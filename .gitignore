@@ -1,0 +1,9 @@
+.gradle/
+build/
+run/
+work/
+outputs/
+.DS_Store
+
+**/build/
+bluemap-addon/dist/

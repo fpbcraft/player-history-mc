@@ -1,0 +1,3 @@
+pluginManagement { repositories { gradlePluginPortal() } }
+rootProject.name = 'player-history'
+include 'recorder-neoforge', 'bluemap-neoforge'

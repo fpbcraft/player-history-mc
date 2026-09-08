@@ -1,0 +1,842 @@
+bluemap-player-replay {
+  --history-accent: #80b8ed;
+  position: fixed;
+  z-index: 1000;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  color: var(--theme-fg, #eee);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: calc(100vw - 16px);
+}
+bluemap-player-replay *,
+bluemap-player-replay *::before,
+bluemap-player-replay *::after {
+  box-sizing: border-box;
+}
+bluemap-player-replay [hidden] {
+  display: none !important;
+}
+bluemap-player-replay section,
+bluemap-player-replay > button,
+bluemap-player-replay .history-popover {
+  background: color-mix(in srgb, var(--theme-bg, #181818) 92%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-fg-light, #aaa) 28%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 3px 12px #0003;
+  backdrop-filter: blur(12px);
+}
+bluemap-player-replay section {
+  width: min(1000px, calc(100vw - 80px));
+  padding: 10px 16px 8px;
+}
+bluemap-player-replay button {
+  font: inherit;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  min-height: 38px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+bluemap-player-replay button:hover {
+  background: var(--theme-bg-hover, #333);
+}
+bluemap-player-replay button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+bluemap-player-replay button[aria-pressed="true"],
+bluemap-player-replay button[aria-expanded="true"] {
+  color: var(--history-accent);
+  background: #568fbd20;
+  border-color: #80b8ed40;
+}
+bluemap-player-replay :focus-visible {
+  outline: 2px solid var(--history-accent);
+  outline-offset: 2px;
+}
+bluemap-player-replay .history-heading {
+  flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+bluemap-player-replay select,
+bluemap-player-replay input[type="number"] {
+  font: inherit;
+  color: var(--theme-fg, #eee);
+  background: var(--theme-bg, #181818);
+  border: 1px solid #8885;
+  border-radius: 4px;
+  padding: 6px;
+  min-height: 34px;
+}
+bluemap-player-replay .history-range,
+bluemap-player-replay .history-speed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+bluemap-player-replay .history-custom-days {
+  order: 5;
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+}
+bluemap-player-replay [name="days"] {
+  width: 80px;
+}
+bluemap-player-replay .history-heading > span {
+  flex: 1;
+}
+bluemap-player-replay .history-heading output {
+  font-variant-numeric: tabular-nums;
+}
+bluemap-player-replay .history-heading button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 20px;
+}
+bluemap-player-replay .history-muted,
+bluemap-player-replay .history-dates,
+bluemap-player-replay .history-status {
+  color: var(--theme-fg-light, #aaa);
+}
+bluemap-player-replay .history-dates {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-top: 4px;
+}
+bluemap-player-replay .history-timeline {
+  position: relative;
+  height: 38px;
+}
+bluemap-player-replay input[type="range"] {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  accent-color: var(--history-accent);
+  cursor: ew-resize;
+}
+bluemap-player-replay .history-tooltip {
+  position: absolute;
+  bottom: 34px;
+  transform: translateX(-50%);
+  background: var(--theme-bg, #181818);
+  color: var(--theme-fg, #fff);
+  border: 1px solid #8886;
+  border-radius: 4px;
+  padding: 5px 9px;
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+bluemap-player-replay .history-events {
+  position: absolute;
+  bottom: 4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+}
+bluemap-player-replay .history-events button {
+  position: absolute;
+  padding: 0;
+  width: 10px;
+  height: 10px;
+  min-height: 10px;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 0;
+}
+bluemap-player-replay .history-events button::after {
+  content: "";
+  display: block;
+  width: 2px;
+  height: 6px;
+  background: currentColor;
+  margin: auto;
+}
+bluemap-player-replay .history-events .history-chat-tick::after {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 45%, #111);
+}
+bluemap-player-replay .history-controls,
+bluemap-player-replay .history-playback,
+bluemap-player-replay .history-secondary {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+bluemap-player-replay .history-controls {
+  gap: 12px;
+  justify-content: space-between;
+}
+bluemap-player-replay [name="play"] {
+  min-width: 76px;
+  background: #80b8ed18;
+}
+bluemap-player-replay .history-shuttle-wrap {
+  flex: 1;
+  max-width: 250px;
+  min-width: 145px;
+  text-align: center;
+}
+bluemap-player-replay .history-shuttle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+  font-size: 10px;
+  color: var(--theme-fg-light, #aaa);
+}
+bluemap-player-replay .history-shuttle-track {
+  position: relative;
+  flex: 1;
+  height: 3px;
+  background: var(--theme-bg-light, #555);
+  border-radius: 3px;
+}
+bluemap-player-replay .history-shuttle-track::before {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 13px;
+  top: -5px;
+  left: 50%;
+  background: #999;
+}
+bluemap-player-replay .history-shuttle i {
+  position: absolute;
+  left: var(--shuttle, 50%);
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--history-accent);
+  transform: translate(-50%, -50%);
+  transition: left 150ms ease-out;
+}
+bluemap-player-replay .history-shuttle.held i {
+  transition: none;
+}
+bluemap-player-replay [name="rate"] {
+  display: block;
+  font-size: 10px;
+  color: var(--theme-fg-light, #aaa);
+  margin-top: -3px;
+}
+bluemap-player-replay .history-player-control {
+  position: relative;
+}
+bluemap-player-replay .history-popover {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 240px;
+  padding: 12px;
+  z-index: 3;
+}
+bluemap-player-replay .history-popover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+}
+bluemap-player-replay .history-popover-heading button {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--history-accent);
+}
+bluemap-player-replay .history-player-list {
+  max-height: min(280px, 40vh);
+  overflow: auto;
+}
+bluemap-player-replay .history-player-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+bluemap-player-replay input[type="checkbox"] {
+  accent-color: var(--history-accent);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+bluemap-player-replay .history-status {
+  font-size: 10px;
+  margin-top: 5px;
+}
+.history-player {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 2px solid;
+  border-radius: 3px;
+  pointer-events: auto;
+  box-shadow: 0 2px 5px #0009;
+}
+.history-player.health-known::before,
+.history-player.health-known::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: -8px;
+  height: 4px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.history-player.health-known::before {
+  width: 24px;
+  background: #210b0d;
+  border: 1px solid #000b;
+}
+.history-player.health-known::after {
+  left: -1px;
+  top: -7px;
+  width: var(--health, 0px);
+  max-width: 22px;
+  height: 2px;
+  background: linear-gradient(90deg, #e5484d, #63d471);
+}
+.history-player img {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  display: block;
+}
+.history-event {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.history-event svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 2px #000);
+}
+.history-trail-dot {
+  width: 10px;
+  height: 10px;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 4px #000b;
+  pointer-events: none;
+}
+.history-trail-dot[hidden] {
+  display: none;
+}
+.history-player:focus-visible,
+.history-event:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+/* Transport layout: one stable header, one stable playback strip. */
+bluemap-player-replay .history-heading {
+  position: relative;
+  padding-right: 64px;
+}
+bluemap-player-replay .history-heading [name="compact"],
+bluemap-player-replay .history-heading [name="close"] {
+  position: absolute;
+  top: 0;
+  min-width: 28px;
+  width: 28px;
+  padding: 0;
+}
+bluemap-player-replay .history-heading [name="close"] {
+  right: 0;
+}
+bluemap-player-replay .history-heading [name="compact"] {
+  right: 32px;
+}
+bluemap-player-replay .history-controls {
+  display: grid;
+  grid-template-columns: 32px minmax(120px, 1fr) 32px 36px 36px 42px;
+  align-items: start;
+  gap: 6px;
+}
+bluemap-player-replay .history-controls > button {
+  width: 32px;
+  min-width: 32px;
+  min-height: 30px;
+  padding: 2px;
+  font-size: 18px;
+}
+bluemap-player-replay .history-controls [name="play"] {
+  width: 36px;
+  min-width: 36px;
+  font-size: 16px;
+}
+bluemap-player-replay .history-controls [name="latest"] {
+  width: 36px;
+  min-width: 36px;
+  font-size: 13px;
+}
+bluemap-player-replay .history-shuttle-wrap {
+  max-width: none;
+  min-width: 0;
+}
+bluemap-player-replay .history-speed {
+  position: relative;
+  display: block;
+}
+bluemap-player-replay .history-speed > [name="speed-button"] {
+  width: 42px;
+  min-width: 42px;
+  min-height: 30px;
+  padding: 3px;
+  font-size: 12px;
+}
+bluemap-player-replay .history-speed-popover {
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 168px;
+  padding: 10px;
+  z-index: 5;
+}
+bluemap-player-replay .history-speed-popover select {
+  width: 100%;
+  margin-top: 5px;
+}
+bluemap-player-replay .history-secondary {
+  grid-column: 1 / -1;
+  width: 100%;
+  justify-content: flex-end;
+}
+@media (min-width: 601px) {
+  bluemap-player-replay .history-heading {
+    padding-right: 64px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  bluemap-player-replay .history-shuttle i {
+    transition: none;
+  }
+}
+bluemap-player-replay .history-custom-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+bluemap-player-replay .history-custom-dates label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+bluemap-player-replay input[type="datetime-local"] {
+  color-scheme: dark;
+  font: inherit;
+  color: var(--theme-fg, #eee);
+  background: var(--theme-bg, #181818);
+  border: 1px solid #8885;
+  border-radius: 4px;
+  padding: 6px;
+  min-height: 38px;
+  max-width: 100%;
+}
+bluemap-player-replay .history-trails {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.history-player-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.history-map-tooltip {
+  position: fixed;
+  z-index: 20000;
+  pointer-events: none;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: 45vh;
+  overflow: hidden;
+  padding: 8px 12px;
+  font: 12px/1.5 system-ui;
+  background: #181818ed;
+  color: #fff;
+  border: 1px solid #8886;
+  border-radius: 4px;
+}
+.history-map-tooltip[hidden] {
+  display: none;
+}
+/* Activity bars share the timeline's inset and leave the seek control interactive. */
+bluemap-player-replay .history-timeline {
+  height: 76px;
+}
+bluemap-player-replay .history-timeline input[type="range"] {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+}
+bluemap-player-replay .history-histogram {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 22px;
+  height: 46px;
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(1px, 0.25vw, 3px);
+}
+bluemap-player-replay .history-histogram span {
+  flex: 1;
+  min-width: 0;
+  background: #319fce;
+  border-radius: 3px 3px 0 0;
+}
+bluemap-player-replay .history-histogram span:hover {
+  background: var(--history-accent);
+}
+bluemap-player-replay .history-density-status {
+  color: var(--theme-fg-light, #aaa);
+  font-size: 10px;
+  margin: 0 0 6px;
+}
+bluemap-player-replay .history-tooltip {
+  bottom: 74px;
+}
+
+.history-event-control {
+  position: relative;
+}
+.history-event-control summary {
+  cursor: pointer;
+  padding: 6px;
+}
+.history-event-control .history-event-options {
+  bottom: 100%;
+  right: 0;
+  width: 230px;
+  max-height: 50vh;
+  overflow: auto;
+}
+.history-event-filter-list {
+  display: grid;
+  gap: 6px;
+}
+.history-event-filter-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: capitalize;
+}
+
+.history-event {
+  border: 2px solid;
+  border-radius: 50%;
+  background: #17191bc9;
+  animation: history-event-enter 300ms ease-out both;
+}
+@keyframes history-event-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.16);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .history-event {
+    animation: none;
+  }
+}
+bluemap-player-replay .history-chat {
+  max-height: 120px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+bluemap-player-replay .history-chat > div {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px;
+  padding: 2px 0;
+}
+bluemap-player-replay .history-chat .history-chat-empty {
+  display: block;
+  color: var(--theme-fg-light, #aaa);
+  font-style: italic;
+}
+bluemap-player-replay .history-chat-time {
+  color: var(--theme-fg-light, #aaa);
+  font-variant-numeric: tabular-nums;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  text-align: left;
+}
+/* Keep native zoom controls away from the history transport. */
+body:has(bluemap-player-replay section:not([hidden])) #zoom-buttons {
+  bottom: auto;
+  top: 64px;
+}
+@media (min-width: 601px) {
+  bluemap-player-replay.compact .history-heading > span,
+  bluemap-player-replay.compact .history-range,
+  bluemap-player-replay.compact .history-custom-days,
+  bluemap-player-replay.compact .history-custom-dates,
+  bluemap-player-replay.compact .history-dates,
+  bluemap-player-replay.compact .history-density-status,
+  bluemap-player-replay.compact .history-status,
+  bluemap-player-replay.compact .history-secondary,
+  bluemap-player-replay.compact .history-chat,
+  bluemap-player-replay.compact .history-webchat,
+  bluemap-player-replay.compact .history-heading .history-event-control {
+    display: none !important;
+  }
+  bluemap-player-replay.compact section {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  bluemap-player-replay.compact .history-heading {
+    min-height: 30px;
+  }
+  bluemap-player-replay.compact .history-heading [name="current"] {
+    display: block;
+    font-variant-numeric: tabular-nums;
+  }
+}
+/* One mobile layout owns both expanded and compact states. */
+@media (max-width: 600px) {
+  bluemap-player-replay {
+    width: calc(100vw - 16px);
+    left: 8px;
+    right: 8px;
+    transform: none;
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  bluemap-player-replay section {
+    width: 100%;
+    padding: 10px;
+    max-height: 75dvh;
+    overflow-y: auto;
+  }
+  bluemap-player-replay .history-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 32px 32px 32px;
+    gap: 4px;
+    padding: 0;
+    min-height: 32px;
+  }
+  bluemap-player-replay .history-heading > span { display: none; }
+  bluemap-player-replay .history-heading [name="current"] {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 12px;
+    min-width: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  bluemap-player-replay .history-heading [name="compact"],
+  bluemap-player-replay .history-heading [name="close"] {
+    position: static;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    grid-row: 1;
+  }
+  bluemap-player-replay .history-heading [name="compact"] { grid-column: 2; }
+  bluemap-player-replay .history-heading [name="close"] { grid-column: 3; }
+  bluemap-player-replay .history-range,
+  bluemap-player-replay .history-custom-days { grid-column: 1 / -1; min-width: 0; }
+  bluemap-player-replay .history-range select { flex: 1; min-width: 0; }
+  bluemap-player-replay .history-timeline { height: 60px; margin-top: 4px; }
+  bluemap-player-replay .history-histogram { height: 32px; overflow: hidden; }
+  bluemap-player-replay .history-controls {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 32px 36px 42px 32px;
+    gap: 4px;
+    align-items: center;
+  }
+  bluemap-player-replay .history-controls [name="back"] { grid-area: 1 / 1; }
+  bluemap-player-replay .history-shuttle-wrap { grid-area: 1 / 2; min-width: 0; }
+  bluemap-player-replay .history-controls [name="forward"] { grid-area: 1 / 3; }
+  bluemap-player-replay .history-controls [name="play"] { grid-area: 1 / 4; }
+  bluemap-player-replay .history-controls [name="latest"] { grid-area: 1 / 5; width: 42px; min-width: 42px; }
+  bluemap-player-replay .history-speed { grid-area: 1 / 6; }
+  bluemap-player-replay .history-speed > [name="speed-button"] { width: 32px; min-width: 32px; }
+  bluemap-player-replay .history-shuttle { min-height: 36px; }
+  bluemap-player-replay .history-shuttle > span { display: none; }
+  bluemap-player-replay [name="rate"] { display: none; }
+  bluemap-player-replay .history-secondary { grid-column: 1 / -1; flex-wrap: wrap; justify-content: flex-start; }
+  bluemap-player-replay .history-density-status { display: none; }
+  bluemap-player-replay .history-popover { position: fixed; right: 10px; bottom: 60px; max-width: calc(100vw - 40px); }
+  bluemap-player-replay.compact .history-range,
+  bluemap-player-replay.compact .history-custom-days,
+  bluemap-player-replay.compact .history-custom-dates,
+  bluemap-player-replay.compact .history-dates,
+  bluemap-player-replay.compact .history-status,
+  bluemap-player-replay.compact .history-secondary,
+  bluemap-player-replay.compact .history-chat,
+  bluemap-player-replay.compact [name="rate"] { display: none; }
+}
+
+bluemap-player-replay .history-controls [name="latest"] { font-size: 10px; }
+bluemap-player-replay .history-trails { position: relative; }
+bluemap-player-replay .history-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 240px;
+  gap: 4px;
+  padding: 8px;
+}
+bluemap-player-replay .history-choices button { padding: 6px 3px; min-width: 0; font-size: 12px; }
+bluemap-player-replay .history-trails-popover { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+bluemap-player-replay .history-heading { padding-right: 96px; }
+bluemap-player-replay .history-heading .history-event-control { position: absolute; right: 32px; top: 0; }
+bluemap-player-replay .history-heading [name="compact"] { right: 64px; }
+bluemap-player-replay .history-event-control summary { list-style: none; width: 32px; height: 32px; display: grid; place-items: center; font-size: 20px; cursor: pointer; }
+bluemap-player-replay .history-event-control summary::-webkit-details-marker { display: none; }
+bluemap-player-replay .history-secondary > button,
+bluemap-player-replay .history-secondary > div > button { font-size: 20px; }
+@media (min-width: 601px) {
+  bluemap-player-replay .history-heading { padding-right: 64px; }
+}
+@media (max-width: 600px) {
+  bluemap-player-replay .history-heading { padding-right: 0; }
+  bluemap-player-replay .history-heading .history-event-control { position: static; grid-area: 1 / 2; }
+  bluemap-player-replay .history-heading [name="compact"] { grid-column: 3; }
+  bluemap-player-replay .history-heading [name="close"] { grid-column: 4; }
+}
+.history-event::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--connector-length, 0px);
+  height: 1px;
+  background: currentColor;
+  transform-origin: left center;
+  transform: rotate(var(--connector-angle, 0rad)) translateX(var(--connector-start, 0px));
+  pointer-events: none;
+  z-index: -1;
+  opacity: .7;
+}
+
+.history-event-group {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+}
+.history-event-count {
+  position: absolute;
+  right: -7px;
+  top: -7px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #111;
+  color: white;
+  font: 700 10px/1 system-ui;
+}
+.history-event-fan {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 4;
+}
+.history-event-detail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 5px;
+  display: grid;
+  place-items: center;
+  border: 2px solid;
+  border-radius: 50%;
+  background: #17191bf2;
+  color: inherit;
+  box-shadow: 0 3px 10px #0009;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) rotate(var(--fan-angle)) translateX(var(--fan-radius)) rotate(var(--fan-counter-angle));
+  animation: history-event-enter 180ms ease-out both;
+}
+.history-event-detail svg { width: 21px; height: 21px; }
+.history-event-group.expanded .history-event-count { display: none; }
+.history-event-group.expanded { z-index: 5; }
+
+.history-chat-bubble {
+  width: max-content;
+  max-width: min(220px, 55vw);
+  height: auto;
+  min-height: 28px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  color: white !important;
+  font: 12px/1.4 system-ui;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+bluemap-player-replay .history-webchat { margin-top: 8px; }
+bluemap-player-replay .history-webchat-feed { max-height: 150px; overflow: auto; font-size: 12px; overflow-wrap: anywhere; }
+bluemap-player-replay [name="chat-status"] { display: block; font-size: 12px; overflow-wrap: anywhere; }
+bluemap-player-replay .history-chat-form { display: flex; gap: 6px; }
+bluemap-player-replay [name="chat-message"] { min-width: 0; flex: 1; padding: 8px; background: #222; color: white; border: 1px solid #8885; border-radius: 4px; }
+bluemap-player-replay.compact .history-webchat { display: none; }
+
+bluemap-player-replay button > svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+
+bluemap-player-replay .history-popover[popover] {
+  position: fixed;
+  margin: 0;
+  bottom: auto;
+  right: auto;
+  color: var(--theme-fg, #eee);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}

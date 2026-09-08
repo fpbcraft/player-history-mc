@@ -1,0 +1,12 @@
+plugins { id 'java-library'; id 'net.neoforged.moddev' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+neoForge { version = '21.1.248'; mods { playerhistory { sourceSet sourceSets.main } } }
+dependencies {
+ testImplementation 'com.google.code.gson:gson:2.10.1'
+ testImplementation platform('org.junit:junit-bom:5.11.4')
+ testImplementation 'org.junit.jupiter:junit-jupiter'
+ testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+test { useJUnitPlatform() }
+base { archivesName = 'player-history-recorder' }
+tasks.register('rebuildHeatmaps', JavaExec) { classpath = sourceSets.main.output + configurations.testRuntimeClasspath; mainClass = 'dev.playerhistory.core.RebuildHeatmaps'; dependsOn classes }
