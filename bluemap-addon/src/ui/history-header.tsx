@@ -11,6 +11,9 @@ const TrailControl = () => (
       aria-expanded="false"
     >
       <HistoryIcon name="trails" />
+      <span class="history-tool-value" data-control="trail-label">
+        1m
+      </span>
     </button>
     <div class="history-trails-popover history-popover history-choices" hidden>
       {TRAIL_OPTIONS.map(([value, label]) => (
@@ -36,6 +39,9 @@ const HeaderTools = () => (
         title="Players"
       >
         <HistoryIcon name="players" />
+        <span class="history-tool-value" data-control="player-count">
+          0
+        </span>
       </button>
       <div id="history-players" class="history-popover" hidden>
         <div class="history-popover-heading">

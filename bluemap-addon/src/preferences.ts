@@ -31,8 +31,10 @@ export const preferences = {
     return [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64].includes(value) ? value : null;
   },
   saveSpeed: (value: number): void => localStorage.setItem(KEYS.speed, String(value)),
-  players: (): number[] =>
-    readArray(KEYS.players).filter((value): value is number => Number.isFinite(value)),
+  players: (): number[] | null => {
+    if (localStorage.getItem(KEYS.players) === null) return null;
+    return readArray(KEYS.players).filter((value): value is number => Number.isFinite(value));
+  },
   savePlayers: (value: Iterable<number>): void =>
     localStorage.setItem(KEYS.players, JSON.stringify([...value])),
   hiddenEvents: (): string[] =>

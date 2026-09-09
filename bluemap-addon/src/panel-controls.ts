@@ -18,6 +18,7 @@ export interface ReplayControls {
   latest: HTMLButtonElement;
   open: HTMLButtonElement;
   play: HTMLButtonElement;
+  "player-count": HTMLSpanElement;
   players: HTMLButtonElement;
   range: HTMLSelectElement;
   rate: HTMLOutputElement;
@@ -26,6 +27,7 @@ export interface ReplayControls {
   "speed-button": HTMLButtonElement;
   start: HTMLSpanElement;
   timeline: HTMLInputElement;
+  "trail-label": HTMLSpanElement;
   trails: HTMLInputElement;
   "trails-button": HTMLButtonElement;
   webchat: HTMLButtonElement;

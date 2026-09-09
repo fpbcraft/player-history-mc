@@ -981,18 +981,25 @@ bluemap-player-replay .history-header-tools {
   align-items: center;
   gap: 4px;
 }
-bluemap-player-replay .history-header-tools > *,
+bluemap-player-replay .history-header-tools > * {
+  flex: 0 0 auto;
+  height: 32px;
+  margin: 0;
+  display: flex;
+  align-items: stretch;
+}
 bluemap-player-replay .history-header-tools > button,
 bluemap-player-replay .history-header-tools > div > button,
 bluemap-player-replay .history-header-tools summary {
-  width: 32px;
   min-width: 32px;
   height: 32px;
   min-height: 32px;
   margin: 0;
   padding: 6px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   line-height: 1;
 }
 bluemap-player-replay .history-header-tools svg {
@@ -1007,6 +1014,12 @@ bluemap-player-replay .history-header-tools svg {
 }
 bluemap-player-replay .history-header-tools [name="heat"] svg {
   stroke-width: 1.2;
+}
+bluemap-player-replay .history-header-tools .history-tool-value {
+  min-width: 1.25em;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 bluemap-player-replay .history-heading .history-event-control {
   position: static !important;

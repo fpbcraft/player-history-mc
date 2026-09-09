@@ -19,12 +19,13 @@ describe("replay panel view", () => {
     expect(root.querySelector('[name="webchat"] > svg')).not.toBeNull();
     expect(root.querySelectorAll(".history-speed-popover [data-speed]")).toHaveLength(9);
     expect(root.querySelectorAll(".history-trails-popover [data-trail]")).toHaveLength(8);
+    expect(root.querySelector('[data-control="trail-label"]')?.textContent?.trim()).toBe("1m");
+    expect(root.querySelector('[data-control="player-count"]')?.textContent?.trim()).toBe("0");
     expect(root.querySelector('[name="timeline"]')?.getAttribute("aria-label")).toBe(
       "Replay timeline",
     );
     const eventOverlay = root.querySelector(".history-events");
     expect(eventOverlay?.tagName).toBe("DIV");
-    expect(eventOverlay?.getAttribute("role")).toBe("group");
     expect(eventOverlay?.closest("section")).toBe(root.querySelector("#history-transport"));
   });
 

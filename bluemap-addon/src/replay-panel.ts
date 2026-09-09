@@ -9,6 +9,7 @@ import {
   KNOWN_EVENT_TYPES,
   SPEED_OPTIONS,
   TRAIL_OPTIONS,
+  trailDurationLabel,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
 import { BREAK, ChunkCache, CONTEXT, heatmapPlan, ReplayEngine } from "./replay-core.js";
@@ -260,7 +261,7 @@ export class ReplayPanel extends HTMLElement {
     this.selection = new Set();
     try {
       const selected = preferences.players();
-      if (Array.isArray(selected)) {
+      if (selected !== null) {
         this.selection = new Set(selected.filter(Number.isFinite));
         this.hasSavedSelection = true;
       }
@@ -885,8 +886,15 @@ export class ReplayPanel extends HTMLElement {
       ? `Shuttle · ${Number(c.shuttleRate.toFixed(1))}×`
       : `Shuttle · release to ${c.playbackRate}×`;
     this.q("shuttle").setAttribute("aria-valuenow", c.shuttleRate.toFixed(1));
-    this.q("players").title = `Players · ${this.selection.size} selected`;
+    const playerCount = this.selection.size;
+    this.q("player-count").textContent = String(playerCount);
+    this.q("players").title = `Players · ${playerCount} selected`;
+    this.q("players").setAttribute("aria-label", `Filter players · ${playerCount} selected`);
     this.q("trails").value = String(this.trailMode);
+    const trailLabel = trailDurationLabel(this.trailMode);
+    this.q("trail-label").textContent = trailLabel;
+    this.q("trails-button").title = `Trails · ${trailLabel}`;
+    this.q("trails-button").setAttribute("aria-label", `Trail duration · ${trailLabel}`);
     this.q("heat").setAttribute("aria-pressed", String(!!this.heatEnabled));
     this.querySelectorAll<HTMLButtonElement>("[data-speed]").forEach((button) => {
       button.setAttribute("aria-pressed", String(Number(button.dataset.speed) === c.playbackRate));

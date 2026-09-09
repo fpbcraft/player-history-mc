@@ -20,7 +20,7 @@ bluemap-player-replay *::after {
 bluemap-player-replay [hidden] {
   display: none !important;
 }
-bluemap-player-replay section,
+bluemap-player-replay > section,
 bluemap-player-replay > button,
 bluemap-player-replay .history-popover {
   background: color-mix(in srgb, var(--theme-bg, #181818) 92%, transparent);
@@ -29,7 +29,7 @@ bluemap-player-replay .history-popover {
   box-shadow: 0 3px 12px #0003;
   backdrop-filter: blur(12px);
 }
-bluemap-player-replay section {
+bluemap-player-replay > section {
   width: min(1000px, calc(100vw - 80px));
   padding: 10px 16px 8px;
 }
@@ -684,7 +684,7 @@ bluemap-player-replay .history-chat-time {
   bluemap-player-replay.compact .history-heading .history-event-control {
     display: none !important;
   }
-  bluemap-player-replay.compact section {
+  bluemap-player-replay.compact > section {
     padding-top: 8px;
     padding-bottom: 8px;
   }
@@ -709,7 +709,7 @@ bluemap-player-replay .history-chat-time {
     transform: none;
     bottom: max(8px, env(safe-area-inset-bottom));
   }
-  bluemap-player-replay section {
+  bluemap-player-replay > section {
     width: 100%;
     padding: 10px;
     max-height: 75dvh;
@@ -1103,18 +1103,25 @@ bluemap-player-replay .history-header-tools {
   align-items: center;
   gap: 4px;
 }
-bluemap-player-replay .history-header-tools > *,
+bluemap-player-replay .history-header-tools > * {
+  flex: 0 0 auto;
+  height: 32px;
+  margin: 0;
+  display: flex;
+  align-items: stretch;
+}
 bluemap-player-replay .history-header-tools > button,
 bluemap-player-replay .history-header-tools > div > button,
 bluemap-player-replay .history-header-tools summary {
-  width: 32px;
   min-width: 32px;
   height: 32px;
   min-height: 32px;
   margin: 0;
   padding: 6px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   line-height: 1;
 }
 bluemap-player-replay .history-header-tools svg {
@@ -1129,6 +1136,12 @@ bluemap-player-replay .history-header-tools svg {
 }
 bluemap-player-replay .history-header-tools [name=heat] svg {
   stroke-width: 1.2;
+}
+bluemap-player-replay .history-header-tools .history-tool-value {
+  min-width: 1.25em;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 bluemap-player-replay .history-heading .history-event-control {
   position: static !important;

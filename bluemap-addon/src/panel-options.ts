@@ -24,6 +24,14 @@ export const TRAIL_OPTIONS = [
   [Infinity, "Full range"],
 ] as const;
 
+export const trailDurationLabel = (value: number): string => {
+  if (value === Infinity) return "Full";
+  if (value === 0) return "Off";
+  if (value < 60_000) return `${value / 1_000}s`;
+  if (value < 3_600_000) return `${value / 60_000}m`;
+  return `${value / 3_600_000}h`;
+};
+
 export const DEFAULT_DISABLED_EVENTS = [
   "ITEM_PICKUP",
   "ITEM_DROP",

@@ -2138,6 +2138,13 @@ ${payload}` : ""}`;
     [216e5, "6 hours"],
     [Infinity, "Full range"]
   ];
+  var trailDurationLabel = (value) => {
+    if (value === Infinity) return "Full";
+    if (value === 0) return "Off";
+    if (value < 6e4) return `${value / 1e3}s`;
+    if (value < 36e5) return `${value / 6e4}m`;
+    return `${value / 36e5}h`;
+  };
   var DEFAULT_DISABLED_EVENTS = [
     "ITEM_PICKUP",
     "ITEM_DROP",
@@ -2202,7 +2209,10 @@ ${payload}` : ""}`;
       return [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64].includes(value) ? value : null;
     },
     saveSpeed: (value) => localStorage.setItem(KEYS.speed, String(value)),
-    players: () => readArray(KEYS.players).filter((value) => Number.isFinite(value)),
+    players: () => {
+      if (localStorage.getItem(KEYS.players) === null) return null;
+      return readArray(KEYS.players).filter((value) => Number.isFinite(value));
+    },
     savePlayers: (value) => localStorage.setItem(KEYS.players, JSON.stringify([...value])),
     hiddenEvents: () => readArray(KEYS.hiddenEvents).filter((value) => typeof value === "string"),
     saveHiddenEvents: (value) => localStorage.setItem(KEYS.hiddenEvents, JSON.stringify([...value])),
@@ -2409,7 +2419,10 @@ ${payload}` : ""}`;
         "aria-label": "Trail duration",
         title: "Trails",
         "aria-expanded": "false",
-        children: /* @__PURE__ */ u2(HistoryIcon, { name: "trails" })
+        children: [
+          /* @__PURE__ */ u2(HistoryIcon, { name: "trails" }),
+          /* @__PURE__ */ u2("span", { class: "history-tool-value", "data-control": "trail-label", children: "1m" })
+        ]
       }
     ),
     /* @__PURE__ */ u2("div", { class: "history-trails-popover history-popover history-choices", hidden: true, children: [
@@ -2429,7 +2442,10 @@ ${payload}` : ""}`;
           "aria-controls": "history-players",
           "aria-label": "Filter players",
           title: "Players",
-          children: /* @__PURE__ */ u2(HistoryIcon, { name: "players" })
+          children: [
+            /* @__PURE__ */ u2(HistoryIcon, { name: "players" }),
+            /* @__PURE__ */ u2("span", { class: "history-tool-value", "data-control": "player-count", children: "0" })
+          ]
         }
       ),
       /* @__PURE__ */ u2("div", { id: "history-players", class: "history-popover", hidden: true, children: [
@@ -2573,7 +2589,7 @@ ${payload}` : ""}`;
         }
       ),
       /* @__PURE__ */ u2("output", { class: "history-tooltip", hidden: true }),
-      /* @__PURE__ */ u2("div", { class: "history-events", role: "group", "aria-label": "Events in loaded replay window" })
+      /* @__PURE__ */ u2("div", { class: "history-events" })
     ] }),
     /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" }),
     /* @__PURE__ */ u2("div", { class: "history-controls", children: [
@@ -2829,7 +2845,7 @@ ${payload}` : ""}`;
       this.selection = /* @__PURE__ */ new Set();
       try {
         const selected = preferences.players();
-        if (Array.isArray(selected)) {
+        if (selected !== null) {
           this.selection = new Set(selected.filter(Number.isFinite));
           this.hasSavedSelection = true;
         }
@@ -3416,8 +3432,15 @@ ${payload}` : ""}`;
       this.q("play").setAttribute("aria-label", c2.isPlaying ? "Pause replay" : "Play replay");
       this.q("rate").textContent = c2.isShuttling ? `Shuttle \xB7 ${Number(c2.shuttleRate.toFixed(1))}\xD7` : `Shuttle \xB7 release to ${c2.playbackRate}\xD7`;
       this.q("shuttle").setAttribute("aria-valuenow", c2.shuttleRate.toFixed(1));
-      this.q("players").title = `Players \xB7 ${this.selection.size} selected`;
+      const playerCount = this.selection.size;
+      this.q("player-count").textContent = String(playerCount);
+      this.q("players").title = `Players \xB7 ${playerCount} selected`;
+      this.q("players").setAttribute("aria-label", `Filter players \xB7 ${playerCount} selected`);
       this.q("trails").value = String(this.trailMode);
+      const trailLabel = trailDurationLabel(this.trailMode);
+      this.q("trail-label").textContent = trailLabel;
+      this.q("trails-button").title = `Trails \xB7 ${trailLabel}`;
+      this.q("trails-button").setAttribute("aria-label", `Trail duration \xB7 ${trailLabel}`);
       this.q("heat").setAttribute("aria-pressed", String(!!this.heatEnabled));
       this.querySelectorAll("[data-speed]").forEach((button) => {
         button.setAttribute("aria-pressed", String(Number(button.dataset.speed) === c2.playbackRate));
