@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
+import { calendarRange } from "../src/panel-options.js";
 import { ChunkCache } from "../src/replay-core.js";
-import {
-  clusterTimelineEvents,
-  HISTORY_WINDOW,
-  ReplayClock,
-  shuttleRate,
-} from "../src/replay-state.js";
+import { clusterTimelineEvents, HISTORY_WINDOW, ReplayClock } from "../src/replay-state.js";
 
 test("timeline indicators cluster nearby chat and death events", () => {
   const event = (time, type) => ({ point: { time }, type });
@@ -18,7 +14,20 @@ test("timeline indicators cluster nearby chat and death events", () => {
   );
 });
 
-test("selected speed controls playback and survives shuttle release, including pause", () => {
+test("calendar presets use local day boundaries", () => {
+  const now = new Date(2026, 8, 9, 15, 30).getTime();
+  const today = new Date(2026, 8, 9).getTime();
+  const yesterday = new Date(2026, 8, 8).getTime();
+  assert.deepEqual(calendarRange("today", now), { from: today, to: now, followsLive: true });
+  assert.deepEqual(calendarRange("yesterday", now), {
+    from: yesterday,
+    to: today,
+    followsLive: false,
+  });
+  assert.equal(calendarRange("0.5", now), null);
+});
+
+test("selected speed controls playback and pause", () => {
   const clock = new ReplayClock();
   clock.refresh(0, 100000);
   clock.seek(50000);
@@ -26,14 +35,8 @@ test("selected speed controls playback and survives shuttle release, including p
   clock.isPlaying = true;
   clock.tick(1000);
   assert.equal(clock.time, 58000);
-  clock.shuttle(-0.5);
-  clock.tick(1000);
-  assert.equal(clock.time, 54000);
-  clock.release();
   assert.equal(clock.rate, 8);
   clock.isPlaying = false;
-  clock.shuttle(1);
-  clock.release();
   assert.equal(clock.rate, 0);
   assert.equal(clock.playbackRate, 8);
 });
@@ -81,61 +84,14 @@ test("manifest refresh follows latest but preserves historical absolute time unt
   clock.refresh(100, HISTORY_WINDOW + 2000);
   assert.equal(clock.time, 2000);
 });
-test("elastic shuttle reverses while paused and restores the separate normal state", () => {
-  const clock = new ReplayClock();
-  clock.refresh(0, 100000);
-  clock.shuttle(-0.5);
-  clock.tick(1000);
-  assert.equal(clock.time, 96000);
-  clock.release();
-  assert.equal(clock.rate, 0);
-  assert.equal(clock.shuttleRate, 1);
-  clock.isPlaying = true;
-  clock.shuttle(0.5);
-  clock.tick(100);
-  assert.equal(clock.time, 96400);
-  clock.release();
-  assert.equal(clock.rate, 1);
-  clock.tick(100);
-  assert.equal(clock.time, 96500);
-});
-test("rewind and forward clamp without wrapping or losing the shuttle's base state", () => {
+test("playback clamps at the selected range end", () => {
   const clock = new ReplayClock();
   clock.customRange = { from: 100, to: 1000 };
   clock.refresh(100, 1000);
   clock.isPlaying = true;
-  clock.shuttle(-1);
-  clock.tick(1000);
-  assert.equal(clock.time, 100);
-  clock.shuttle(1);
   clock.tick(1000);
   assert.equal(clock.time, 1000);
-  assert.equal(clock.isPlaying, true);
-  clock.release();
-  assert.equal(clock.rate, 1);
-  clock.tick(1000);
   assert.equal(clock.isPlaying, false);
-});
-test("shuttle curve has precise slow, stopped, reverse and forward positions", () => {
-  for (const [position, rate] of [
-    [-1, -120],
-    [-0.85, -60],
-    [-0.7, -16],
-    [-0.5, -4],
-    [-0.35, -2],
-    [-0.25, -1],
-    [-0.16, 0],
-    [-0.1, 0.5],
-    [0, 1],
-    [0.25, 2],
-    [0.5, 4],
-    [0.7, 16],
-    [0.85, 60],
-    [1, 120],
-  ])
-    assert.ok(Math.abs(shuttleRate(position) - rate) < 1e-10);
-  assert.equal(shuttleRate(-2), -120);
-  assert.equal(shuttleRate(2), 120);
 });
 test("refresh invalidates cached misses and mutable latest chunks", async () => {
   let published = false,

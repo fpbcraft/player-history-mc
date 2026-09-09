@@ -1389,41 +1389,11 @@ ${payload}` : ""}`;
       }
     }
   };
-  var SHUTTLE_STOPS = [
-    [-1, -120],
-    [-0.85, -60],
-    [-0.7, -16],
-    [-0.5, -4],
-    [-0.35, -2],
-    [-0.25, -1],
-    [-0.16, 0],
-    [-0.1, 0.5],
-    [0, 1],
-    [0.25, 2],
-    [0.5, 4],
-    [0.7, 16],
-    [0.85, 60],
-    [1, 120]
-  ];
-  var shuttleRate = (position) => {
-    const value = clamp(position, -1, 1);
-    for (let index = 1; index < SHUTTLE_STOPS.length; index++) {
-      const previous = SHUTTLE_STOPS[index - 1];
-      const current = SHUTTLE_STOPS[index];
-      if (!previous || !current) continue;
-      const [from, rate] = previous;
-      const [to, nextRate] = current;
-      if (value <= to) return rate + (nextRate - rate) * (value - from) / (to - from);
-    }
-    return 120;
-  };
   var ReplayClock = class {
     playbackRate = 1;
     rangeDuration = HISTORY_WINDOW;
     customRange = null;
     isPlaying = false;
-    isShuttling = false;
-    shuttleRate = 1;
     from = 0;
     to = 0;
     time = Number.NaN;
@@ -1431,7 +1401,6 @@ ${payload}` : ""}`;
       return Number.isFinite(this.time) && this.to - this.time <= 1e3;
     }
     get rate() {
-      if (this.isShuttling) return this.shuttleRate;
       return this.isPlaying ? this.playbackRate : 0;
     }
     refresh(earliest, latest, reset = false) {
@@ -1449,15 +1418,7 @@ ${payload}` : ""}`;
     }
     tick(delta) {
       this.seek(this.time + delta * this.rate);
-      if (!this.isShuttling && this.time >= this.to) this.isPlaying = false;
-    }
-    shuttle(position) {
-      this.isShuttling = true;
-      this.shuttleRate = shuttleRate(position);
-    }
-    release() {
-      this.isShuttling = false;
-      this.shuttleRate = 1;
+      if (this.time >= this.to) this.isPlaying = false;
     }
   };
   var clusterTimelineEvents = (events, thresholdMs) => {
@@ -2119,14 +2080,26 @@ ${payload}` : ""}`;
     ["0.041666666666666664", "Last hour"],
     ["0.125", "Last 3 hours"],
     ["0.25", "Last 6 hours"],
+    ["0.5", "Last 12 hours"],
     ["1", "Last 24 hours"],
     ["2", "Last 48 hours"],
+    ["today", "Today"],
+    ["yesterday", "Yesterday"],
     ["7", "Last week"],
     ["30", "Last 30 days"],
     ["all", "All history"],
     ["custom", "Last N days\u2026"],
     ["dates", "Custom dates\u2026"]
   ];
+  var calendarRange = (value, now) => {
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    if (value === "today") return { from: today.getTime(), to: now, followsLive: true };
+    if (value !== "yesterday") return null;
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return { from: yesterday.getTime(), to: today.getTime(), followsLive: false };
+  };
   var SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
   var TRAIL_OPTIONS = [
     [0, "Off"],
@@ -2480,7 +2453,10 @@ ${payload}` : ""}`;
       /* @__PURE__ */ u2("span", { children: "\u25F7 History" }),
       /* @__PURE__ */ u2("label", { class: "history-range", children: [
         "Range",
-        /* @__PURE__ */ u2("select", { name: "range", "aria-label": "History range", children: RANGE_OPTIONS.map(([value, label]) => /* @__PURE__ */ u2("option", { value, selected: value === "0.125", children: label })) })
+        /* @__PURE__ */ u2("select", { name: "range", "aria-label": "History range", children: [
+          RANGE_OPTIONS.map(([value, label]) => /* @__PURE__ */ u2("option", { value, selected: value === "0.125", children: label })),
+          /* @__PURE__ */ u2("option", { value: "selection", hidden: true, children: "Selected range" })
+        ] })
       ] }),
       /* @__PURE__ */ u2("form", { class: "history-custom-days", hidden: true, children: [
         /* @__PURE__ */ u2("label", { children: [
@@ -2520,28 +2496,40 @@ ${payload}` : ""}`;
     ] })
   ] });
 
-  // src/ui/history-transport.tsx
-  var Shuttle = () => /* @__PURE__ */ u2("div", { class: "history-shuttle-wrap", children: [
+  // src/ui/time-range-control.tsx
+  var TimeRangeControl = () => /* @__PURE__ */ u2("div", { class: "history-window-selector", "data-control": "range-window", children: [
+    /* @__PURE__ */ u2("div", { class: "history-window-track", "aria-hidden": "true", children: /* @__PURE__ */ u2("i", {}) }),
     /* @__PURE__ */ u2(
-      "div",
+      "input",
       {
-        "data-control": "shuttle",
-        class: "history-shuttle",
-        role: "slider",
-        tabIndex: 0,
-        "aria-label": "Hold to rewind or fast forward; release to restore playback",
-        "aria-valuemin": -120,
-        "aria-valuemax": 120,
-        "aria-valuenow": 1,
-        children: [
-          /* @__PURE__ */ u2("span", { children: "\u2212120\xD7" }),
-          /* @__PURE__ */ u2("div", { class: "history-shuttle-track", children: /* @__PURE__ */ u2("i", {}) }),
-          /* @__PURE__ */ u2("span", { children: "120\xD7" })
-        ]
+        name: "range-start",
+        type: "range",
+        min: "0",
+        max: "1",
+        step: "1",
+        value: "0",
+        "aria-label": "Replay range start"
       }
     ),
-    /* @__PURE__ */ u2("output", { name: "rate", children: "Shuttle \xB7 1\xD7" })
+    /* @__PURE__ */ u2(
+      "input",
+      {
+        name: "range-end",
+        type: "range",
+        min: "0",
+        max: "1",
+        step: "1",
+        value: "1",
+        "aria-label": "Replay range end"
+      }
+    ),
+    /* @__PURE__ */ u2("div", { class: "history-window-labels", children: [
+      /* @__PURE__ */ u2("output", { name: "range-start-label", children: "\u2014" }),
+      /* @__PURE__ */ u2("output", { name: "range-end-label", children: "\u2014" })
+    ] })
   ] });
+
+  // src/ui/history-transport.tsx
   var SpeedControl = () => /* @__PURE__ */ u2("div", { class: "history-speed", children: [
     /* @__PURE__ */ u2(
       "button",
@@ -2594,7 +2582,7 @@ ${payload}` : ""}`;
     /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" }),
     /* @__PURE__ */ u2("div", { class: "history-controls", children: [
       /* @__PURE__ */ u2("button", { type: "button", name: "back", title: "Back five minutes", "aria-label": "Back five minutes", children: "\u21B6" }),
-      /* @__PURE__ */ u2(Shuttle, {}),
+      /* @__PURE__ */ u2(TimeRangeControl, {}),
       /* @__PURE__ */ u2(
         "button",
         {
@@ -2684,7 +2672,6 @@ ${payload}` : ""}`;
     lastMap;
     loadedBucket;
     pendingBucket;
-    shuttlePointer;
     heatVersion = 0;
     chatTimer;
     seekTimer;
@@ -2702,8 +2689,6 @@ ${payload}` : ""}`;
     filterRevision = 0;
     healthToken = {};
     trailMode = 6e4;
-    releaseShuttle = () => {
-    };
     get compact() {
       return this.panelState.compact;
     }
@@ -2803,7 +2788,9 @@ ${payload}` : ""}`;
       if (savedDays !== null && Number.isInteger(savedDays) && savedDays > 0 && savedDays <= 36500)
         this.q("days").value = String(savedDays);
       const initialRange = this.q("range").value;
-      this.clock.rangeDuration = initialRange === "all" ? Infinity : Number(initialRange === "custom" ? this.q("days").value : initialRange) * 864e5;
+      if (initialRange === "all") this.clock.rangeDuration = Infinity;
+      else if (!calendarRange(initialRange, Date.now()))
+        this.clock.rangeDuration = Number(initialRange === "custom" ? this.q("days").value : initialRange) * 864e5;
       const savedSpeed = preferences.speed();
       if (savedSpeed !== null && SPEED_OPTIONS.includes(savedSpeed))
         this.clock.playbackRate = savedSpeed;
@@ -3033,47 +3020,11 @@ ${payload}` : ""}`;
         },
         { passive: false }
       );
-      const shuttle = this.q("shuttle");
-      const move = (event) => {
-        const bounds = this.require(".history-shuttle-track").getBoundingClientRect();
-        const position = clamp((event.clientX - bounds.left) / bounds.width * 2 - 1, -1, 1);
-        this.clock.shuttle(position);
-        shuttle.style.setProperty("--shuttle", `${(position + 1) * 50}%`);
-        this.sync();
-      };
-      shuttle.onpointerdown = (event) => {
-        if (!Number.isFinite(this.clock.time)) return;
-        if (event.button !== 0 || this.shuttlePointer !== void 0) return;
-        event.preventDefault();
-        shuttle.focus();
-        shuttle.setPointerCapture(event.pointerId);
-        this.shuttlePointer = event.pointerId;
-        shuttle.classList.add("held");
-        move(event);
-      };
-      shuttle.onpointermove = (event) => {
-        if (event.pointerId === this.shuttlePointer) move(event);
-      };
-      const release = () => {
-        this.shuttlePointer = void 0;
-        this.clock.release();
-        shuttle.classList.remove("held");
-        shuttle.style.setProperty("--shuttle", "50%");
-        this.sync();
-      };
-      shuttle.onpointerup = shuttle.onpointercancel = shuttle.onlostpointercapture = release;
-      shuttle.onblur = release;
-      shuttle.onkeydown = (event) => {
-        if (!Number.isFinite(this.clock.time)) return;
-        if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        this.clock.shuttle(event.key === "ArrowLeft" ? -0.5 : 0.5);
-        shuttle.style.setProperty("--shuttle", event.key === "ArrowLeft" ? "25%" : "75%");
-        this.sync();
-      };
-      shuttle.onkeyup = release;
-      this.releaseShuttle = release;
+      for (const name of ["range-start", "range-end"]) {
+        const input = this.q(name);
+        input.oninput = () => this.selectTimelineRange(name, false);
+        input.onchange = () => this.selectTimelineRange(name, true);
+      }
       this.q("players").onclick = () => this.togglePlayers();
       this.q("all").onclick = () => {
         this.selection = new Set(this.names.keys());
@@ -3128,20 +3079,12 @@ ${payload}` : ""}`;
           if (event.key === "Escape") {
             this.closeChoices();
             this.togglePlayers(false);
-            this.releaseShuttle();
             this.q("players").focus();
           }
         },
         { signal: this.lifecycle.signal }
       );
-      window.addEventListener(
-        "blur",
-        () => {
-          finishScrub();
-          release();
-        },
-        { signal: this.lifecycle.signal }
-      );
+      window.addEventListener("blur", finishScrub, { signal: this.lifecycle.signal });
       this.lastFrame = performance.now();
       this.q("speed").value = String(this.clock.playbackRate);
       this.q("trails").value = String(this.trailMode);
@@ -3207,7 +3150,6 @@ ${payload}` : ""}`;
       this.opened = false;
       this.lifecycle.clearInterval(this.chatTimer);
       this.clock.isPlaying = false;
-      this.releaseShuttle();
       this.togglePlayers(false);
       this.requests.abort("heatmap");
       this.requests.abort("activity");
@@ -3313,7 +3255,10 @@ ${payload}` : ""}`;
         this.selection = new Set([...this.selection].filter((id) => this.names.has(id)));
         this.registryRevision++;
         this.selectionRevision++;
-        this.clock.refresh(m2.earliestTimestamp, Math.max(m2.latestTimestamp, Date.now()), reset);
+        const latest = Math.max(m2.latestTimestamp, Date.now());
+        const calendar = calendarRange(this.q("range").value, latest);
+        if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
+        this.clock.refresh(m2.earliestTimestamp, latest, reset);
         this.renderPlayers();
         if (changed) await this.reloadRange();
         else this.loadActivity();
@@ -3330,10 +3275,37 @@ ${payload}` : ""}`;
       if (!(error instanceof DOMException && error.name === "AbortError"))
         this.statusCoordinator.show("error", errorMessage(error));
     }
+    selectTimelineRange(source, commit) {
+      if (!this.manifest) return;
+      const startInput = this.q("range-start");
+      const endInput = this.q("range-end");
+      const minimum = Number(startInput.min);
+      const maximum = Number(startInput.max);
+      const step = Math.min(Number(startInput.step), Math.max(1, maximum - minimum));
+      let from = Number(startInput.value);
+      let to = Number(endInput.value);
+      if (source === "range-start") from = Math.min(from, to - step);
+      else to = Math.max(to, from + step);
+      from = clamp(from, minimum, maximum - step);
+      to = clamp(to, minimum + step, maximum);
+      this.clock.customRange = { from, to };
+      this.clock.refresh(minimum, maximum);
+      this.isLive = false;
+      this.q("range").value = "selection";
+      this.require(".history-custom-days").hidden = true;
+      this.require(".history-custom-dates").hidden = true;
+      this.sync();
+      if (commit) void this.reloadRange();
+    }
     async changeRange() {
       const choice = this.q("range").value;
       if (choice === "custom" && !this.q("days").reportValidity()) return;
-      if (choice === "dates") {
+      const latest = Math.max(this.manifest?.latestTimestamp ?? 0, Date.now());
+      const calendar = calendarRange(choice, latest);
+      if (calendar) {
+        this.clock.customRange = { from: calendar.from, to: calendar.to };
+        this.isLive = calendar.followsLive;
+      } else if (choice === "dates") {
         this.isLive = false;
         const from = new Date(this.q("date-from").value).getTime(), to = new Date(this.q("date-to").value).getTime();
         if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
@@ -3341,8 +3313,11 @@ ${payload}` : ""}`;
           return;
         }
         this.clock.customRange = { from, to };
-      } else this.clock.customRange = null;
-      if (choice !== "dates")
+      } else {
+        this.clock.customRange = null;
+        this.isLive = true;
+      }
+      if (!calendar && choice !== "dates")
         this.clock.rangeDuration = choice === "all" ? Infinity : Number(choice === "custom" ? this.q("days").value : choice) * 864e5;
       preferences.saveRange(choice);
       if (choice === "custom") preferences.saveDays(Number(this.q("days").value));
@@ -3423,6 +3398,29 @@ ${payload}` : ""}`;
         this.q("current").textContent = formatDate(c2.time);
         this.q("latest").disabled = this.isLive;
         this.q("latest").setAttribute("aria-pressed", String(this.isLive));
+        const rangeMinimum = Math.min(this.manifest?.earliestTimestamp ?? c2.from, c2.from);
+        const rangeMaximum = Math.max(this.manifest?.latestTimestamp ?? c2.to, c2.to, Date.now());
+        const rangeSpan = Math.max(1, rangeMaximum - rangeMinimum);
+        const rangeStep = Math.min(6e4, rangeSpan);
+        const rangeStart = this.q("range-start");
+        const rangeEnd = this.q("range-end");
+        for (const input of [rangeStart, rangeEnd]) {
+          input.min = String(rangeMinimum);
+          input.max = String(rangeMaximum);
+          input.step = String(rangeStep);
+        }
+        rangeStart.value = String(c2.from);
+        rangeEnd.value = String(c2.to);
+        rangeStart.setAttribute("aria-valuetext", formatDate(c2.from));
+        rangeEnd.setAttribute("aria-valuetext", formatDate(c2.to));
+        this.q("range-start-label").textContent = formatDate(c2.from, false);
+        this.q("range-end-label").textContent = formatDate(c2.to, false);
+        const selector = this.q("range-window");
+        selector.style.setProperty(
+          "--range-start",
+          `${(c2.from - rangeMinimum) / rangeSpan * 100}%`
+        );
+        selector.style.setProperty("--range-end", `${(c2.to - rangeMinimum) / rangeSpan * 100}%`);
         const tooltip = this.require(".history-tooltip");
         tooltip.hidden = !this.scrubbing;
         tooltip.textContent = formatDate(c2.time);
@@ -3430,8 +3428,6 @@ ${payload}` : ""}`;
       }
       this.q("play").textContent = c2.isPlaying ? "\u2161" : "\u25B6";
       this.q("play").setAttribute("aria-label", c2.isPlaying ? "Pause replay" : "Play replay");
-      this.q("rate").textContent = c2.isShuttling ? `Shuttle \xB7 ${Number(c2.shuttleRate.toFixed(1))}\xD7` : `Shuttle \xB7 release to ${c2.playbackRate}\xD7`;
-      this.q("shuttle").setAttribute("aria-valuenow", c2.shuttleRate.toFixed(1));
       const playerCount = this.selection.size;
       this.q("player-count").textContent = String(playerCount);
       this.q("players").title = `Players \xB7 ${playerCount} selected`;

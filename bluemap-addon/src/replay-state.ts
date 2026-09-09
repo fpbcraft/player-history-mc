@@ -30,36 +30,6 @@ export const addActivityBins = (
   }
 };
 
-const SHUTTLE_STOPS = [
-  [-1, -120],
-  [-0.85, -60],
-  [-0.7, -16],
-  [-0.5, -4],
-  [-0.35, -2],
-  [-0.25, -1],
-  [-0.16, 0],
-  [-0.1, 0.5],
-  [0, 1],
-  [0.25, 2],
-  [0.5, 4],
-  [0.7, 16],
-  [0.85, 60],
-  [1, 120],
-] as const;
-
-export const shuttleRate = (position: number): number => {
-  const value = clamp(position, -1, 1);
-  for (let index = 1; index < SHUTTLE_STOPS.length; index++) {
-    const previous = SHUTTLE_STOPS[index - 1];
-    const current = SHUTTLE_STOPS[index];
-    if (!previous || !current) continue;
-    const [from, rate] = previous;
-    const [to, nextRate] = current;
-    if (value <= to) return rate + ((nextRate - rate) * (value - from)) / (to - from);
-  }
-  return 120;
-};
-
 export interface CustomRange {
   from: number;
   to: number;
@@ -70,8 +40,6 @@ export class ReplayClock {
   rangeDuration = HISTORY_WINDOW;
   customRange: CustomRange | null = null;
   isPlaying = false;
-  isShuttling = false;
-  shuttleRate = 1;
   from = 0;
   to = 0;
   time = Number.NaN;
@@ -81,7 +49,6 @@ export class ReplayClock {
   }
 
   get rate(): number {
-    if (this.isShuttling) return this.shuttleRate;
     return this.isPlaying ? this.playbackRate : 0;
   }
 
@@ -107,17 +74,7 @@ export class ReplayClock {
 
   tick(delta: number): void {
     this.seek(this.time + delta * this.rate);
-    if (!this.isShuttling && this.time >= this.to) this.isPlaying = false;
-  }
-
-  shuttle(position: number): void {
-    this.isShuttling = true;
-    this.shuttleRate = shuttleRate(position);
-  }
-
-  release(): void {
-    this.isShuttling = false;
-    this.shuttleRate = 1;
+    if (this.time >= this.to) this.isPlaying = false;
   }
 }
 

@@ -5,6 +5,7 @@ import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overl
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
 import { PanelLifecycle, type PanelTimer } from "./panel-lifecycle.js";
 import {
+  calendarRange,
   DEFAULT_DISABLED_EVENTS,
   KNOWN_EVENT_TYPES,
   SPEED_OPTIONS,
@@ -70,7 +71,6 @@ export class ReplayPanel extends HTMLElement {
   private lastMap: string | undefined;
   private loadedBucket: number | undefined;
   private pendingBucket: number | undefined;
-  private shuttlePointer: number | undefined;
   private heatVersion = 0;
   private chatTimer: PanelTimer | undefined;
   private seekTimer: PanelTimer | undefined;
@@ -88,7 +88,6 @@ export class ReplayPanel extends HTMLElement {
   private filterRevision = 0;
   private healthToken: object = {};
   private trailMode = 60_000;
-  private releaseShuttle: () => void = () => {};
 
   private get compact(): boolean {
     return this.panelState.compact;
@@ -216,10 +215,10 @@ export class ReplayPanel extends HTMLElement {
     if (savedDays !== null && Number.isInteger(savedDays) && savedDays > 0 && savedDays <= 36500)
       this.q("days").value = String(savedDays);
     const initialRange = this.q("range").value;
-    this.clock.rangeDuration =
-      initialRange === "all"
-        ? Infinity
-        : Number(initialRange === "custom" ? this.q("days").value : initialRange) * 86400000;
+    if (initialRange === "all") this.clock.rangeDuration = Infinity;
+    else if (!calendarRange(initialRange, Date.now()))
+      this.clock.rangeDuration =
+        Number(initialRange === "custom" ? this.q("days").value : initialRange) * 86400000;
     const savedSpeed = preferences.speed();
     if (savedSpeed !== null && SPEED_OPTIONS.includes(savedSpeed as (typeof SPEED_OPTIONS)[number]))
       this.clock.playbackRate = savedSpeed;
@@ -453,47 +452,11 @@ export class ReplayPanel extends HTMLElement {
       },
       { passive: false },
     );
-    const shuttle = this.q("shuttle");
-    const move = (event: PointerEvent) => {
-      const bounds = this.require<HTMLElement>(".history-shuttle-track").getBoundingClientRect();
-      const position = clamp(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -1, 1);
-      this.clock.shuttle(position);
-      shuttle.style.setProperty("--shuttle", `${(position + 1) * 50}%`);
-      this.sync();
-    };
-    shuttle.onpointerdown = (event) => {
-      if (!Number.isFinite(this.clock.time)) return;
-      if (event.button !== 0 || this.shuttlePointer !== undefined) return;
-      event.preventDefault();
-      shuttle.focus();
-      shuttle.setPointerCapture(event.pointerId);
-      this.shuttlePointer = event.pointerId;
-      shuttle.classList.add("held");
-      move(event);
-    };
-    shuttle.onpointermove = (event) => {
-      if (event.pointerId === this.shuttlePointer) move(event);
-    };
-    const release = () => {
-      this.shuttlePointer = undefined;
-      this.clock.release();
-      shuttle.classList.remove("held");
-      shuttle.style.setProperty("--shuttle", "50%");
-      this.sync();
-    };
-    shuttle.onpointerup = shuttle.onpointercancel = shuttle.onlostpointercapture = release;
-    shuttle.onblur = release;
-    shuttle.onkeydown = (event) => {
-      if (!Number.isFinite(this.clock.time)) return;
-      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      this.clock.shuttle(event.key === "ArrowLeft" ? -0.5 : 0.5);
-      shuttle.style.setProperty("--shuttle", event.key === "ArrowLeft" ? "25%" : "75%");
-      this.sync();
-    };
-    shuttle.onkeyup = release;
-    this.releaseShuttle = release;
+    for (const name of ["range-start", "range-end"] as const) {
+      const input = this.q(name);
+      input.oninput = () => this.selectTimelineRange(name, false);
+      input.onchange = () => this.selectTimelineRange(name, true);
+    }
     this.q("players").onclick = () => this.togglePlayers();
     this.q("all").onclick = () => {
       this.selection = new Set(this.names.keys());
@@ -555,20 +518,12 @@ export class ReplayPanel extends HTMLElement {
         if (event.key === "Escape") {
           this.closeChoices();
           this.togglePlayers(false);
-          this.releaseShuttle();
           this.q("players").focus();
         }
       },
       { signal: this.lifecycle.signal },
     );
-    window.addEventListener(
-      "blur",
-      () => {
-        finishScrub();
-        release();
-      },
-      { signal: this.lifecycle.signal },
-    );
+    window.addEventListener("blur", finishScrub, { signal: this.lifecycle.signal });
     this.lastFrame = performance.now();
     this.q("speed").value = String(this.clock.playbackRate);
     this.q("trails").value = String(this.trailMode);
@@ -634,7 +589,6 @@ export class ReplayPanel extends HTMLElement {
     this.opened = false;
     this.lifecycle.clearInterval(this.chatTimer);
     this.clock.isPlaying = false;
-    this.releaseShuttle();
     this.togglePlayers(false);
     this.requests.abort("heatmap");
     this.requests.abort("activity");
@@ -746,7 +700,10 @@ export class ReplayPanel extends HTMLElement {
       this.selection = new Set([...this.selection].filter((id) => this.names.has(id)));
       this.registryRevision++;
       this.selectionRevision++;
-      this.clock.refresh(m.earliestTimestamp, Math.max(m.latestTimestamp, Date.now()), reset);
+      const latest = Math.max(m.latestTimestamp, Date.now());
+      const calendar = calendarRange(this.q("range").value, latest);
+      if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
+      this.clock.refresh(m.earliestTimestamp, latest, reset);
       this.renderPlayers();
       if (changed) await this.reloadRange();
       else this.loadActivity();
@@ -763,10 +720,37 @@ export class ReplayPanel extends HTMLElement {
     if (!(error instanceof DOMException && error.name === "AbortError"))
       this.statusCoordinator.show("error", errorMessage(error));
   }
+  private selectTimelineRange(source: "range-start" | "range-end", commit: boolean): void {
+    if (!this.manifest) return;
+    const startInput = this.q("range-start");
+    const endInput = this.q("range-end");
+    const minimum = Number(startInput.min);
+    const maximum = Number(startInput.max);
+    const step = Math.min(Number(startInput.step), Math.max(1, maximum - minimum));
+    let from = Number(startInput.value);
+    let to = Number(endInput.value);
+    if (source === "range-start") from = Math.min(from, to - step);
+    else to = Math.max(to, from + step);
+    from = clamp(from, minimum, maximum - step);
+    to = clamp(to, minimum + step, maximum);
+    this.clock.customRange = { from, to };
+    this.clock.refresh(minimum, maximum);
+    this.isLive = false;
+    this.q("range").value = "selection";
+    this.require<HTMLElement>(".history-custom-days").hidden = true;
+    this.require<HTMLElement>(".history-custom-dates").hidden = true;
+    this.sync();
+    if (commit) void this.reloadRange();
+  }
   async changeRange() {
     const choice = this.q("range").value;
     if (choice === "custom" && !this.q("days").reportValidity()) return;
-    if (choice === "dates") {
+    const latest = Math.max(this.manifest?.latestTimestamp ?? 0, Date.now());
+    const calendar = calendarRange(choice, latest);
+    if (calendar) {
+      this.clock.customRange = { from: calendar.from, to: calendar.to };
+      this.isLive = calendar.followsLive;
+    } else if (choice === "dates") {
       this.isLive = false;
       const from = new Date(this.q("date-from").value).getTime(),
         to = new Date(this.q("date-to").value).getTime();
@@ -775,8 +759,11 @@ export class ReplayPanel extends HTMLElement {
         return;
       }
       this.clock.customRange = { from, to };
-    } else this.clock.customRange = null;
-    if (choice !== "dates")
+    } else {
+      this.clock.customRange = null;
+      this.isLive = true;
+    }
+    if (!calendar && choice !== "dates")
       this.clock.rangeDuration =
         choice === "all"
           ? Infinity
@@ -873,6 +860,29 @@ export class ReplayPanel extends HTMLElement {
       this.q("current").textContent = formatDate(c.time);
       this.q("latest").disabled = this.isLive;
       this.q("latest").setAttribute("aria-pressed", String(this.isLive));
+      const rangeMinimum = Math.min(this.manifest?.earliestTimestamp ?? c.from, c.from);
+      const rangeMaximum = Math.max(this.manifest?.latestTimestamp ?? c.to, c.to, Date.now());
+      const rangeSpan = Math.max(1, rangeMaximum - rangeMinimum);
+      const rangeStep = Math.min(60_000, rangeSpan);
+      const rangeStart = this.q("range-start");
+      const rangeEnd = this.q("range-end");
+      for (const input of [rangeStart, rangeEnd]) {
+        input.min = String(rangeMinimum);
+        input.max = String(rangeMaximum);
+        input.step = String(rangeStep);
+      }
+      rangeStart.value = String(c.from);
+      rangeEnd.value = String(c.to);
+      rangeStart.setAttribute("aria-valuetext", formatDate(c.from));
+      rangeEnd.setAttribute("aria-valuetext", formatDate(c.to));
+      this.q("range-start-label").textContent = formatDate(c.from, false);
+      this.q("range-end-label").textContent = formatDate(c.to, false);
+      const selector = this.q("range-window");
+      selector.style.setProperty(
+        "--range-start",
+        `${((c.from - rangeMinimum) / rangeSpan) * 100}%`,
+      );
+      selector.style.setProperty("--range-end", `${((c.to - rangeMinimum) / rangeSpan) * 100}%`);
       const tooltip = this.require<HTMLElement>(".history-tooltip");
       tooltip.hidden = !this.scrubbing;
       tooltip.textContent = formatDate(c.time);
@@ -882,10 +892,6 @@ export class ReplayPanel extends HTMLElement {
     // label carries the full action name.
     this.q("play").textContent = c.isPlaying ? "Ⅱ" : "▶";
     this.q("play").setAttribute("aria-label", c.isPlaying ? "Pause replay" : "Play replay");
-    this.q("rate").textContent = c.isShuttling
-      ? `Shuttle · ${Number(c.shuttleRate.toFixed(1))}×`
-      : `Shuttle · release to ${c.playbackRate}×`;
-    this.q("shuttle").setAttribute("aria-valuenow", c.shuttleRate.toFixed(1));
     const playerCount = this.selection.size;
     this.q("player-count").textContent = String(playerCount);
     this.q("players").title = `Players · ${playerCount} selected`;

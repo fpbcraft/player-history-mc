@@ -21,8 +21,11 @@ export interface ReplayControls {
   "player-count": HTMLSpanElement;
   players: HTMLButtonElement;
   range: HTMLSelectElement;
-  rate: HTMLOutputElement;
-  shuttle: HTMLDivElement;
+  "range-end": HTMLInputElement;
+  "range-end-label": HTMLOutputElement;
+  "range-start": HTMLInputElement;
+  "range-start-label": HTMLOutputElement;
+  "range-window": HTMLDivElement;
   speed: HTMLInputElement;
   "speed-button": HTMLButtonElement;
   start: HTMLSpanElement;

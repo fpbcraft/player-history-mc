@@ -86,6 +86,9 @@ export const HistoryHeader = () => (
               {label}
             </option>
           ))}
+          <option value="selection" hidden>
+            Selected range
+          </option>
         </select>
       </label>
       <form class="history-custom-days" hidden>

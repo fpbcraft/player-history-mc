@@ -2,14 +2,30 @@ export const RANGE_OPTIONS = [
   ["0.041666666666666664", "Last hour"],
   ["0.125", "Last 3 hours"],
   ["0.25", "Last 6 hours"],
+  ["0.5", "Last 12 hours"],
   ["1", "Last 24 hours"],
   ["2", "Last 48 hours"],
+  ["today", "Today"],
+  ["yesterday", "Yesterday"],
   ["7", "Last week"],
   ["30", "Last 30 days"],
   ["all", "All history"],
   ["custom", "Last N days…"],
   ["dates", "Custom dates…"],
 ] as const;
+
+export const calendarRange = (
+  value: string,
+  now: number,
+): { from: number; to: number; followsLive: boolean } | null => {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  if (value === "today") return { from: today.getTime(), to: now, followsLive: true };
+  if (value !== "yesterday") return null;
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return { from: yesterday.getTime(), to: today.getTime(), followsLive: false };
+};
 
 export const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64] as const;
 

@@ -1,27 +1,6 @@
 import { SPEED_OPTIONS } from "../panel-options.js";
 import { HistoryIcon } from "./history-icon.js";
-
-const Shuttle = () => (
-  <div class="history-shuttle-wrap">
-    <div
-      data-control="shuttle"
-      class="history-shuttle"
-      role="slider"
-      tabIndex={0}
-      aria-label="Hold to rewind or fast forward; release to restore playback"
-      aria-valuemin={-120}
-      aria-valuemax={120}
-      aria-valuenow={1}
-    >
-      <span>−120×</span>
-      <div class="history-shuttle-track">
-        <i />
-      </div>
-      <span>120×</span>
-    </div>
-    <output name="rate">Shuttle · 1×</output>
-  </div>
-);
+import { TimeRangeControl } from "./time-range-control.js";
 
 const SpeedControl = () => (
   <div class="history-speed">
@@ -76,7 +55,7 @@ export const HistoryTransport = () => (
       <button type="button" name="back" title="Back five minutes" aria-label="Back five minutes">
         ↶
       </button>
-      <Shuttle />
+      <TimeRangeControl />
       <button
         type="button"
         name="forward"
