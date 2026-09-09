@@ -1,6 +1,7 @@
 import { BlueMapAdapter } from "./bluemap-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
+import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
 import { PanelLifecycle, type PanelTimer } from "./panel-lifecycle.js";
 import {
@@ -10,29 +11,16 @@ import {
   TRAIL_OPTIONS,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import {
-  BREAK,
-  ChunkCache,
-  CONTEXT,
-  heatmapPlan,
-  mergePoints,
-  ReplayEngine,
-} from "./replay-core.js";
+import { BREAK, ChunkCache, CONTEXT, heatmapPlan, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
-import {
-  addActivityBins,
-  clamp,
-  combineProductionEvents,
-  ReplayClock,
-  visibleEvents,
-} from "./replay-state.js";
+import { addActivityBins, clamp, ReplayClock } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
 import { describeState, TelemetryCache } from "./telemetry.js";
+import { formatDate } from "./time-format.js";
 import type { HistoryEvent, HistoryManifest, HistoryPoint, IntegrationMapping } from "./types.js";
 import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
 import { renderEventFilter } from "./ui/event-filter-view.js";
-import { renderHistoryEvents } from "./ui/history-events-view.js";
 import { renderPlayerFilter } from "./ui/player-filter-view.js";
 import { mountReplayPanelView, unmountReplayPanelView } from "./ui/replay-panel-view.js";
 import { renderWebChatFeed } from "./ui/webchat-feed-view.js";
@@ -45,18 +33,6 @@ declare global {
 }
 
 const BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
-const formatDate = (time: number, seconds = true): string =>
-  new Date(time).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    ...(seconds ? { second: "2-digit" } : {}),
-  });
-
-type HeatmapRow = [number, number, number, number, number];
-
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -97,12 +73,14 @@ export class ReplayPanel extends HTMLElement {
   private heatVersion = 0;
   private chatTimer: PanelTimer | undefined;
   private seekTimer: PanelTimer | undefined;
-  private eventKey: string | null = null;
-  private trailKey: string | null = null;
   private trailDataKey: string | null = null;
-  private heatKey: string | null = null;
   private healthKey: string | null = null;
-  private timelineEventKey: string | null = null;
+  private overlayKeys: OverlayKeys = {
+    event: null,
+    heat: null,
+    timeline: null,
+    trail: null,
+  };
   private eventRevision = 0;
   private registryRevision = 0;
   private selectionRevision = 0;
@@ -212,6 +190,7 @@ export class ReplayPanel extends HTMLElement {
     this.registryRevision = 0;
     this.selectionRevision = 0;
     this.filterRevision = 0;
+    this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
     mountReplayPanelView(this);
     this.controls = new PanelControls(this);
     const eventControl = this.require<HTMLDetailsElement>(".history-event-control");
@@ -872,7 +851,7 @@ export class ReplayPanel extends HTMLElement {
     this.requests.abort("trails");
     this.requests.abort("heatmap");
     this.heatRows = null;
-    this.heatKey = this.trailKey = null;
+    this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
     this.updateOverlays();
     this.loadRangeEvents();
     await this.loadWindow();
@@ -1021,7 +1000,7 @@ export class ReplayPanel extends HTMLElement {
             manifest.registry,
             manifest.capabilities,
           );
-        this.trailKey = this.eventKey = this.heatKey = null;
+        this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       }
       const world = this.world();
       const ready = Math.floor(this.clock.time / this.cache.duration) === this.loadedBucket;
@@ -1065,127 +1044,47 @@ export class ReplayPanel extends HTMLElement {
   }
   updateOverlays() {
     if (!this.adapter || !this.cache || !this.manifest || !Number.isFinite(this.clock.time)) return;
-    const { from, to, time } = this.clock,
-      world = this.world();
-    const full = this.trailMode === Infinity;
-    const start = full ? from : Math.max(from, time - this.trailMode);
-    const dataKey = [
-      String(this.trailMode),
-      this.isLive ? Math.floor(from / this.cache.duration) : from,
-      this.isLive ? Math.floor(to / this.cache.duration) : to,
-      full ? "full" : Math.floor(time / this.cache.duration),
-    ].join(":");
-    if (this.trailDataKey !== dataKey && !this.requests.pending("trails")) this.loadTrails(dataKey);
-    const historyEngine = this.trailDataKey === dataKey ? this.fullTrails : null;
-    const engine = this.isLive
-      ? new ReplayEngine(
-          mergePoints([
-            { points: [...(historyEngine?.players.values() || [])].flat(), events: [] },
-            { points: this.livePoints, events: [] },
-          ]),
-        )
-      : historyEngine;
-    const trailKey = [
-      dataKey,
-      start,
-      full ? to : time,
-      this.selectionRevision,
-      world,
-      !!engine,
-      this.registryRevision,
-    ].join(":");
-    if (trailKey !== this.trailKey) {
-      this.trailKey = trailKey;
-      this.adapter.setTrails(
-        this.trailMode && engine
-          ? [...this.selection]
-              .flatMap((id) => engine.trails(id, start, full ? to : time))
-              .filter((line) => line[0]?.world === world)
-          : [],
-        this.names,
-      );
-    }
-    const combined = new Map(
-      [...this.rangeEvents, ...this.events, ...(this.isLive ? this.liveEvents : [])].map(
-        (event) => [JSON.stringify([event.point, event.type, event.payload]), event],
-      ),
-    );
-    const selectedTimelineEvents = [...combined.values()]
-      .sort((a, b) => a.point.time - b.point.time)
-      .filter(
-        (event) =>
-          this.selection.has(event.point.player) &&
-          event.point.time >= from &&
-          event.point.time <= to,
-      );
-    const timelineEvents = combineProductionEvents(selectedTimelineEvents).filter(
-      (event) => !this.disabledEvents.has(event.type),
-    );
-    const events = visibleEvents(timelineEvents, {
-      from,
-      time,
+    const chat = this.require<HTMLElement>(".history-chat");
+    const timeline = this.require<HTMLElement>(".history-events");
+    this.overlayKeys = updateReplayOverlays({
+      adapter: this.adapter,
+      cache: this.cache,
+      clock: this.clock,
+      disabledEvents: this.disabledEvents,
+      events: this.events,
+      eventRevision: this.eventRevision,
+      filterRevision: this.filterRevision,
+      fullTrails: this.fullTrails,
+      heatEnabled: this.heatEnabled,
+      heatRows: this.heatRows,
+      heatVersion: this.heatVersion,
+      isLive: this.isLive,
+      liveEvents: this.liveEvents,
+      livePoints: this.livePoints,
+      manifest: this.manifest,
+      names: this.names,
+      ...(window.bluemap?.mapViewer?.map?.data?.mapDataRoot
+        ? { mapRoot: window.bluemap.mapViewer.map.data.mapDataRoot }
+        : {}),
+      registryRevision: this.registryRevision,
+      rangeEvents: this.rangeEvents,
+      selection: this.selection,
+      selectionRevision: this.selectionRevision,
+      chatPinned: this.chatPinned,
+      timelineRoot: timeline,
+      chatRoot: chat,
+      trailDataKey: this.trailDataKey,
       trailMode: this.trailMode,
-      disabled: this.disabledEvents,
-    }).slice(-500);
-    const eventKey = [
-      this.eventRevision,
-      this.filterRevision,
-      this.selectionRevision,
-      world,
-      from,
-      to,
-      this.registryRevision,
-    ].join(":");
-    if (this.eventKey !== eventKey) {
-      this.eventKey = eventKey;
-      this.adapter.setEvents(
-        events.filter((event) => event.point.world === world),
-        this.names,
-        (t) => this.seek(t),
-        this.manifest.registry,
-      );
-    }
-    const chatEvents = selectedTimelineEvents
-      .filter((event) => ["CHAT", "JOIN", "QUIT", "DEATH"].includes(event.type))
-      .slice(-1000);
-    const timelineEventKey = `${this.eventRevision}:${this.registryRevision}:${from}:${to}`;
-    if (this.timelineEventKey !== timelineEventKey) {
-      this.timelineEventKey = timelineEventKey;
-      const chat = this.require<HTMLElement>(".history-chat");
-      const follow = this.chatPinned;
-      const ticks = this.require<HTMLElement>(".history-events");
-      const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
-      renderHistoryEvents(chat, ticks, {
-        events: chatEvents,
-        from,
-        to,
-        timelineWidth: ticks.clientWidth,
-        names: this.names,
-        players: this.manifest.registry.players,
-        ...(mapRoot ? { mapRoot } : {}),
-        formatTime: formatDate,
-        onSelect: (event) => this.goToEvent(event),
-      });
-      if (follow)
-        this.lifecycle.frame(() => {
-          chat.scrollTop = chat.scrollHeight;
-        });
-    }
-    const heatKey = [this.heatVersion, this.selectionRevision, world, this.heatEnabled].join(":");
-    if (heatKey !== this.heatKey) {
-      this.heatKey = heatKey;
-      if (this.heatEnabled && this.heatRows) {
-        const cells = new Map();
-        for (const row of this.heatRows)
-          if (this.selection.has(row[0]) && row[1] === world) {
-            const key = `${row[2]},${row[3]}`,
-              old = cells.get(key);
-            if (old) old[4] += row[4];
-            else cells.set(key, [...row]);
-          }
-        this.adapter.setHeatmap([...cells.values()], this.manifest.cellSize, 0.55);
-      } else this.adapter.clearHeatmap();
-    }
+      world: this.world(),
+      keys: this.overlayKeys,
+      timelineWidth: timeline.clientWidth,
+      requestTrail: (dataKey) => this.loadTrails(dataKey),
+      trailPending: this.requests.pending("trails"),
+      schedule: (callback) => this.lifecycle.frame(callback),
+      onSelectEvent: (event) => this.goToEvent(event),
+      onSeek: (time) => this.seek(time),
+    });
+    return;
   }
   async pollLive() {
     if (!this.isConnected || this.liveLoading) return;
@@ -1271,8 +1170,8 @@ export class ReplayPanel extends HTMLElement {
       if (controller.signal.aborted) return;
       this.rangeEvents = events.sort((a, b) => a.point.time - b.point.time);
       this.eventRevision++;
-      this.timelineEventKey = null;
-      this.eventKey = null;
+      this.overlayKeys.timeline = null;
+      this.overlayKeys.event = null;
       this.updateOverlays();
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) this.report(error);

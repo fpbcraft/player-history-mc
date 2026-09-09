@@ -1205,183 +1205,6 @@ ${payload}` : ""}`;
     }
   };
 
-  // src/panel-controls.ts
-  var PanelControls = class {
-    constructor(root) {
-      this.root = root;
-    }
-    root;
-    get(name) {
-      const element = this.root.querySelector(`[name="${name}"], [data-control="${name}"]`);
-      if (!element) throw new Error(`Missing replay panel control: ${name}`);
-      return element;
-    }
-  };
-
-  // src/panel-lifecycle.ts
-  var PanelLifecycle = class {
-    abortController = new AbortController();
-    intervals = /* @__PURE__ */ new Set();
-    timeouts = /* @__PURE__ */ new Set();
-    frames = /* @__PURE__ */ new Set();
-    get signal() {
-      return this.abortController.signal;
-    }
-    interval(callback, delay) {
-      const timer = setInterval(callback, delay);
-      this.intervals.add(timer);
-      return timer;
-    }
-    clearInterval(timer) {
-      if (timer === void 0) return;
-      clearInterval(timer);
-      this.intervals.delete(timer);
-    }
-    timeout(callback, delay) {
-      const timer = setTimeout(() => {
-        this.timeouts.delete(timer);
-        callback();
-      }, delay);
-      this.timeouts.add(timer);
-      return timer;
-    }
-    clearTimeout(timer) {
-      if (timer === void 0) return;
-      clearTimeout(timer);
-      this.timeouts.delete(timer);
-    }
-    frame(callback) {
-      const frame = requestAnimationFrame((time) => {
-        this.frames.delete(frame);
-        callback(time);
-      });
-      this.frames.add(frame);
-      return frame;
-    }
-    cancelFrame(frame) {
-      if (frame === void 0) return;
-      cancelAnimationFrame(frame);
-      this.frames.delete(frame);
-    }
-    dispose() {
-      this.abortController.abort();
-      for (const timer of this.intervals) clearInterval(timer);
-      for (const timer of this.timeouts) clearTimeout(timer);
-      for (const frame of this.frames) cancelAnimationFrame(frame);
-      this.intervals.clear();
-      this.timeouts.clear();
-      this.frames.clear();
-    }
-  };
-
-  // src/panel-options.ts
-  var RANGE_OPTIONS = [
-    ["0.041666666666666664", "Last hour"],
-    ["0.125", "Last 3 hours"],
-    ["0.25", "Last 6 hours"],
-    ["1", "Last 24 hours"],
-    ["2", "Last 48 hours"],
-    ["7", "Last week"],
-    ["30", "Last 30 days"],
-    ["all", "All history"],
-    ["custom", "Last N days\u2026"],
-    ["dates", "Custom dates\u2026"]
-  ];
-  var SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
-  var TRAIL_OPTIONS = [
-    [0, "Off"],
-    [3e4, "30 seconds"],
-    [6e4, "1 minute"],
-    [3e5, "5 minutes"],
-    [9e5, "15 minutes"],
-    [36e5, "1 hour"],
-    [216e5, "6 hours"],
-    [Infinity, "Full range"]
-  ];
-  var DEFAULT_DISABLED_EVENTS = [
-    "ITEM_PICKUP",
-    "ITEM_DROP",
-    "BLOCK_PLACE",
-    "BLOCK_BREAK",
-    "CONTAINER_OPEN",
-    "TELEPORT"
-  ];
-  var KNOWN_EVENT_TYPES = [
-    "CHAT",
-    "JOIN",
-    "QUIT",
-    "RESPAWN",
-    "DEATH",
-    "TELEPORT",
-    "DIMENSION_CHANGE",
-    "BLOCK_BREAK",
-    "BLOCK_PLACE",
-    "CONTAINER_OPEN",
-    "DAMAGE_TAKEN",
-    "DAMAGE_DEALT",
-    "MOB_KILL",
-    "PLAYER_KILL",
-    "ADVANCEMENT",
-    "CRAFT",
-    "SMELT",
-    "ENCHANT",
-    "TRADE",
-    "ITEM_PICKUP",
-    "ITEM_DROP"
-  ];
-
-  // src/preferences.ts
-  var KEYS = {
-    range: "player-history-range",
-    days: "player-history-custom-days",
-    speed: "player-history-speed",
-    players: "player-history-players",
-    hiddenEvents: "player-history-hidden-events",
-    trails: "player-history-trails",
-    heatmap: "player-history-heatmap",
-    chatToken: "player-history-chat-token"
-  };
-  var readArray = (key) => {
-    try {
-      const value = JSON.parse(localStorage.getItem(key) ?? "null");
-      return Array.isArray(value) ? value : [];
-    } catch {
-      return [];
-    }
-  };
-  var preferences = {
-    range: () => localStorage.getItem(KEYS.range),
-    saveRange: (value) => localStorage.setItem(KEYS.range, value),
-    days: () => {
-      const value = Number(localStorage.getItem(KEYS.days));
-      return Number.isInteger(value) && value > 0 && value <= 36500 ? value : null;
-    },
-    saveDays: (value) => localStorage.setItem(KEYS.days, String(value)),
-    speed: () => {
-      const value = Number(localStorage.getItem(KEYS.speed));
-      return [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64].includes(value) ? value : null;
-    },
-    saveSpeed: (value) => localStorage.setItem(KEYS.speed, String(value)),
-    players: () => readArray(KEYS.players).filter((value) => Number.isFinite(value)),
-    savePlayers: (value) => localStorage.setItem(KEYS.players, JSON.stringify([...value])),
-    hiddenEvents: () => readArray(KEYS.hiddenEvents).filter((value) => typeof value === "string"),
-    saveHiddenEvents: (value) => localStorage.setItem(KEYS.hiddenEvents, JSON.stringify([...value])),
-    trails: () => {
-      const stored = localStorage.getItem(KEYS.trails);
-      if (stored === "Infinity") return Infinity;
-      const value = Number(stored);
-      return Number.isFinite(value) ? value : null;
-    },
-    saveTrails: (value) => localStorage.setItem(KEYS.trails, String(value)),
-    heatmap: () => localStorage.getItem(KEYS.heatmap) === "true",
-    saveHeatmap: (value) => localStorage.setItem(KEYS.heatmap, String(value)),
-    chatToken: () => localStorage.getItem(KEYS.chatToken) ?? "",
-    saveChatToken: (value) => {
-      if (value) localStorage.setItem(KEYS.chatToken, value);
-      else localStorage.removeItem(KEYS.chatToken);
-    }
-  };
-
   // src/replay-core.ts
   var BREAK = 1;
   var OFFLINE = 2;
@@ -1543,20 +1366,6 @@ ${payload}` : ""}`;
     }
     return plan;
   };
-
-  // src/replay-panel-state.ts
-  var createReplayPanelState = () => ({
-    panel: "closed",
-    mode: "live",
-    compact: false,
-    scrubbing: false,
-    heatmap: false,
-    chatPinned: true,
-    chatLoading: false,
-    liveLoading: false,
-    refreshing: false,
-    hasSavedSelection: false
-  });
 
   // src/replay-state.ts
   var HISTORY_WINDOW = 3 * 36e5;
@@ -1720,64 +1529,15 @@ ${payload}` : ""}`;
     return result;
   };
 
-  // src/request-coordinator.ts
-  var RequestCoordinator = class {
-    active = /* @__PURE__ */ new Map();
-    start(request) {
-      this.abort(request);
-      const controller = new AbortController();
-      this.active.set(request, controller);
-      return controller;
-    }
-    pending(request) {
-      return this.active.has(request);
-    }
-    current(request, controller) {
-      return this.active.get(request) === controller && !controller.signal.aborted;
-    }
-    finish(request, controller) {
-      if (this.active.get(request) === controller) this.active.delete(request);
-    }
-    abort(request) {
-      this.active.get(request)?.abort();
-      this.active.delete(request);
-    }
-    abortAll() {
-      for (const controller of this.active.values()) controller.abort();
-      this.active.clear();
-    }
-  };
-
-  // src/status-coordinator.ts
-  var PRIORITY = {
-    error: 4,
-    range: 3,
-    loading: 2,
-    context: 1
-  };
-  var StatusCoordinator = class {
-    constructor(element) {
-      this.element = element;
-    }
-    element;
-    messages = /* @__PURE__ */ new Map();
-    show(channel, message) {
-      if (channel !== "error") this.messages.delete("error");
-      this.messages.set(channel, message);
-      this.render();
-    }
-    clear(channel) {
-      this.messages.delete(channel);
-      this.render();
-    }
-    render() {
-      let selected;
-      for (const channel of this.messages.keys()) {
-        if (!selected || PRIORITY[channel] > PRIORITY[selected]) selected = channel;
-      }
-      this.element.textContent = selected ? this.messages.get(selected) ?? "" : "";
-    }
-  };
+  // src/time-format.ts
+  var formatDate = (time, seconds = true) => new Date(time).toLocaleString(void 0, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    ...seconds ? { second: "2-digit" } : {}
+  });
 
   // node_modules/preact/dist/preact.module.js
   var n;
@@ -2047,40 +1807,6 @@ ${payload}` : ""}`;
     return l.vnode && l.vnode(l2), l2;
   }
 
-  // src/ui/activity-histogram-view.tsx
-  var ActivityHistogram = ({ bins, from, to, formatTime }) => {
-    const max = Math.max(0, ...bins);
-    return /* @__PURE__ */ u2(S, { children: bins.map((count, index) => /* @__PURE__ */ u2(
-      "span",
-      {
-        style: { height: count > 0 ? `max(2px, ${count / max * 100}%)` : "0" },
-        title: `${formatTime(from + (to - from) * index / bins.length)} \xB7 ${Math.round(count).toLocaleString()} recorded samples (approx.)`
-      },
-      index
-    )) });
-  };
-  var renderActivityHistogram = (root, props) => {
-    R(/* @__PURE__ */ u2(ActivityHistogram, { ...props }), root);
-  };
-
-  // src/ui/event-filter-view.tsx
-  var eventLabel = (type) => type.toLowerCase().replaceAll("_", " ");
-  var EventFilter = ({ types, disabled, onChange }) => /* @__PURE__ */ u2(S, { children: [...types].map((type) => /* @__PURE__ */ u2("label", { children: [
-    /* @__PURE__ */ u2(
-      "input",
-      {
-        type: "checkbox",
-        "aria-label": eventLabel(type),
-        checked: !disabled.has(type),
-        onChange: (event) => onChange(type, event.currentTarget.checked)
-      }
-    ),
-    eventLabel(type)
-  ] }, type)) });
-  var renderEventFilter = (root, props) => {
-    R(/* @__PURE__ */ u2(EventFilter, { ...props }), root);
-  };
-
   // src/ui/history-icon.tsx
   var ICON_PATHS = {
     events: "M12 3v2m0 14v2M3 12h2m14 0h2M5.64 5.64l1.42 1.42m9.88 9.88 1.42 1.42m0-12.72-1.42 1.42M7.06 16.94l-1.42 1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
@@ -2202,6 +1928,405 @@ ${payload}` : ""}`;
   var renderHistoryEvents = (chatRoot, timelineRoot, props) => {
     R(/* @__PURE__ */ u2(ChatHistory, { ...props }), chatRoot);
     R(/* @__PURE__ */ u2(TimelineEvents, { ...props }), timelineRoot);
+  };
+
+  // src/overlay-coordinator.ts
+  var updateReplayOverlays = (input) => {
+    const { adapter, cache, manifest } = input;
+    if (!adapter || !cache || !manifest || !Number.isFinite(input.clock.time)) return input.keys;
+    const { from, to, time } = input.clock;
+    const full = input.trailMode === Infinity;
+    const start = full ? from : Math.max(from, time - input.trailMode);
+    const dataKey = [
+      String(input.trailMode),
+      input.isLive ? Math.floor(from / cache.duration) : from,
+      input.isLive ? Math.floor(to / cache.duration) : to,
+      full ? "full" : Math.floor(time / cache.duration)
+    ].join(":");
+    if (input.trailDataKey !== dataKey && !input.trailPending) input.requestTrail(dataKey);
+    const historyEngine = input.trailDataKey === dataKey ? input.fullTrails : null;
+    const engine = input.isLive ? new ReplayEngine(
+      mergePoints([
+        {
+          points: [...historyEngine?.players.values() || []].flatMap((points) => [...points]),
+          events: []
+        },
+        { points: [...input.livePoints], events: [] }
+      ])
+    ) : historyEngine;
+    const trailKey = [
+      dataKey,
+      start,
+      full ? to : time,
+      input.selectionRevision,
+      input.world,
+      !!engine,
+      input.registryRevision
+    ].join(":");
+    if (trailKey !== input.keys.trail) {
+      input.keys.trail = trailKey;
+      adapter.setTrails(
+        input.trailMode && engine ? [...input.selection].flatMap((id) => engine.trails(id, start, full ? to : time)).filter((line) => line[0]?.world === input.world) : [],
+        new Map(input.names)
+      );
+    }
+    const combined = new Map(
+      [...input.rangeEvents, ...input.events, ...input.isLive ? input.liveEvents : []].map(
+        (event) => [JSON.stringify([event.point, event.type, event.payload]), event]
+      )
+    );
+    const selectedTimelineEvents = [...combined.values()].sort((a2, b2) => a2.point.time - b2.point.time).filter(
+      (event) => input.selection.has(event.point.player) && event.point.time >= from && event.point.time <= to
+    );
+    const timelineEvents = combineProductionEvents(selectedTimelineEvents).filter(
+      (event) => !input.disabledEvents.has(event.type)
+    );
+    const events = visibleEvents(timelineEvents, {
+      from,
+      time,
+      trailMode: input.trailMode,
+      disabled: new Set(input.disabledEvents)
+    }).slice(-500);
+    const eventKey = [
+      input.eventRevision,
+      input.filterRevision,
+      input.selectionRevision,
+      input.world,
+      from,
+      to,
+      input.registryRevision
+    ].join(":");
+    if (input.keys.event !== eventKey) {
+      input.keys.event = eventKey;
+      adapter.setEvents(
+        events.filter((event) => event.point.world === input.world),
+        new Map(input.names),
+        input.onSeek,
+        manifest.registry
+      );
+    }
+    const chatEvents = selectedTimelineEvents.filter((event) => ["CHAT", "JOIN", "QUIT", "DEATH"].includes(event.type)).slice(-1e3);
+    const timelineKey = `${input.eventRevision}:${input.registryRevision}:${from}:${to}`;
+    if (input.keys.timeline !== timelineKey) {
+      input.keys.timeline = timelineKey;
+      renderHistoryEvents(input.chatRoot, input.timelineRoot, {
+        events: chatEvents,
+        from,
+        to,
+        timelineWidth: input.timelineWidth,
+        names: input.names,
+        players: manifest.registry.players,
+        ...input.mapRoot ? { mapRoot: input.mapRoot } : {},
+        formatTime: formatDate,
+        onSelect: input.onSelectEvent
+      });
+      if (input.chatPinned)
+        input.schedule(() => {
+          input.chatRoot.scrollTop = input.chatRoot.scrollHeight;
+        });
+    }
+    const heatKey = [input.heatVersion, input.selectionRevision, input.world, input.heatEnabled].join(
+      ":"
+    );
+    if (input.keys.heat !== heatKey) {
+      input.keys.heat = heatKey;
+      if (input.heatEnabled && input.heatRows) {
+        const cells = /* @__PURE__ */ new Map();
+        for (const row of input.heatRows) {
+          if (!input.selection.has(row[0]) || row[1] !== input.world) continue;
+          const key = `${row[2]},${row[3]}`;
+          const old = cells.get(key);
+          if (old) old[4] += row[4];
+          else cells.set(key, [...row]);
+        }
+        adapter.setHeatmap([...cells.values()], manifest.cellSize, 0.55);
+      } else adapter.clearHeatmap();
+    }
+    return input.keys;
+  };
+
+  // src/panel-controls.ts
+  var PanelControls = class {
+    constructor(root) {
+      this.root = root;
+    }
+    root;
+    get(name) {
+      const element = this.root.querySelector(`[name="${name}"], [data-control="${name}"]`);
+      if (!element) throw new Error(`Missing replay panel control: ${name}`);
+      return element;
+    }
+  };
+
+  // src/panel-lifecycle.ts
+  var PanelLifecycle = class {
+    abortController = new AbortController();
+    intervals = /* @__PURE__ */ new Set();
+    timeouts = /* @__PURE__ */ new Set();
+    frames = /* @__PURE__ */ new Set();
+    get signal() {
+      return this.abortController.signal;
+    }
+    interval(callback, delay) {
+      const timer = setInterval(callback, delay);
+      this.intervals.add(timer);
+      return timer;
+    }
+    clearInterval(timer) {
+      if (timer === void 0) return;
+      clearInterval(timer);
+      this.intervals.delete(timer);
+    }
+    timeout(callback, delay) {
+      const timer = setTimeout(() => {
+        this.timeouts.delete(timer);
+        callback();
+      }, delay);
+      this.timeouts.add(timer);
+      return timer;
+    }
+    clearTimeout(timer) {
+      if (timer === void 0) return;
+      clearTimeout(timer);
+      this.timeouts.delete(timer);
+    }
+    frame(callback) {
+      const frame = requestAnimationFrame((time) => {
+        this.frames.delete(frame);
+        callback(time);
+      });
+      this.frames.add(frame);
+      return frame;
+    }
+    cancelFrame(frame) {
+      if (frame === void 0) return;
+      cancelAnimationFrame(frame);
+      this.frames.delete(frame);
+    }
+    dispose() {
+      this.abortController.abort();
+      for (const timer of this.intervals) clearInterval(timer);
+      for (const timer of this.timeouts) clearTimeout(timer);
+      for (const frame of this.frames) cancelAnimationFrame(frame);
+      this.intervals.clear();
+      this.timeouts.clear();
+      this.frames.clear();
+    }
+  };
+
+  // src/panel-options.ts
+  var RANGE_OPTIONS = [
+    ["0.041666666666666664", "Last hour"],
+    ["0.125", "Last 3 hours"],
+    ["0.25", "Last 6 hours"],
+    ["1", "Last 24 hours"],
+    ["2", "Last 48 hours"],
+    ["7", "Last week"],
+    ["30", "Last 30 days"],
+    ["all", "All history"],
+    ["custom", "Last N days\u2026"],
+    ["dates", "Custom dates\u2026"]
+  ];
+  var SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
+  var TRAIL_OPTIONS = [
+    [0, "Off"],
+    [3e4, "30 seconds"],
+    [6e4, "1 minute"],
+    [3e5, "5 minutes"],
+    [9e5, "15 minutes"],
+    [36e5, "1 hour"],
+    [216e5, "6 hours"],
+    [Infinity, "Full range"]
+  ];
+  var DEFAULT_DISABLED_EVENTS = [
+    "ITEM_PICKUP",
+    "ITEM_DROP",
+    "BLOCK_PLACE",
+    "BLOCK_BREAK",
+    "CONTAINER_OPEN",
+    "TELEPORT"
+  ];
+  var KNOWN_EVENT_TYPES = [
+    "CHAT",
+    "JOIN",
+    "QUIT",
+    "RESPAWN",
+    "DEATH",
+    "TELEPORT",
+    "DIMENSION_CHANGE",
+    "BLOCK_BREAK",
+    "BLOCK_PLACE",
+    "CONTAINER_OPEN",
+    "DAMAGE_TAKEN",
+    "DAMAGE_DEALT",
+    "MOB_KILL",
+    "PLAYER_KILL",
+    "ADVANCEMENT",
+    "CRAFT",
+    "SMELT",
+    "ENCHANT",
+    "TRADE",
+    "ITEM_PICKUP",
+    "ITEM_DROP"
+  ];
+
+  // src/preferences.ts
+  var KEYS = {
+    range: "player-history-range",
+    days: "player-history-custom-days",
+    speed: "player-history-speed",
+    players: "player-history-players",
+    hiddenEvents: "player-history-hidden-events",
+    trails: "player-history-trails",
+    heatmap: "player-history-heatmap",
+    chatToken: "player-history-chat-token"
+  };
+  var readArray = (key) => {
+    try {
+      const value = JSON.parse(localStorage.getItem(key) ?? "null");
+      return Array.isArray(value) ? value : [];
+    } catch {
+      return [];
+    }
+  };
+  var preferences = {
+    range: () => localStorage.getItem(KEYS.range),
+    saveRange: (value) => localStorage.setItem(KEYS.range, value),
+    days: () => {
+      const value = Number(localStorage.getItem(KEYS.days));
+      return Number.isInteger(value) && value > 0 && value <= 36500 ? value : null;
+    },
+    saveDays: (value) => localStorage.setItem(KEYS.days, String(value)),
+    speed: () => {
+      const value = Number(localStorage.getItem(KEYS.speed));
+      return [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64].includes(value) ? value : null;
+    },
+    saveSpeed: (value) => localStorage.setItem(KEYS.speed, String(value)),
+    players: () => readArray(KEYS.players).filter((value) => Number.isFinite(value)),
+    savePlayers: (value) => localStorage.setItem(KEYS.players, JSON.stringify([...value])),
+    hiddenEvents: () => readArray(KEYS.hiddenEvents).filter((value) => typeof value === "string"),
+    saveHiddenEvents: (value) => localStorage.setItem(KEYS.hiddenEvents, JSON.stringify([...value])),
+    trails: () => {
+      const stored = localStorage.getItem(KEYS.trails);
+      if (stored === "Infinity") return Infinity;
+      const value = Number(stored);
+      return Number.isFinite(value) ? value : null;
+    },
+    saveTrails: (value) => localStorage.setItem(KEYS.trails, String(value)),
+    heatmap: () => localStorage.getItem(KEYS.heatmap) === "true",
+    saveHeatmap: (value) => localStorage.setItem(KEYS.heatmap, String(value)),
+    chatToken: () => localStorage.getItem(KEYS.chatToken) ?? "",
+    saveChatToken: (value) => {
+      if (value) localStorage.setItem(KEYS.chatToken, value);
+      else localStorage.removeItem(KEYS.chatToken);
+    }
+  };
+
+  // src/replay-panel-state.ts
+  var createReplayPanelState = () => ({
+    panel: "closed",
+    mode: "live",
+    compact: false,
+    scrubbing: false,
+    heatmap: false,
+    chatPinned: true,
+    chatLoading: false,
+    liveLoading: false,
+    refreshing: false,
+    hasSavedSelection: false
+  });
+
+  // src/request-coordinator.ts
+  var RequestCoordinator = class {
+    active = /* @__PURE__ */ new Map();
+    start(request) {
+      this.abort(request);
+      const controller = new AbortController();
+      this.active.set(request, controller);
+      return controller;
+    }
+    pending(request) {
+      return this.active.has(request);
+    }
+    current(request, controller) {
+      return this.active.get(request) === controller && !controller.signal.aborted;
+    }
+    finish(request, controller) {
+      if (this.active.get(request) === controller) this.active.delete(request);
+    }
+    abort(request) {
+      this.active.get(request)?.abort();
+      this.active.delete(request);
+    }
+    abortAll() {
+      for (const controller of this.active.values()) controller.abort();
+      this.active.clear();
+    }
+  };
+
+  // src/status-coordinator.ts
+  var PRIORITY = {
+    error: 4,
+    range: 3,
+    loading: 2,
+    context: 1
+  };
+  var StatusCoordinator = class {
+    constructor(element) {
+      this.element = element;
+    }
+    element;
+    messages = /* @__PURE__ */ new Map();
+    show(channel, message) {
+      if (channel !== "error") this.messages.delete("error");
+      this.messages.set(channel, message);
+      this.render();
+    }
+    clear(channel) {
+      this.messages.delete(channel);
+      this.render();
+    }
+    render() {
+      let selected;
+      for (const channel of this.messages.keys()) {
+        if (!selected || PRIORITY[channel] > PRIORITY[selected]) selected = channel;
+      }
+      this.element.textContent = selected ? this.messages.get(selected) ?? "" : "";
+    }
+  };
+
+  // src/ui/activity-histogram-view.tsx
+  var ActivityHistogram = ({ bins, from, to, formatTime }) => {
+    const max = Math.max(0, ...bins);
+    return /* @__PURE__ */ u2(S, { children: bins.map((count, index) => /* @__PURE__ */ u2(
+      "span",
+      {
+        style: { height: count > 0 ? `max(2px, ${count / max * 100}%)` : "0" },
+        title: `${formatTime(from + (to - from) * index / bins.length)} \xB7 ${Math.round(count).toLocaleString()} recorded samples (approx.)`
+      },
+      index
+    )) });
+  };
+  var renderActivityHistogram = (root, props) => {
+    R(/* @__PURE__ */ u2(ActivityHistogram, { ...props }), root);
+  };
+
+  // src/ui/event-filter-view.tsx
+  var eventLabel = (type) => type.toLowerCase().replaceAll("_", " ");
+  var EventFilter = ({ types, disabled, onChange }) => /* @__PURE__ */ u2(S, { children: [...types].map((type) => /* @__PURE__ */ u2("label", { children: [
+    /* @__PURE__ */ u2(
+      "input",
+      {
+        type: "checkbox",
+        "aria-label": eventLabel(type),
+        checked: !disabled.has(type),
+        onChange: (event) => onChange(type, event.currentTarget.checked)
+      }
+    ),
+    eventLabel(type)
+  ] }, type)) });
+  var renderEventFilter = (root, props) => {
+    R(/* @__PURE__ */ u2(EventFilter, { ...props }), root);
   };
 
   // src/ui/player-filter-view.tsx
@@ -2509,14 +2634,6 @@ ${payload}` : ""}`;
 
   // src/replay-panel.ts
   var BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
-  var formatDate = (time, seconds = true) => new Date(time).toLocaleString(void 0, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    ...seconds ? { second: "2-digit" } : {}
-  });
   var errorMessage = (error) => error instanceof Error ? error.message : String(error);
   var ReplayPanel = class extends HTMLElement {
     historyClient = new HistoryClient(BASE_URL);
@@ -2555,12 +2672,14 @@ ${payload}` : ""}`;
     heatVersion = 0;
     chatTimer;
     seekTimer;
-    eventKey = null;
-    trailKey = null;
     trailDataKey = null;
-    heatKey = null;
     healthKey = null;
-    timelineEventKey = null;
+    overlayKeys = {
+      event: null,
+      heat: null,
+      timeline: null,
+      trail: null
+    };
     eventRevision = 0;
     registryRevision = 0;
     selectionRevision = 0;
@@ -2648,6 +2767,7 @@ ${payload}` : ""}`;
       this.registryRevision = 0;
       this.selectionRevision = 0;
       this.filterRevision = 0;
+      this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       mountReplayPanelView(this);
       this.controls = new PanelControls(this);
       const eventControl = this.require(".history-event-control");
@@ -3267,7 +3387,7 @@ ${payload}` : ""}`;
       this.requests.abort("trails");
       this.requests.abort("heatmap");
       this.heatRows = null;
-      this.heatKey = this.trailKey = null;
+      this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       this.updateOverlays();
       this.loadRangeEvents();
       await this.loadWindow();
@@ -3399,7 +3519,7 @@ ${payload}` : ""}`;
             manifest.registry,
             manifest.capabilities
           );
-          this.trailKey = this.eventKey = this.heatKey = null;
+          this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
         }
         const world = this.world();
         const ready = Math.floor(this.clock.time / this.cache.duration) === this.loadedBucket;
@@ -3434,112 +3554,45 @@ ${payload}` : ""}`;
     }
     updateOverlays() {
       if (!this.adapter || !this.cache || !this.manifest || !Number.isFinite(this.clock.time)) return;
-      const { from, to, time } = this.clock, world = this.world();
-      const full = this.trailMode === Infinity;
-      const start = full ? from : Math.max(from, time - this.trailMode);
-      const dataKey = [
-        String(this.trailMode),
-        this.isLive ? Math.floor(from / this.cache.duration) : from,
-        this.isLive ? Math.floor(to / this.cache.duration) : to,
-        full ? "full" : Math.floor(time / this.cache.duration)
-      ].join(":");
-      if (this.trailDataKey !== dataKey && !this.requests.pending("trails")) this.loadTrails(dataKey);
-      const historyEngine = this.trailDataKey === dataKey ? this.fullTrails : null;
-      const engine = this.isLive ? new ReplayEngine(
-        mergePoints([
-          { points: [...historyEngine?.players.values() || []].flat(), events: [] },
-          { points: this.livePoints, events: [] }
-        ])
-      ) : historyEngine;
-      const trailKey = [
-        dataKey,
-        start,
-        full ? to : time,
-        this.selectionRevision,
-        world,
-        !!engine,
-        this.registryRevision
-      ].join(":");
-      if (trailKey !== this.trailKey) {
-        this.trailKey = trailKey;
-        this.adapter.setTrails(
-          this.trailMode && engine ? [...this.selection].flatMap((id) => engine.trails(id, start, full ? to : time)).filter((line) => line[0]?.world === world) : [],
-          this.names
-        );
-      }
-      const combined = new Map(
-        [...this.rangeEvents, ...this.events, ...this.isLive ? this.liveEvents : []].map(
-          (event) => [JSON.stringify([event.point, event.type, event.payload]), event]
-        )
-      );
-      const selectedTimelineEvents = [...combined.values()].sort((a2, b2) => a2.point.time - b2.point.time).filter(
-        (event) => this.selection.has(event.point.player) && event.point.time >= from && event.point.time <= to
-      );
-      const timelineEvents = combineProductionEvents(selectedTimelineEvents).filter(
-        (event) => !this.disabledEvents.has(event.type)
-      );
-      const events = visibleEvents(timelineEvents, {
-        from,
-        time,
+      const chat = this.require(".history-chat");
+      const timeline = this.require(".history-events");
+      this.overlayKeys = updateReplayOverlays({
+        adapter: this.adapter,
+        cache: this.cache,
+        clock: this.clock,
+        disabledEvents: this.disabledEvents,
+        events: this.events,
+        eventRevision: this.eventRevision,
+        filterRevision: this.filterRevision,
+        fullTrails: this.fullTrails,
+        heatEnabled: this.heatEnabled,
+        heatRows: this.heatRows,
+        heatVersion: this.heatVersion,
+        isLive: this.isLive,
+        liveEvents: this.liveEvents,
+        livePoints: this.livePoints,
+        manifest: this.manifest,
+        names: this.names,
+        ...window.bluemap?.mapViewer?.map?.data?.mapDataRoot ? { mapRoot: window.bluemap.mapViewer.map.data.mapDataRoot } : {},
+        registryRevision: this.registryRevision,
+        rangeEvents: this.rangeEvents,
+        selection: this.selection,
+        selectionRevision: this.selectionRevision,
+        chatPinned: this.chatPinned,
+        timelineRoot: timeline,
+        chatRoot: chat,
+        trailDataKey: this.trailDataKey,
         trailMode: this.trailMode,
-        disabled: this.disabledEvents
-      }).slice(-500);
-      const eventKey = [
-        this.eventRevision,
-        this.filterRevision,
-        this.selectionRevision,
-        world,
-        from,
-        to,
-        this.registryRevision
-      ].join(":");
-      if (this.eventKey !== eventKey) {
-        this.eventKey = eventKey;
-        this.adapter.setEvents(
-          events.filter((event) => event.point.world === world),
-          this.names,
-          (t2) => this.seek(t2),
-          this.manifest.registry
-        );
-      }
-      const chatEvents = selectedTimelineEvents.filter((event) => ["CHAT", "JOIN", "QUIT", "DEATH"].includes(event.type)).slice(-1e3);
-      const timelineEventKey = `${this.eventRevision}:${this.registryRevision}:${from}:${to}`;
-      if (this.timelineEventKey !== timelineEventKey) {
-        this.timelineEventKey = timelineEventKey;
-        const chat = this.require(".history-chat");
-        const follow = this.chatPinned;
-        const ticks = this.require(".history-events");
-        const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
-        renderHistoryEvents(chat, ticks, {
-          events: chatEvents,
-          from,
-          to,
-          timelineWidth: ticks.clientWidth,
-          names: this.names,
-          players: this.manifest.registry.players,
-          ...mapRoot ? { mapRoot } : {},
-          formatTime: formatDate,
-          onSelect: (event) => this.goToEvent(event)
-        });
-        if (follow)
-          this.lifecycle.frame(() => {
-            chat.scrollTop = chat.scrollHeight;
-          });
-      }
-      const heatKey = [this.heatVersion, this.selectionRevision, world, this.heatEnabled].join(":");
-      if (heatKey !== this.heatKey) {
-        this.heatKey = heatKey;
-        if (this.heatEnabled && this.heatRows) {
-          const cells = /* @__PURE__ */ new Map();
-          for (const row of this.heatRows)
-            if (this.selection.has(row[0]) && row[1] === world) {
-              const key = `${row[2]},${row[3]}`, old = cells.get(key);
-              if (old) old[4] += row[4];
-              else cells.set(key, [...row]);
-            }
-          this.adapter.setHeatmap([...cells.values()], this.manifest.cellSize, 0.55);
-        } else this.adapter.clearHeatmap();
-      }
+        world: this.world(),
+        keys: this.overlayKeys,
+        timelineWidth: timeline.clientWidth,
+        requestTrail: (dataKey) => this.loadTrails(dataKey),
+        trailPending: this.requests.pending("trails"),
+        schedule: (callback) => this.lifecycle.frame(callback),
+        onSelectEvent: (event) => this.goToEvent(event),
+        onSeek: (time) => this.seek(time)
+      });
+      return;
     }
     async pollLive() {
       if (!this.isConnected || this.liveLoading) return;
@@ -3621,8 +3674,8 @@ ${payload}` : ""}`;
         if (controller.signal.aborted) return;
         this.rangeEvents = events.sort((a2, b2) => a2.point.time - b2.point.time);
         this.eventRevision++;
-        this.timelineEventKey = null;
-        this.eventKey = null;
+        this.overlayKeys.timeline = null;
+        this.overlayKeys.event = null;
         this.updateOverlays();
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) this.report(error);
