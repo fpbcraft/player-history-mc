@@ -1,11 +1,11 @@
-# Player History 0.8.9
+# Player History 0.8.12
 
 Two server-side **Minecraft 1.21.1 / NeoForge 21.1.248+ / Java 21** mods:
 
 - **Player History Recorder** records movement, configurable state and activity, and publishes a versioned dataset. It does not depend on BlueMap.
 - **Player History BlueMap** installs the replay viewer into **BlueMap 5.x**, links the public dataset, and maps BlueMap map IDs to Minecraft dimensions. It does not depend on recorder classes and can view an existing compatible dataset.
 
-Install `player-history-recorder-0.8.9.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.9.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
+Install `player-history-recorder-0.8.12.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.12.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 
@@ -49,8 +49,8 @@ Viewer fixes in 0.8.1: immutable filenames for all helper assets prevent mixed c
 0.8.1 adds public chat recording, near-real-time event/chat display while preserving historical batches, and a collapsible mobile panel. Clicking trails/events opens details without seeking. Live uses BlueMap's native player heads without historical duplicates. Item pickup/drop, block place/break and container-open start hidden in fresh viewer preferences; enable them in Events.
 
 
-## Version 0.8.9
+## Version 0.8.12
 
 The timeline keeps the full selected range, including empty periods and custom dates outside recorded data. NOW follows current time, and dragging fully right enters live mode. Live trails load before the History panel is opened. Range, speed, trail, player, heatmap and event choices persist in the browser. Timeline event marks remain visible independently of trail duration, with distinct chat marks. Chat history covers the selected range with timestamps and follows new messages until the user scrolls up. Nearby event bursts use dense count markers that open a timestamped, icon-labelled scrollable list only when clicked; timestamped chat bubbles remain directly readable. Join, leave and Minecraft death messages also appear in chat. Historical player markers show compact Minecraft hearts; live mode relies on BlueMap’s native player marker without a drifting duplicate overlay. Chat rows include player heads and navigate the timeline and camera to their recorded position. Chat and death ticks use distinct bubble and skull markers, event-group lists isolate hover interactions, and compact player tooltips round recorded values.
 
-Recent movement is published in the live feed without waiting for the historical batch. Authenticated web chat uses a one-time in-game linking command instead of IP matching. Install **both** 0.8.9 mods for these features. See [Web chat setup and live trails](docs/web-chat.md) for the required same-origin HTTPS proxy route, commands, session expiry and limits.
+Recent movement is published in the live feed without waiting for the historical batch. Authenticated web chat uses a one-time in-game linking command instead of IP matching. Install **both** 0.8.12 mods for these features. See [Web chat setup and live trails](docs/web-chat.md) for the required same-origin HTTPS proxy route, commands, session expiry and limits.

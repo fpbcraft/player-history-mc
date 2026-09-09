@@ -184,9 +184,10 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(adapter.tooltip.hidden, true);
     let sought;
     adapter.setEvents(
-      [{ point, type: "DEATH", payload: "{}" }],
+      [{ point, type: "DEATH", payload: JSON.stringify({ message: "Test player hit the ground too hard", from: point, to: point }) }],
       names,
       (time) => (sought = time),
+      { players: [{ id: 1, uuid: "abc" }] },
     );
     const event = adapter.events.children[0];
     assert.equal(event.element.textContent, "");
@@ -194,9 +195,10 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(event.element.style.color, eventColor("DEATH"));
     assert.equal(event.element.style.borderColor, playerColor(1));
     adapter.setEvents(
-      [{ point, type: "DEATH", payload: "{}" }],
+      [{ point, type: "DEATH", payload: JSON.stringify({ message: "Test player hit the ground too hard", from: point, to: point }) }],
       names,
       (time) => (sought = time),
+      { players: [{ id: 1, uuid: "abc" }] },
     );
     assert.equal(
       adapter.events.children[0],
@@ -205,6 +207,9 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     );
     event.element.onfocus();
     assert.match(adapter.tooltip.textContent, /death/);
+    assert.match(adapter.tooltip.textContent, /hit the ground too hard/);
+    assert.doesNotMatch(adapter.tooltip.textContent, /Position|From:|To:/);
+    assert.match(adapter.tooltip.style.backgroundImage, /playerheads\/abc\.png/);
     event.element.onclick();
     assert.equal(sought, undefined, "event clicks do not seek");
     adapter.tooltip.hidden = false;
@@ -227,10 +232,18 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     adapter.hover({ target: new Element(), clientX: 50, clientY: 50 });
     assert.equal(adapter.hoverDot.element.hidden, true);
     assert.equal(adapter.tooltip.hidden, true);
-    adapter.setEvents([{ point, type: "CHAT", payload: JSON.stringify({message: "<b>Hello</b>"}) }], names);
+    adapter.setEvents(
+      [{ point, type: "CHAT", payload: JSON.stringify({message: "<b>Hello</b>"}) }],
+      names,
+      undefined,
+      { players: [{ id: 1, uuid: "abc" }] },
+    );
     const bubble = adapter.events.children[0].element;
-    assert.match(bubble.textContent, /\d.*<b>Hello<\/b>/, "timestamped message stays literal text");
-    assert.equal(bubble.children.length, 0, "chat uses a message bubble instead of an icon");
+    assert.equal(bubble.dataset.historyTooltip, undefined, "chat bubbles have no redundant tooltip");
+    assert.equal(bubble.children.length, 2, "chat bubble includes a player head and message");
+    assert.equal(bubble.children[0].src, "maps/world/assets/playerheads/abc.png");
+    assert.match(bubble.children[1].children[0].textContent, /Test player · \d{2}:\d{2}:\d{2}/);
+    assert.equal(bubble.children[1].children[1].textContent, "<b>Hello</b>");
     assert.match(bubble.className, /history-chat-bubble/);
     adapter.dispose();
   } finally {

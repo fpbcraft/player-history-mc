@@ -3,7 +3,7 @@ loaderVersion="[4,)"
 license="MIT"
 [[mods]]
 modId="playerhistory_bluemap"
-version="0.8.9"
+version="0.8.12"
 displayName="Player History BlueMap"
 description="Independent BlueMap history viewer and asset installer."
 [[dependencies.playerhistory_bluemap]]

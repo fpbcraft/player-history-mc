@@ -9,7 +9,7 @@ tasks.register('buildViewer', Exec) {
  inputs.file('../bluemap-addon/build.mjs')
  outputs.dir('../bluemap-addon/dist')
 }
-sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', '*-0.8.9.js', '*-0.8.9.css' }
+sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', '*-0.8.12.js', '*-0.8.12.css' }
 tasks.named('processResources') { dependsOn 'buildViewer' }
 base { archivesName = 'player-history-bluemap' }
 

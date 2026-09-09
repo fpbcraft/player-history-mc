@@ -55,6 +55,7 @@ const shortStamp = (time) => new Date(time).toLocaleTimeString(undefined, {
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
+  hourCycle: "h23",
 });
 const eventPaths = {
   CRAFT: "M3 3h18v18H3zM9 3v18m6-18v18M3 9h18M3 15h18",
@@ -244,6 +245,9 @@ export class BlueMapAdapter {
     }
     this.tooltip.hidden = !text;
     if (text) {
+      const head = annotation?.dataset?.historyHead;
+      this.tooltip.className = "history-map-tooltip" + (head ? " with-player-head" : "");
+      this.tooltip.style.backgroundImage = head ? `url("${head}")` : "";
       this.tooltip.textContent = text;
       const token = (this.hoverToken = {});
       if (this.hoverState && this.stateDetails)
@@ -372,6 +376,7 @@ export class BlueMapAdapter {
           head.src = fallbackHead;
         };
         marker.element.append(this.createVitals(), head);
+        marker.element.dataset.historyHead = head.src;
         marker.element.tabIndex = 0;
         this.focusTooltip(marker.element);
         this.players.add(marker);
@@ -462,7 +467,23 @@ export class BlueMapAdapter {
           let payload;
           try { payload = typeof e.payload === "string" ? JSON.parse(e.payload) : e.payload; } catch { payload = {}; }
           m.element.className += " history-chat-bubble";
-          m.element.textContent = `${shortStamp(e.point.time)}  ${String(payload?.message || "")}`;
+          const player = registry.players?.find((player) => player.id === e.point.player);
+          const head = document.createElement("img");
+          head.className = "history-chat-bubble-head";
+          head.alt = "";
+          const root = this.app.mapViewer.map?.data?.mapDataRoot;
+          head.src = player?.uuid && root
+            ? `${root}/assets/playerheads/${player.uuid}.png`
+            : fallbackHead;
+          head.onerror = () => { head.onerror = null; head.src = fallbackHead; };
+          const copy = document.createElement("span");
+          copy.className = "history-chat-bubble-copy";
+          const meta = document.createElement("strong");
+          meta.textContent = `${names.get(e.point.player) || e.point.player} · ${shortStamp(e.point.time)}`;
+          const message = document.createElement("span");
+          message.textContent = String(payload?.message || "");
+          copy.append(meta, message);
+          m.element.append(head, copy);
         } else if (bucket.length > 1) {
           m.element.classList.add("history-event-group");
           const count = document.createElement("span");
@@ -477,17 +498,11 @@ export class BlueMapAdapter {
             detail.className = "history-event-list-item";
             detail.style.color = eventColor(item.type);
             detail.style.borderLeftColor = playerColor(item.point.player);
-            const details = eventDetails(item.payload, registry);
-            detail.dataset.historyTooltip =
-              (names.get(item.point.player) || item.point.player) +
-              " · " +
-              item.type.toLowerCase().replaceAll("_", " ") +
-              "\n" +
-              stamp(item.point.time) +
-              "\nPosition: " +
-              coords(item.point) +
-              (details ? "\n" + details : "");
-            detail.setAttribute("aria-label", detail.dataset.historyTooltip);
+            const details = eventDetails(item.payload, registry, item.type);
+            detail.setAttribute(
+              "aria-label",
+              `${names.get(item.point.player) || item.point.player} · ${item.type.toLowerCase().replaceAll("_", " ")} · ${shortStamp(item.point.time)}`,
+            );
             const copy = document.createElement("span");
             const title = document.createElement("strong");
             title.textContent =
@@ -498,35 +513,45 @@ export class BlueMapAdapter {
             description.textContent = details || "Position: " + coords(item.point);
             copy.append(title, description);
             detail.append(eventIcon(item.type), copy);
-            this.focusTooltip(detail);
-            detail.onclick = (event) => {
-              event.stopPropagation();
-              detail.focus?.();
-              detail.onfocus();
-            };
+            detail.onclick = (event) => event.stopPropagation();
             list.append(detail);
           }
           m.element.append(svg, count, list);
         } else m.element.append(svg);
-        this.focusTooltip(m.element);
+        if (e.type !== "CHAT" && bucket.length === 1)
+          this.focusTooltip(m.element);
         this.events.add(m);
       }
-      const payload = eventDetails(e.payload, registry);
-      m.element.dataset.historyTooltip = bucket.length > 1
-        ? `${names.get(e.point.player) || e.point.player} · ${bucket.length} events\n${stamp(bucket[0].point.time)} – ${stamp(e.point.time)}\nPosition: ${coords(e.point)}`
-        : `${names.get(e.point.player) || e.point.player} · ${e.type.toLowerCase().replaceAll("_", " ")}\n${stamp(e.point.time)}\nPosition: ${coords(e.point)}${payload ? "\n" + payload : ""}`;
+      const payload = eventDetails(e.payload, registry, e.type);
+      if (e.type !== "CHAT" && bucket.length === 1) {
+        const label = e.type.toLowerCase().replaceAll("_", " ");
+        const showPosition = ["BLOCK_BREAK", "BLOCK_PLACE", "CONTAINER_OPEN", "ITEM_PICKUP", "ITEM_DROP"].includes(e.type);
+        m.element.dataset.historyTooltip = `${names.get(e.point.player) || e.point.player} · ${label}\n${stamp(e.point.time)}${showPosition ? "\nPosition: " + coords(e.point) : ""}${payload ? "\n" + payload : ""}`;
+        const player = registry.players?.find((player) => player.id === e.point.player);
+        const root = this.app.mapViewer.map?.data?.mapDataRoot;
+        m.element.dataset.historyHead = player?.uuid && root
+          ? `${root}/assets/playerheads/${player.uuid}.png`
+          : fallbackHead;
+      } else {
+        delete m.element.dataset.historyTooltip;
+        delete m.element.dataset.historyHead;
+      }
       m.element.onclick = (event) => {
         event?.stopPropagation?.();
-        if (m.element.querySelector?.(".history-event-list")) {
+        if (m.element.querySelector?.(".history-event-list"))
           this.expandEventGroup(m);
-          return;
-        }
-        m.element.onfocus();
+        else if (e.type !== "CHAT")
+          m.element.onfocus?.();
       };
-      m.element.tabIndex = 0;
-      m.element.setAttribute("role", "button");
-      if (bucket.length > 1) m.element.setAttribute("aria-expanded", "false");
-      m.element.setAttribute("aria-label", m.element.dataset.historyTooltip);
+      if (e.type !== "CHAT") {
+        m.element.tabIndex = 0;
+        m.element.setAttribute("role", "button");
+      }
+      if (bucket.length > 1) {
+        m.element.setAttribute("aria-expanded", "false");
+        m.element.setAttribute("aria-label", `${bucket.length} events; click to expand`);
+      } else if (m.element.dataset.historyTooltip)
+        m.element.setAttribute("aria-label", m.element.dataset.historyTooltip);
       m.element.onkeydown = (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

@@ -1,15 +1,15 @@
 (async () => {
   const base = new URL("player-history/", location.href);
   const { ReplayEngine, ChunkCache, heatmapPlan, mergePoints, BREAK, CONTEXT } =
-    await import(new URL("replay-core.js?v=0.8.9", base));
-  const { ReplayClock, clamp, addActivityBins, visibleEvents } = await import(
-    new URL("replay-state.js?v=0.8.9", base)
+    await import(new URL("replay-core.js?v=0.8.12", base));
+  const { ReplayClock, clamp, addActivityBins, visibleEvents, clusterTimelineEvents } = await import(
+    new URL("replay-state.js?v=0.8.12", base)
   );
   const { BlueMapAdapter, playerColor, eventColor } = await import(
-    new URL("bluemap-adapter.js?v=0.8.9", base)
+    new URL("bluemap-adapter.js?v=0.8.12", base)
   );
   const { TelemetryCache, describeState, chatMessage } = await import(
-    new URL("telemetry.js?v=0.8.9", base)
+    new URL("telemetry.js?v=0.8.12", base)
   );
   if (customElements.get("bluemap-player-replay")) return;
   const date = (time, seconds = true) =>
@@ -18,6 +18,7 @@
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
       ...(seconds ? { second: "2-digit" } : {}),
     });
   const trailOptions = [
@@ -63,11 +64,14 @@
       const icons = {
         players: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
         webchat: "M21 11a8 8 0 0 1-8 8H7l-5 3V11a9 9 0 0 1 19 0Z",
-        "trails-button": "M3 19c0-8 18 0 18-8S3 11 3 3",
+        "trails-button": "M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4M7 17c4 0 3-10 8-10h2",
         "speed-button": "M3 18a10 10 0 1 1 18 0M12 14l5-6M5 18h14",
+        heat: "M4 4h5v5H4zM10 4h5v5h-5zM16 4h4v5h-4zM4 10h5v5H4zM10 10h5v5h-5zM16 10h4v5h-4zM4 16h5v4H4zM10 16h5v4h-5zM16 16h4v4h-4z",
       };
-      for (const [name, path] of Object.entries(icons)) this.q(name).innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+      const iconMarkup = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+      for (const [name, path] of Object.entries(icons)) this.q(name).innerHTML = iconMarkup(path);
       const eventControl = this.querySelector(".history-event-control");
+      eventControl.querySelector("summary").innerHTML = iconMarkup("M12 3v2m0 14v2M3 12h2m14 0h2M5.64 5.64l1.42 1.42m9.88 9.88 1.42 1.42m0-12.72-1.42 1.42M7.06 16.94l-1.42 1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0");
       const heading = this.querySelector(".history-heading");
       const headerTools = document.createElement("div");
       headerTools.className = "history-header-tools";
@@ -1162,24 +1166,25 @@
         if (follow) requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
         const ticks = this.querySelector(".history-events");
         ticks.replaceChildren();
-        for (const event of chatEvents.filter((event) => ["CHAT", "DEATH"].includes(event.type))) {
+        const indicatorEvents = chatEvents.filter((event) => ["CHAT", "DEATH"].includes(event.type));
+        const threshold = ((to - from) * 18) / Math.max(1, ticks.clientWidth || 600);
+        for (const cluster of clusterTimelineEvents(indicatorEvents, threshold)) {
           const button = document.createElement("button");
-          button.className = event.type === "DEATH"
-            ? "history-timeline-event history-death-tick"
-            : "history-timeline-event history-chat-tick";
-          button.title = `${date(event.point.time)} · ${event.type.toLowerCase().replaceAll("_", " ")} · ${this.names.get(event.point.player)}`;
-          button.setAttribute("aria-label", button.title);
-          button.style.color = eventColor(event.type);
-          button.style.left = `${((event.point.time - from) / Math.max(1, to - from)) * 100}%`;
+          const hasChat = cluster.some((event) => event.type === "CHAT");
+          const hasDeath = cluster.some((event) => event.type === "DEATH");
+          button.className = `history-timeline-event ${hasChat && hasDeath ? "history-mixed-tick" : hasDeath ? "history-death-tick" : "history-chat-tick"}`;
+          const middle = cluster.reduce((sum, event) => sum + event.point.time, 0) / cluster.length;
+          button.style.left = `${((middle - from) / Math.max(1, to - from)) * 100}%`;
+          button.style.color = hasChat && hasDeath ? "#eee" : eventColor(hasDeath ? "DEATH" : "CHAT");
+          const bubble = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v9H7l-4 3v-3H2z"/></svg>';
+          const skull = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 7a5 5 0 0 1 10 0v4h-2v2H9v-2H7v2H5v-2H3zM5 7h2v2H5zm4 0h2v2H9z"/></svg>';
+          button.innerHTML = (hasChat ? bubble : "") + (hasDeath ? skull : "") + (cluster.length > 1 ? `<b>${cluster.length}</b>` : "");
+          button.setAttribute("aria-label", `${cluster.length} ${hasChat && hasDeath ? "chat and death" : hasDeath ? "death" : "chat"} event${cluster.length === 1 ? "" : "s"}; click repeatedly to cycle`);
+          let current = 0;
           button.onclick = () => {
+            const event = cluster[current++ % cluster.length];
             this.goToEvent(event);
-            this.adapter.tooltip.textContent = button.title;
-            const bounds = button.getBoundingClientRect();
-            this.adapter.tooltip.style.left =
-              Math.min(bounds.left, innerWidth - 300) + "px";
-            this.adapter.tooltip.style.top =
-              Math.max(8, bounds.top - 100) + "px";
-            this.adapter.tooltip.hidden = false;
+            button.title = `${date(event.point.time)} · ${event.type.toLowerCase()} · ${this.names.get(event.point.player) || "Player"}`;
           };
           ticks.append(button);
         }

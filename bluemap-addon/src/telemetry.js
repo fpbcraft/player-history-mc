@@ -179,7 +179,7 @@ export function chatMessage(type, name, payload = {}) {
   return payload.message || "";
 }
 
-export function eventDetails(payload, registry = {}) {
+export function eventDetails(payload, registry = {}, type) {
   if (typeof payload === "string") {
     try {
       payload = JSON.parse(payload);
@@ -188,6 +188,31 @@ export function eventDetails(payload, registry = {}) {
     }
   }
   if (!payload || typeof payload !== "object") return "";
+  if (type === "JOIN") return "Joined the game";
+  if (type === "QUIT") return "Left the game";
+  if (type === "RESPAWN") return "Respawned";
+  if (type === "DEATH") return String(payload.message || "Died");
+  const fields = {
+    DEATH: ["message"],
+    TELEPORT: ["from", "to"],
+    DIMENSION_CHANGE: ["from", "to"],
+    BLOCK_BREAK: ["block"],
+    BLOCK_PLACE: ["block"],
+    CONTAINER_OPEN: ["menuType"],
+    DAMAGE_TAKEN: ["source", "amount", "healthAfter"],
+    DAMAGE_DEALT: ["targetType", "source", "amount", "healthAfter"],
+    MOB_KILL: ["targetType"],
+    PLAYER_KILL: ["targetType"],
+    ADVANCEMENT: ["advancement"],
+    CRAFT: ["item", "count", "name", "enchantments"],
+    SMELT: ["item", "count", "name", "enchantments"],
+    ENCHANT: ["item", "count", "name", "enchantments"],
+    TRADE: ["item", "count", "name", "enchantments"],
+    ITEM_PICKUP: ["item", "count", "name", "enchantments"],
+    ITEM_DROP: ["item", "count", "name", "enchantments"],
+  }[type];
+  if (fields)
+    payload = Object.fromEntries(fields.filter((key) => payload[key] != null).map((key) => [key, payload[key]]));
   const lines = [];
   const visit = (value, label, depth = 0) => {
     if (depth > 3 || lines.length >= 24) return;
@@ -202,12 +227,14 @@ export function eventDetails(payload, registry = {}) {
         );
         return;
       }
-      for (const [key, item] of Object.entries(value))
+      for (const [key, item] of Object.entries(value)) {
+        if (key.toLowerCase() === "damage") continue;
         visit(
           item,
           label ? `${label} · ${readableName(key)}` : readableName(key),
           depth + 1,
         );
+      }
     } else {
       if (label === "Details Truncated") {
         lines.push("Some details were too large to record");

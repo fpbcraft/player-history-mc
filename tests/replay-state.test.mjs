@@ -4,8 +4,17 @@ import {
   ReplayClock,
   HISTORY_WINDOW,
   shuttleRate,
+  clusterTimelineEvents,
 } from "../bluemap-addon/src/replay-state.js";
 import { ChunkCache } from "../bluemap-addon/src/replay-core.js";
+
+test("timeline indicators cluster nearby chat and death events", () => {
+  const event = (time, type) => ({ point: { time }, type });
+  assert.deepEqual(
+    clusterTimelineEvents([event(100, "CHAT"), event(108, "DEATH"), event(140, "CHAT")], 10).map((group) => group.map((item) => item.point.time)),
+    [[100, 108], [140]],
+  );
+});
 
 test("selected speed controls playback and survives shuttle release, including pause", () => {
   const clock = new ReplayClock();

@@ -98,6 +98,19 @@ export class ReplayClock {
   }
 }
 
+export function clusterTimelineEvents(events, thresholdMs) {
+  const sorted = [...events].sort((a, b) => a.point.time - b.point.time);
+  const clusters = [];
+  for (const event of sorted) {
+    const last = clusters.at(-1);
+    if (last && event.point.time - last.at(-1).point.time <= thresholdMs)
+      last.push(event);
+    else
+      clusters.push([event]);
+  }
+  return clusters;
+}
+
 export function visibleEvents(
   events,
   { from, time, trailMode, disabled = new Set() },

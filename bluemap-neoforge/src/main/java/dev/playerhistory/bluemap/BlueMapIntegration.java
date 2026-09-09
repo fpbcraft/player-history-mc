@@ -86,12 +86,12 @@ public final class BlueMapIntegration {
       Files.createDirectories(root);
       for (String name :
           List.of(
-              "player-history-0.8.9.js",
-              "replay-core-0.8.9.js",
-              "replay-state-0.8.9.js",
-              "bluemap-adapter-0.8.9.js",
-              "player-history-0.8.9.css",
-              "telemetry-0.8.9.js")) {
+              "player-history-0.8.12.js",
+              "replay-core-0.8.12.js",
+              "replay-state-0.8.12.js",
+              "bluemap-adapter-0.8.12.js",
+              "player-history-0.8.12.css",
+              "telemetry-0.8.12.js")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);
           Files.copy(in, root.resolve(name), StandardCopyOption.REPLACE_EXISTING);
@@ -134,13 +134,13 @@ public final class BlueMapIntegration {
           "WebApp",
           "registerScript",
           new Class<?>[] {String.class},
-          "player-history/player-history-0.8.9.js");
+          "player-history/player-history-0.8.12.js");
       call(
           web,
           "WebApp",
           "registerStyle",
           new Class<?>[] {String.class},
-          "player-history/player-history-0.8.9.css");
+          "player-history/player-history-0.8.12.css");
       log.accept("History viewer installed; public dataset: " + dataset);
     } catch (Exception ex) {
       log.accept(
