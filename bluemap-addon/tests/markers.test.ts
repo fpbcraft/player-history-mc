@@ -219,6 +219,13 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(event.element.children.length, 1);
     assert.equal(event.element.style.color, eventColor("DEATH"));
     assert.equal(event.element.style.borderColor, playerColor(1));
+    event.offsetX = 48;
+    event.offsetY = -48;
+    event.element.style.translate = "48px -48px";
+    adapter.layoutEvents();
+    assert.equal(event.offsetX, 0, "event marker remains anchored to its trail coordinate");
+    assert.equal(event.offsetY, 0, "event marker remains anchored to its trail coordinate");
+    assert.equal(event.element.style.translate, "0 0");
     adapter.setEvents(
       [
         {

@@ -1,91 +1,5 @@
 "use strict";
 (() => {
-  // src/event-layout.ts
-  var overlaps = (box, x2, y2, width, height) => Math.abs(box.x - x2) < (box.width + width) / 2 + 8 && Math.abs(box.y - y2) < (box.height + height) / 2 + 8;
-  var candidatesFor = (element, bounds) => {
-    const candidates = [];
-    if (element.classList?.contains("history-chat-bubble") || String(element.className ?? "").includes("history-chat-bubble")) {
-      for (let column = -5; column <= 5; column++) {
-        for (let row = -10; row <= 10; row++) {
-          if (column || row)
-            candidates.push({
-              dx: column * (bounds.width + 10),
-              dy: row * (bounds.height + 10)
-            });
-        }
-      }
-      return candidates.sort(
-        (left, right) => Math.hypot(left.dx, left.dy) - Math.hypot(right.dx, right.dy) || Math.abs(left.dx) - Math.abs(right.dx)
-      );
-    }
-    for (let ring = 0; ring < 12; ring++) {
-      for (let slot = 0; slot < 16; slot++) {
-        const angle = -Math.PI / 2 + slot * Math.PI / 8;
-        candidates.push({
-          dx: Math.cos(angle) * (48 + ring * 34),
-          dy: Math.sin(angle) * (48 + ring * 34)
-        });
-      }
-    }
-    return candidates;
-  };
-  var reserveElement = (occupied, element, protectHead = false) => {
-    const bounds = element?.getBoundingClientRect();
-    if (!bounds?.width || !bounds.height) return;
-    const extra = protectHead ? 28 : 0;
-    occupied.push({
-      x: bounds.left + bounds.width / 2,
-      y: bounds.top + (bounds.height + extra) / 2,
-      width: bounds.width,
-      height: bounds.height + extra
-    });
-  };
-  var applyConnector = (marker, candidate, bounds) => {
-    marker.offsetX = candidate.dx;
-    marker.offsetY = candidate.dy;
-    marker.element.style.translate = `${candidate.dx}px ${candidate.dy}px`;
-    const distance = Math.hypot(candidate.dx, candidate.dy);
-    const horizontal = distance ? Math.abs(candidate.dx / distance) : 0;
-    const vertical = distance ? Math.abs(candidate.dy / distance) : 0;
-    const edge = Math.min(
-      horizontal ? bounds.width / 2 / horizontal : Infinity,
-      vertical ? bounds.height / 2 / vertical : Infinity
-    );
-    marker.element.style.setProperty("--connector-start", `${Math.min(edge, distance)}px`);
-    marker.element.style.setProperty("--connector-length", `${Math.max(0, distance - edge)}px`);
-    marker.element.style.setProperty(
-      "--connector-angle",
-      `${Math.atan2(-candidate.dy, -candidate.dx)}rad`
-    );
-  };
-  var layoutEventMarkers = (eventMarkers, playerMarkers) => {
-    const occupied = [];
-    for (const marker of playerMarkers?.markers.values() ?? []) {
-      reserveElement(occupied, marker.element);
-      reserveElement(occupied, marker.element.querySelector(".history-player-vitals"), true);
-    }
-    for (const marker of eventMarkers) {
-      const bounds = marker.element.getBoundingClientRect();
-      if (!bounds.width || !bounds.height) continue;
-      const originX = bounds.left + bounds.width / 2 - (marker.offsetX ?? 0);
-      const originY = bounds.top + bounds.height / 2 - (marker.offsetY ?? 0);
-      const candidate = candidatesFor(marker.element, bounds).find(({ dx, dy }) => {
-        const x2 = originX + dx;
-        const y2 = originY + dy;
-        if (x2 < bounds.width / 2 + 8 || y2 < bounds.height / 2 + 8 || x2 > innerWidth - bounds.width / 2 - 8 || y2 > innerHeight - bounds.height / 2 - 8)
-          return false;
-        return !occupied.some((box) => overlaps(box, x2, y2, bounds.width, bounds.height));
-      }) ?? { dx: 0, dy: -48 };
-      occupied.push({
-        x: originX + candidate.dx,
-        y: originY + candidate.dy,
-        width: bounds.width,
-        height: bounds.height
-      });
-      applyConnector(marker, candidate, bounds);
-    }
-  };
-
   // src/event-presentation.ts
   var EVENT_TYPES = [
     "CHAT",
@@ -1056,7 +970,13 @@ ${payload}` : ""}`;
           marker.element.hidden = marker !== this.expandedGroup;
     }
     layoutEvents() {
-      layoutEventMarkers(this.eventMarkers.values(), this.players);
+      for (const marker of this.eventMarkers.values()) {
+        marker.offsetX = 0;
+        marker.offsetY = 0;
+        marker.element.style.translate = "0 0";
+        marker.element.style.setProperty?.("--connector-start", "0px");
+        marker.element.style.setProperty?.("--connector-length", "0px");
+      }
     }
     setHeatmap(rows, size, opacity) {
       this.clearHeatmap();

@@ -6,7 +6,6 @@ import type {
   Mesh,
   Raycaster,
 } from "./bluemap-types.js";
-import { layoutEventMarkers } from "./event-layout.js";
 import {
   createEventIcon,
   eventColor,
@@ -509,7 +508,13 @@ export class BlueMapAdapter {
         marker.element.hidden = marker !== this.expandedGroup;
   }
   layoutEvents(): void {
-    layoutEventMarkers(this.eventMarkers.values(), this.players);
+    for (const marker of this.eventMarkers.values()) {
+      marker.offsetX = 0;
+      marker.offsetY = 0;
+      marker.element.style.translate = "0 0";
+      marker.element.style.setProperty?.("--connector-start", "0px");
+      marker.element.style.setProperty?.("--connector-length", "0px");
+    }
   }
   setHeatmap(
     rows: [number, number, number, number, number][],

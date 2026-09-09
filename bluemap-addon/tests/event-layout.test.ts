@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { BlueMapAdapter } from "../src/bluemap-adapter.js";
 import { BREAK, mergePoints, ReplayEngine } from "../src/replay-core.js";
 
-test("event layout offsets crowded markers with connectors and stays stable", () => {
+test("event layout keeps crowded markers on their recorded coordinates", () => {
   globalThis.innerWidth = 800;
   globalThis.innerHeight = 600;
   const adapter = Object.create(BlueMapAdapter.prototype);
@@ -26,19 +26,12 @@ test("event layout offsets crowded markers with connectors and stays stable", ()
   });
   adapter.eventMarkers = new Map(markers.map((m, i) => [i, m]));
   adapter.layoutEvents();
-  const positions = markers.map((m) => [m.offsetX, m.offsetY]);
-  assert.equal(new Set(positions.map(JSON.stringify)).size, 8);
   for (const m of markers) {
-    const start = parseFloat(m.element.style["--connector-start"]);
-    const length = parseFloat(m.element.style["--connector-length"]);
-    assert.ok(start > 0, "connector starts at the marker edge");
-    assert.ok(Math.abs(start + length - Math.hypot(m.offsetX, m.offsetY)) < 0.01);
+    assert.equal(m.offsetX, 0);
+    assert.equal(m.offsetY, 0);
+    assert.equal(m.element.style.translate, "0 0");
+    assert.equal(m.element.style["--connector-length"], "0px");
   }
-  adapter.layoutEvents();
-  assert.deepEqual(
-    markers.map((m) => [m.offsetX, m.offsetY]),
-    positions,
-  );
 });
 test("live movement extends batched trails without duplicate points or teleport connections", () => {
   const p = (time, x, flags = 0) => ({ player: 1, time, world: 1, x, y: 0, z: 0, flags });
@@ -79,7 +72,7 @@ test("expanded event groups hide peers and collapse back to the count marker", (
   assert.equal(peer.element.hidden, false);
   assert.equal(group.element.attributes["aria-expanded"], "false");
 });
-test("chat bubbles reserve their rendered bounds when packed", () => {
+test("chat bubbles may overlap rather than leaving their recorded coordinates", () => {
   globalThis.innerWidth = 1200;
   globalThis.innerHeight = 800;
   const adapter = Object.create(BlueMapAdapter.prototype);
@@ -103,13 +96,8 @@ test("chat bubbles reserve their rendered bounds when packed", () => {
   });
   adapter.eventMarkers = new Map(markers.map((marker, index) => [index, marker]));
   adapter.layoutEvents();
-  for (let i = 0; i < markers.length; i++)
-    for (let j = i + 1; j < markers.length; j++) {
-      const a = markers[i],
-        b = markers[j];
-      assert.ok(
-        Math.abs(a.offsetX - b.offsetX) >= 228 || Math.abs(a.offsetY - b.offsetY) >= 72,
-        "bubble rectangles do not overlap",
-      );
-    }
+  assert.deepEqual(
+    markers.map((marker) => [marker.offsetX, marker.offsetY]),
+    markers.map(() => [0, 0]),
+  );
 });
