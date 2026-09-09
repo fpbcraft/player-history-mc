@@ -1206,6 +1206,75 @@ ${payload}` : ""}`;
     }
   };
 
+  // src/panel-controls.ts
+  var PanelControls = class {
+    constructor(root) {
+      this.root = root;
+    }
+    root;
+    get(name) {
+      const element = this.root.querySelector(`[name="${name}"], [data-control="${name}"]`);
+      if (!element) throw new Error(`Missing replay panel control: ${name}`);
+      return element;
+    }
+  };
+
+  // src/panel-lifecycle.ts
+  var PanelLifecycle = class {
+    abortController = new AbortController();
+    intervals = /* @__PURE__ */ new Set();
+    timeouts = /* @__PURE__ */ new Set();
+    frames = /* @__PURE__ */ new Set();
+    get signal() {
+      return this.abortController.signal;
+    }
+    interval(callback, delay) {
+      const timer = setInterval(callback, delay);
+      this.intervals.add(timer);
+      return timer;
+    }
+    clearInterval(timer) {
+      if (timer === void 0) return;
+      clearInterval(timer);
+      this.intervals.delete(timer);
+    }
+    timeout(callback, delay) {
+      const timer = setTimeout(() => {
+        this.timeouts.delete(timer);
+        callback();
+      }, delay);
+      this.timeouts.add(timer);
+      return timer;
+    }
+    clearTimeout(timer) {
+      if (timer === void 0) return;
+      clearTimeout(timer);
+      this.timeouts.delete(timer);
+    }
+    frame(callback) {
+      const frame = requestAnimationFrame((time) => {
+        this.frames.delete(frame);
+        callback(time);
+      });
+      this.frames.add(frame);
+      return frame;
+    }
+    cancelFrame(frame) {
+      if (frame === void 0) return;
+      cancelAnimationFrame(frame);
+      this.frames.delete(frame);
+    }
+    dispose() {
+      this.abortController.abort();
+      for (const timer of this.intervals) clearInterval(timer);
+      for (const timer of this.timeouts) clearTimeout(timer);
+      for (const frame of this.frames) cancelAnimationFrame(frame);
+      this.intervals.clear();
+      this.timeouts.clear();
+      this.frames.clear();
+    }
+  };
+
   // src/panel-options.ts
   var RANGE_OPTIONS = [
     ["0.041666666666666664", "Last hour"],
@@ -1476,6 +1545,20 @@ ${payload}` : ""}`;
     return plan;
   };
 
+  // src/replay-panel-state.ts
+  var createReplayPanelState = () => ({
+    panel: "closed",
+    mode: "live",
+    compact: false,
+    scrubbing: false,
+    heatmap: false,
+    chatPinned: true,
+    chatLoading: false,
+    liveLoading: false,
+    refreshing: false,
+    hasSavedSelection: false
+  });
+
   // src/replay-state.ts
   var HISTORY_WINDOW = 3 * 36e5;
   var clamp = (value, from, to) => Math.max(from, Math.min(to, value));
@@ -1636,6 +1719,34 @@ ${payload}` : ""}`;
       }
     }
     return result;
+  };
+
+  // src/request-coordinator.ts
+  var RequestCoordinator = class {
+    active = /* @__PURE__ */ new Map();
+    start(request) {
+      this.abort(request);
+      const controller = new AbortController();
+      this.active.set(request, controller);
+      return controller;
+    }
+    pending(request) {
+      return this.active.has(request);
+    }
+    current(request, controller) {
+      return this.active.get(request) === controller && !controller.signal.aborted;
+    }
+    finish(request, controller) {
+      if (this.active.get(request) === controller) this.active.delete(request);
+    }
+    abort(request) {
+      this.active.get(request)?.abort();
+      this.active.delete(request);
+    }
+    abortAll() {
+      for (const controller of this.active.values()) controller.abort();
+      this.active.clear();
+    }
   };
 
   // node_modules/preact/dist/preact.module.js
@@ -2188,6 +2299,9 @@ ${payload}` : ""}`;
   var mountReplayPanelView = (root) => {
     R(/* @__PURE__ */ u2(ReplayPanelView, {}), root);
   };
+  var unmountReplayPanelView = (root) => {
+    R(null, root);
+  };
 
   // src/replay-panel.ts
   var BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
@@ -2221,19 +2335,12 @@ ${payload}` : ""}`;
     heatRows = null;
     status;
     mobileQuery;
-    listeners = new AbortController();
+    controls = new PanelControls(this);
+    lifecycle = new PanelLifecycle();
+    requests = new RequestCoordinator();
+    panelState = createReplayPanelState();
     chatClient;
     chatToken = "";
-    compact = false;
-    opened = false;
-    isLive = true;
-    heatEnabled = false;
-    chatPinned = true;
-    chatLoading = false;
-    liveLoading = false;
-    refreshing = false;
-    hasSavedSelection = false;
-    scrubbing = false;
     requestId = 0;
     lastFrame = 0;
     lastOverlay;
@@ -2242,9 +2349,6 @@ ${payload}` : ""}`;
     pendingBucket;
     shuttlePointer;
     heatVersion = 0;
-    frame;
-    liveTimer;
-    refreshTimer;
     chatTimer;
     seekTimer;
     eventKey = null;
@@ -2256,16 +2360,71 @@ ${payload}` : ""}`;
     chatFeedKey;
     healthToken = {};
     trailMode = 6e4;
-    liveAbort;
-    manifestAbort;
-    heatAbort;
-    trailAbort;
-    rangeEventAbort;
-    activityAbort;
     releaseShuttle = () => {
     };
+    get compact() {
+      return this.panelState.compact;
+    }
+    set compact(value) {
+      this.panelState.compact = value;
+    }
+    get opened() {
+      return this.panelState.panel === "open";
+    }
+    set opened(value) {
+      this.panelState.panel = value ? "open" : "closed";
+    }
+    get isLive() {
+      return this.panelState.mode === "live";
+    }
+    set isLive(value) {
+      this.panelState.mode = value ? "live" : "historical";
+    }
+    get heatEnabled() {
+      return this.panelState.heatmap;
+    }
+    set heatEnabled(value) {
+      this.panelState.heatmap = value;
+    }
+    get chatPinned() {
+      return this.panelState.chatPinned;
+    }
+    set chatPinned(value) {
+      this.panelState.chatPinned = value;
+    }
+    get chatLoading() {
+      return this.panelState.chatLoading;
+    }
+    set chatLoading(value) {
+      this.panelState.chatLoading = value;
+    }
+    get liveLoading() {
+      return this.panelState.liveLoading;
+    }
+    set liveLoading(value) {
+      this.panelState.liveLoading = value;
+    }
+    get refreshing() {
+      return this.panelState.refreshing;
+    }
+    set refreshing(value) {
+      this.panelState.refreshing = value;
+    }
+    get hasSavedSelection() {
+      return this.panelState.hasSavedSelection;
+    }
+    set hasSavedSelection(value) {
+      this.panelState.hasSavedSelection = value;
+    }
+    get scrubbing() {
+      return this.panelState.scrubbing;
+    }
+    set scrubbing(value) {
+      this.panelState.scrubbing = value;
+    }
     q(name) {
-      return this.require(`[name="${name}"], [data-control="${name}"]`);
+      this.controls ??= new PanelControls(this);
+      return this.controls.get(name);
     }
     require(selector) {
       const element = this.querySelector(selector);
@@ -2273,7 +2432,13 @@ ${payload}` : ""}`;
       return element;
     }
     connectedCallback() {
+      this.lifecycle.dispose();
+      this.requests.abortAll();
+      this.lifecycle = new PanelLifecycle();
+      this.requests = new RequestCoordinator();
+      this.panelState = createReplayPanelState();
       mountReplayPanelView(this);
+      this.controls = new PanelControls(this);
       const eventControl = this.require(".history-event-control");
       const eventMenu = this.require(".history-event-options");
       eventMenu.setAttribute("popover", "manual");
@@ -2313,17 +2478,21 @@ ${payload}` : ""}`;
         this.q("compact").textContent = this.compact ? "\u2303" : "\u2304";
         this.sync();
       };
-      this.mobileQuery.addEventListener?.("change", (event) => {
-        this.compact = event.matches;
-        this.classList.toggle("compact", this.compact);
-        this.q("compact").setAttribute("aria-expanded", String(!this.compact));
-        this.q("compact").setAttribute(
-          "aria-label",
-          this.compact ? "Expand controls" : "Collapse controls"
-        );
-        this.q("compact").textContent = this.compact ? "\u2303" : "\u2304";
-        this.sync();
-      });
+      this.mobileQuery.addEventListener?.(
+        "change",
+        (event) => {
+          this.compact = event.matches;
+          this.classList.toggle("compact", this.compact);
+          this.q("compact").setAttribute("aria-expanded", String(!this.compact));
+          this.q("compact").setAttribute(
+            "aria-label",
+            this.compact ? "Expand controls" : "Collapse controls"
+          );
+          this.q("compact").textContent = this.compact ? "\u2303" : "\u2304";
+          this.sync();
+        },
+        { signal: this.lifecycle.signal }
+      );
       this.engine = new ReplayEngine();
       this.names = /* @__PURE__ */ new Map();
       this.selection = /* @__PURE__ */ new Set();
@@ -2367,9 +2536,9 @@ ${payload}` : ""}`;
         await this.refresh(true);
         await this.loadRangeEvents();
         this.updateOverlays();
-        clearInterval(this.chatTimer);
+        this.lifecycle.clearInterval(this.chatTimer);
         this.pollChat();
-        this.chatTimer = window.setInterval(() => this.pollChat(), 2e3);
+        this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2e3);
       };
       this.q("chat-close").onclick = () => this.closeChat();
       this.q("chat-connect").onclick = async () => {
@@ -2496,8 +2665,8 @@ ${payload}` : ""}`;
         this.scrubbing = false;
         this.sync();
       };
-      this.addEventListener("pointerup", finishScrub);
-      this.addEventListener("pointercancel", finishScrub);
+      this.addEventListener("pointerup", finishScrub, { signal: this.lifecycle.signal });
+      this.addEventListener("pointercancel", finishScrub, { signal: this.lifecycle.signal });
       timeline.onblur = finishScrub;
       timeline.onkeydown = (event) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -2570,7 +2739,7 @@ ${payload}` : ""}`;
         this.trailMode = Number(this.q("trails").value);
         preferences.saveTrails(this.trailMode);
         this.trailDataKey = null;
-        this.trailAbort?.abort();
+        this.requests.abort("trails");
         this.fullTrails = null;
         this.sync();
         this.updateOverlays();
@@ -2578,12 +2747,11 @@ ${payload}` : ""}`;
       this.q("heat").onclick = () => {
         this.heatEnabled = !this.heatEnabled;
         preferences.saveHeatmap(this.heatEnabled);
-        this.heatAbort?.abort();
+        this.requests.abort("heatmap");
         this.sync();
         this.updateOverlays();
         if (this.heatEnabled) this.loadHeat();
       };
-      this.listeners = new AbortController();
       document.addEventListener(
         "pointerdown",
         (event) => {
@@ -2604,36 +2772,44 @@ ${payload}` : ""}`;
             }
           }
         },
-        { signal: this.listeners.signal }
+        { signal: this.lifecycle.signal }
       );
-      this.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-          this.closeChoices();
-          this.togglePlayers(false);
-          this.releaseShuttle();
-          this.q("players").focus();
-        }
-      });
+      this.addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "Escape") {
+            this.closeChoices();
+            this.togglePlayers(false);
+            this.releaseShuttle();
+            this.q("players").focus();
+          }
+        },
+        { signal: this.lifecycle.signal }
+      );
       window.addEventListener(
         "blur",
         () => {
           finishScrub();
           release();
         },
-        { signal: this.listeners.signal }
+        { signal: this.lifecycle.signal }
       );
       this.lastFrame = performance.now();
       this.q("speed").value = String(this.clock.playbackRate);
       this.q("trails").value = String(this.trailMode);
-      this.require(".history-chat").addEventListener("scroll", (event) => {
-        const chat = event.currentTarget;
-        this.chatPinned = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 20;
-      });
+      this.require(".history-chat").addEventListener(
+        "scroll",
+        (event) => {
+          const chat = event.currentTarget;
+          this.chatPinned = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 20;
+        },
+        { signal: this.lifecycle.signal, passive: true }
+      );
       this.sync();
-      this.frame = requestAnimationFrame((time) => this.tickFrame(time));
+      this.lifecycle.frame((time) => this.tickFrame(time));
       this.refresh(true).then(() => this.pollLive());
-      this.liveTimer = window.setInterval(() => this.pollLive(), 1e3);
-      this.refreshTimer = window.setInterval(() => this.refresh(), 45e3);
+      this.lifecycle.interval(() => this.pollLive(), 1e3);
+      this.lifecycle.interval(() => this.refresh(), 45e3);
     }
     closeChoices() {
       this.require(".history-event-control").open = false;
@@ -2689,12 +2865,12 @@ ${payload}` : ""}`;
     close() {
       this.closeChoices();
       this.opened = false;
-      clearInterval(this.chatTimer);
+      this.lifecycle.clearInterval(this.chatTimer);
       this.clock.isPlaying = false;
       this.releaseShuttle();
       this.togglePlayers(false);
-      this.heatAbort?.abort();
-      this.activityAbort?.abort();
+      this.requests.abort("heatmap");
+      this.requests.abort("activity");
       this.require("section").hidden = true;
       this.q("open").hidden = false;
       if (this.mobileQuery.matches && this.require(".history-chat-panel").hidden)
@@ -2703,7 +2879,7 @@ ${payload}` : ""}`;
       this.q("open").focus();
     }
     closeChat() {
-      clearInterval(this.chatTimer);
+      this.lifecycle.clearInterval(this.chatTimer);
       this.require(".history-chat-panel").hidden = true;
       this.q("webchat").hidden = false;
       this.q("webchat").setAttribute("aria-expanded", "false");
@@ -2771,9 +2947,9 @@ ${payload}` : ""}`;
     async refresh(reset = false) {
       if (this.refreshing) return;
       this.refreshing = true;
-      this.manifestAbort = new AbortController();
+      const controller = this.requests.start("manifest");
       try {
-        const m2 = await this.historyClient.manifest(this.manifestAbort.signal);
+        const m2 = await this.historyClient.manifest(controller.signal);
         const previous = this.manifest;
         const changed = reset || !previous || previous.latestTimestamp !== m2.latestTimestamp || previous.earliestTimestamp !== m2.earliestTimestamp;
         this.manifest = m2;
@@ -2789,7 +2965,7 @@ ${payload}` : ""}`;
           }
         }
         if (!this.integration) {
-          this.integration = await this.historyClient.integration(this.manifestAbort.signal);
+          this.integration = await this.historyClient.integration(controller.signal);
         }
         if (!this.cache || this.cache.duration !== m2.chunkDurationMs) {
           this.cache?.clear();
@@ -2809,6 +2985,7 @@ ${payload}` : ""}`;
       } catch (error) {
         this.report(error);
       } finally {
+        this.requests.finish("manifest", controller);
         this.refreshing = false;
       }
     }
@@ -2841,9 +3018,7 @@ ${payload}` : ""}`;
       await this.reloadRange();
     }
     async loadActivity() {
-      this.activityAbort?.abort();
-      const controller = new AbortController();
-      this.activityAbort = controller;
+      const controller = this.requests.start("activity");
       const { from, to } = this.clock, chart = this.require(".history-histogram");
       const caption = this.require(".history-density-status");
       chart.replaceChildren();
@@ -2881,6 +3056,8 @@ ${payload}` : ""}`;
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError"))
           caption.textContent = errorMessage(error);
+      } finally {
+        this.requests.finish("activity", controller);
       }
     }
     async reloadRange() {
@@ -2891,8 +3068,8 @@ ${payload}` : ""}`;
       this.pendingBucket = this.loadedBucket = void 0;
       this.fullTrails = null;
       this.trailDataKey = null;
-      this.trailAbort?.abort();
-      this.heatAbort?.abort();
+      this.requests.abort("trails");
+      this.requests.abort("heatmap");
       this.heatRows = null;
       this.heatKey = this.trailKey = null;
       this.updateOverlays();
@@ -2956,7 +3133,7 @@ ${payload}` : ""}`;
       const bucket = Math.floor(this.clock.time / this.cache.duration);
       if (bucket !== this.loadedBucket && bucket !== this.pendingBucket) {
         if (!this.seekTimer)
-          this.seekTimer = window.setTimeout(() => {
+          this.seekTimer = this.lifecycle.timeout(() => {
             this.seekTimer = void 0;
             this.loadWindow();
           }, 80);
@@ -2989,7 +3166,7 @@ ${payload}` : ""}`;
     tickFrame(time) {
       const delta = Number.isFinite(this.lastFrame) ? Math.max(0, Math.min(time - this.lastFrame, 1e3)) : 0;
       this.lastFrame = time;
-      this.frame = requestAnimationFrame((t2) => this.tickFrame(t2));
+      this.lifecycle.frame((t2) => this.tickFrame(t2));
       if (this.manifest && this.cache) {
         if (!this.scrubbing && this.clock.rate) {
           this.clock.tick(delta);
@@ -3069,7 +3246,7 @@ ${payload}` : ""}`;
         this.isLive ? Math.floor(to / this.cache.duration) : to,
         full ? null : Math.floor(time / this.cache.duration)
       ]);
-      if (this.trailDataKey !== dataKey && !this.trailAbort) this.loadTrails(dataKey);
+      if (this.trailDataKey !== dataKey && !this.requests.pending("trails")) this.loadTrails(dataKey);
       const historyEngine = this.trailDataKey === dataKey ? this.fullTrails : null;
       const engine = this.isLive ? new ReplayEngine(
         mergePoints([
@@ -3183,7 +3360,7 @@ ${payload}` : ""}`;
           chat.append(empty);
         }
         if (follow)
-          requestAnimationFrame(() => {
+          this.lifecycle.frame(() => {
             chat.scrollTop = chat.scrollHeight;
           });
         const ticks = this.require(".history-events");
@@ -3238,8 +3415,7 @@ ${payload}` : ""}`;
     async pollLive() {
       if (!this.isConnected || this.liveLoading) return;
       this.liveLoading = true;
-      const controller = new AbortController();
-      this.liveAbort = controller;
+      const controller = this.requests.start("live");
       try {
         const data = await this.historyClient.live(controller.signal);
         if (!this.isConnected || data.protocolVersion !== 2 || !Number.isFinite(data.generatedAt) || Date.now() - data.generatedAt > 1e4)
@@ -3268,6 +3444,7 @@ ${payload}` : ""}`;
         if (!(error instanceof DOMException && error.name === "AbortError"))
           this.status.textContent = "Live updates unavailable";
       } finally {
+        this.requests.finish("live", controller);
         this.liveLoading = false;
       }
     }
@@ -3293,10 +3470,8 @@ ${payload}` : ""}`;
       }
     }
     async loadRangeEvents() {
-      this.rangeEventAbort?.abort();
       if (!this.cache || !this.manifest) return;
-      const controller = new AbortController();
-      this.rangeEventAbort = controller;
+      const controller = this.requests.start("range-events");
       const duration = this.cache.duration;
       const first = Math.floor(this.clock.from / duration) * duration;
       const last = Math.floor(this.clock.to / duration) * duration;
@@ -3321,14 +3496,13 @@ ${payload}` : ""}`;
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) this.report(error);
       } finally {
-        if (this.rangeEventAbort === controller) this.rangeEventAbort = void 0;
+        this.requests.finish("range-events", controller);
       }
     }
     async loadTrails(dataKey) {
       if (!this.cache) return;
       const cache = this.cache;
-      const controller = new AbortController();
-      this.trailAbort = controller;
+      const controller = this.requests.start("trails");
       const duration = cache.duration;
       const from = this.trailMode === Infinity ? this.clock.from : Math.max(
         this.clock.from,
@@ -3378,18 +3552,16 @@ ${payload}` : ""}`;
           this.sync();
         }
       } finally {
-        if (this.trailAbort === controller) {
-          this.trailAbort = void 0;
+        if (this.requests.current("trails", controller)) {
           if (this.fullTrails) this.updateOverlays();
         }
+        this.requests.finish("trails", controller);
       }
     }
     async loadHeat() {
       if (!this.manifest) return;
       const manifest = this.manifest;
-      this.heatAbort?.abort();
-      const controller = new AbortController();
-      this.heatAbort = controller;
+      const controller = this.requests.start("heatmap");
       try {
         const plan = heatmapPlan(this.clock.from, this.clock.to, manifest.chunkDurationMs), cells = /* @__PURE__ */ new Map();
         for (const part of plan) {
@@ -3411,23 +3583,19 @@ ${payload}` : ""}`;
         this.updateOverlays();
       } catch (error) {
         this.report(error);
+      } finally {
+        this.requests.finish("heatmap", controller);
       }
     }
     disconnectedCallback() {
-      clearInterval(this.chatTimer);
-      clearInterval(this.liveTimer);
-      clearInterval(this.refreshTimer);
-      clearTimeout(this.seekTimer);
-      this.liveAbort?.abort();
-      this.manifestAbort?.abort();
-      this.heatAbort?.abort();
-      this.trailAbort?.abort();
-      this.rangeEventAbort?.abort();
-      this.activityAbort?.abort();
+      this.lifecycle.dispose();
+      this.requests.abortAll();
       this.cache?.clear();
       this.adapter?.dispose();
-      if (this.frame !== void 0) cancelAnimationFrame(this.frame);
-      this.listeners.abort();
+      this.adapter = void 0;
+      this.telemetryCache = void 0;
+      this.cache = void 0;
+      unmountReplayPanelView(this);
     }
   };
 

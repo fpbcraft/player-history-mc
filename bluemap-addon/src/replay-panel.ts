@@ -1,6 +1,8 @@
 import { BlueMapAdapter, eventColor, playerColor } from "./bluemap-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
+import { PanelControls, type ReplayControls } from "./panel-controls.js";
+import { PanelLifecycle, type PanelTimer } from "./panel-lifecycle.js";
 import {
   DEFAULT_DISABLED_EVENTS,
   KNOWN_EVENT_TYPES,
@@ -16,6 +18,7 @@ import {
   mergePoints,
   ReplayEngine,
 } from "./replay-core.js";
+import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import {
   addActivityBins,
   clamp,
@@ -24,6 +27,7 @@ import {
   ReplayClock,
   visibleEvents,
 } from "./replay-state.js";
+import { RequestCoordinator } from "./request-coordinator.js";
 import { chatMessage, describeState, TelemetryCache } from "./telemetry.js";
 import type {
   HistoryEvent,
@@ -32,7 +36,7 @@ import type {
   IntegrationMapping,
   JsonObject,
 } from "./types.js";
-import { mountReplayPanelView } from "./ui/replay-panel-view.js";
+import { mountReplayPanelView, unmountReplayPanelView } from "./ui/replay-panel-view.js";
 
 declare global {
   interface Window {
@@ -52,7 +56,6 @@ const formatDate = (time: number, seconds = true): string =>
     ...(seconds ? { second: "2-digit" } : {}),
   });
 
-type NamedControl = HTMLInputElement & HTMLButtonElement & HTMLOutputElement;
 type HeatmapRow = [number, number, number, number, number];
 
 const errorMessage = (error: unknown): string =>
@@ -72,26 +75,19 @@ export class ReplayPanel extends HTMLElement {
   private livePoints: HistoryPoint[] = [];
   private manifest?: HistoryManifest;
   private integration?: IntegrationMapping;
-  private cache?: ChunkCache;
-  private telemetryCache?: TelemetryCache;
-  private adapter?: BlueMapAdapter;
+  private cache: ChunkCache | undefined;
+  private telemetryCache: TelemetryCache | undefined;
+  private adapter: BlueMapAdapter | undefined;
   private fullTrails: ReplayEngine | null = null;
   private heatRows: HeatmapRow[] | null = null;
   private status!: HTMLElement;
   private mobileQuery!: MediaQueryList;
-  private listeners = new AbortController();
+  private controls = new PanelControls(this);
+  private lifecycle = new PanelLifecycle();
+  private requests = new RequestCoordinator();
+  private panelState: ReplayPanelState = createReplayPanelState();
   private chatClient!: ChatClient;
   private chatToken = "";
-  private compact = false;
-  private opened = false;
-  private isLive = true;
-  private heatEnabled = false;
-  private chatPinned = true;
-  private chatLoading = false;
-  private liveLoading = false;
-  private refreshing = false;
-  private hasSavedSelection = false;
-  private scrubbing = false;
   private requestId = 0;
   private lastFrame = 0;
   private lastOverlay: number | undefined;
@@ -100,11 +96,8 @@ export class ReplayPanel extends HTMLElement {
   private pendingBucket: number | undefined;
   private shuttlePointer: number | undefined;
   private heatVersion = 0;
-  private frame: number | undefined;
-  private liveTimer: number | undefined;
-  private refreshTimer: number | undefined;
-  private chatTimer: number | undefined;
-  private seekTimer: number | undefined;
+  private chatTimer: PanelTimer | undefined;
+  private seekTimer: PanelTimer | undefined;
   private eventKey: string | null = null;
   private trailKey: string | null = null;
   private trailDataKey: string | null = null;
@@ -114,16 +107,91 @@ export class ReplayPanel extends HTMLElement {
   private chatFeedKey: string | undefined;
   private healthToken: object = {};
   private trailMode = 60_000;
-  private liveAbort: AbortController | undefined;
-  private manifestAbort: AbortController | undefined;
-  private heatAbort: AbortController | undefined;
-  private trailAbort: AbortController | undefined;
-  private rangeEventAbort: AbortController | undefined;
-  private activityAbort: AbortController | undefined;
   private releaseShuttle: () => void = () => {};
 
-  q<T extends HTMLElement = NamedControl>(name: string): T {
-    return this.require<T>(`[name="${name}"], [data-control="${name}"]`);
+  private get compact(): boolean {
+    return this.panelState.compact;
+  }
+
+  private set compact(value: boolean) {
+    this.panelState.compact = value;
+  }
+
+  private get opened(): boolean {
+    return this.panelState.panel === "open";
+  }
+
+  private set opened(value: boolean) {
+    this.panelState.panel = value ? "open" : "closed";
+  }
+
+  private get isLive(): boolean {
+    return this.panelState.mode === "live";
+  }
+
+  private set isLive(value: boolean) {
+    this.panelState.mode = value ? "live" : "historical";
+  }
+
+  private get heatEnabled(): boolean {
+    return this.panelState.heatmap;
+  }
+
+  private set heatEnabled(value: boolean) {
+    this.panelState.heatmap = value;
+  }
+
+  private get chatPinned(): boolean {
+    return this.panelState.chatPinned;
+  }
+
+  private set chatPinned(value: boolean) {
+    this.panelState.chatPinned = value;
+  }
+
+  private get chatLoading(): boolean {
+    return this.panelState.chatLoading;
+  }
+
+  private set chatLoading(value: boolean) {
+    this.panelState.chatLoading = value;
+  }
+
+  private get liveLoading(): boolean {
+    return this.panelState.liveLoading;
+  }
+
+  private set liveLoading(value: boolean) {
+    this.panelState.liveLoading = value;
+  }
+
+  private get refreshing(): boolean {
+    return this.panelState.refreshing;
+  }
+
+  private set refreshing(value: boolean) {
+    this.panelState.refreshing = value;
+  }
+
+  private get hasSavedSelection(): boolean {
+    return this.panelState.hasSavedSelection;
+  }
+
+  private set hasSavedSelection(value: boolean) {
+    this.panelState.hasSavedSelection = value;
+  }
+
+  private get scrubbing(): boolean {
+    return this.panelState.scrubbing;
+  }
+
+  private set scrubbing(value: boolean) {
+    this.panelState.scrubbing = value;
+  }
+
+  q<Name extends keyof ReplayControls>(name: Name): ReplayControls[Name] {
+    this.controls ??= new PanelControls(this);
+    return this.controls.get(name);
   }
 
   private require<T extends Element = HTMLElement>(selector: string): T {
@@ -133,7 +201,13 @@ export class ReplayPanel extends HTMLElement {
   }
 
   connectedCallback(): void {
+    this.lifecycle.dispose();
+    this.requests.abortAll();
+    this.lifecycle = new PanelLifecycle();
+    this.requests = new RequestCoordinator();
+    this.panelState = createReplayPanelState();
     mountReplayPanelView(this);
+    this.controls = new PanelControls(this);
     const eventControl = this.require<HTMLDetailsElement>(".history-event-control");
     const eventMenu = this.require<HTMLElement>(".history-event-options");
     eventMenu.setAttribute("popover", "manual");
@@ -149,7 +223,7 @@ export class ReplayPanel extends HTMLElement {
     if (
       savedRange &&
       savedRange !== "dates" &&
-      [...this.q<HTMLSelectElement>("range").options].some((option) => option.value === savedRange)
+      [...this.q("range").options].some((option) => option.value === savedRange)
     )
       this.q("range").value = savedRange;
     const savedDays = preferences.days();
@@ -181,17 +255,21 @@ export class ReplayPanel extends HTMLElement {
       this.q("compact").textContent = this.compact ? "⌃" : "⌄";
       this.sync();
     };
-    this.mobileQuery.addEventListener?.("change", (event) => {
-      this.compact = event.matches;
-      this.classList.toggle("compact", this.compact);
-      this.q("compact").setAttribute("aria-expanded", String(!this.compact));
-      this.q("compact").setAttribute(
-        "aria-label",
-        this.compact ? "Expand controls" : "Collapse controls",
-      );
-      this.q("compact").textContent = this.compact ? "⌃" : "⌄";
-      this.sync();
-    });
+    this.mobileQuery.addEventListener?.(
+      "change",
+      (event) => {
+        this.compact = event.matches;
+        this.classList.toggle("compact", this.compact);
+        this.q("compact").setAttribute("aria-expanded", String(!this.compact));
+        this.q("compact").setAttribute(
+          "aria-label",
+          this.compact ? "Expand controls" : "Collapse controls",
+        );
+        this.q("compact").textContent = this.compact ? "⌃" : "⌄";
+        this.sync();
+      },
+      { signal: this.lifecycle.signal },
+    );
     this.engine = new ReplayEngine();
     this.names = new Map();
     this.selection = new Set();
@@ -233,9 +311,9 @@ export class ReplayPanel extends HTMLElement {
       await this.refresh(true);
       await this.loadRangeEvents();
       this.updateOverlays();
-      clearInterval(this.chatTimer);
+      this.lifecycle.clearInterval(this.chatTimer);
       this.pollChat();
-      this.chatTimer = window.setInterval(() => this.pollChat(), 2000);
+      this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2000);
     };
     this.q("chat-close").onclick = () => this.closeChat();
     this.q("chat-connect").onclick = async () => {
@@ -262,7 +340,7 @@ export class ReplayPanel extends HTMLElement {
     };
     this.require<HTMLFormElement>(".history-chat-form").onsubmit = async (event: SubmitEvent) => {
       event.preventDefault();
-      const input = this.q<HTMLInputElement>("chat-message");
+      const input = this.q("chat-message");
       const button = this.require<HTMLButtonElement>(".history-chat-form button");
       button.disabled = true;
       try {
@@ -305,8 +383,8 @@ export class ReplayPanel extends HTMLElement {
       };
       menu.querySelectorAll<HTMLButtonElement>(`[${selector}]`).forEach((button) => {
         button.onclick = () => {
-          this.q<HTMLInputElement>(kind).value = button.getAttribute(selector) ?? "";
-          this.q<HTMLInputElement>(kind).onchange?.(new Event("change"));
+          this.q(kind).value = button.getAttribute(selector) ?? "";
+          this.q(kind).onchange?.(new Event("change"));
           menu.querySelectorAll<HTMLButtonElement>("button").forEach((option) => {
             option.setAttribute("aria-pressed", String(option === button));
           });
@@ -350,7 +428,7 @@ export class ReplayPanel extends HTMLElement {
       this.seek(this.clock.time);
       this.sync();
     };
-    const timeline = this.q<HTMLInputElement>("timeline");
+    const timeline = this.q("timeline");
     timeline.oninput = () => {
       const value = Number(timeline.value);
       if (value >= Number(timeline.max) - 1) this.goNow();
@@ -364,8 +442,8 @@ export class ReplayPanel extends HTMLElement {
       this.scrubbing = false;
       this.sync();
     };
-    this.addEventListener("pointerup", finishScrub);
-    this.addEventListener("pointercancel", finishScrub);
+    this.addEventListener("pointerup", finishScrub, { signal: this.lifecycle.signal });
+    this.addEventListener("pointercancel", finishScrub, { signal: this.lifecycle.signal });
     timeline.onblur = finishScrub;
     timeline.onkeydown = (event) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -389,7 +467,7 @@ export class ReplayPanel extends HTMLElement {
       },
       { passive: false },
     );
-    const shuttle = this.q<HTMLElement>("shuttle");
+    const shuttle = this.q("shuttle");
     const move = (event: PointerEvent) => {
       const bounds = this.require<HTMLElement>(".history-shuttle-track").getBoundingClientRect();
       const position = clamp(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -1, 1);
@@ -442,7 +520,7 @@ export class ReplayPanel extends HTMLElement {
       this.trailMode = Number(this.q("trails").value);
       preferences.saveTrails(this.trailMode);
       this.trailDataKey = null;
-      this.trailAbort?.abort();
+      this.requests.abort("trails");
       this.fullTrails = null;
       this.sync();
       this.updateOverlays();
@@ -450,12 +528,11 @@ export class ReplayPanel extends HTMLElement {
     this.q("heat").onclick = () => {
       this.heatEnabled = !this.heatEnabled;
       preferences.saveHeatmap(this.heatEnabled);
-      this.heatAbort?.abort();
+      this.requests.abort("heatmap");
       this.sync();
       this.updateOverlays();
       if (this.heatEnabled) this.loadHeat();
     };
-    this.listeners = new AbortController();
     document.addEventListener(
       "pointerdown",
       (event) => {
@@ -470,7 +547,7 @@ export class ReplayPanel extends HTMLElement {
           )
         )
           this.togglePlayers(false);
-        for (const kind of ["speed", "trails"]) {
+        for (const kind of ["speed", "trails"] as const) {
           if (
             !this.require<HTMLElement>(`.history-${kind}`).contains(
               event.target instanceof Node ? event.target : null,
@@ -483,40 +560,48 @@ export class ReplayPanel extends HTMLElement {
           }
         }
       },
-      { signal: this.listeners.signal },
+      { signal: this.lifecycle.signal },
     );
-    this.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        this.closeChoices();
-        this.togglePlayers(false);
-        this.releaseShuttle();
-        this.q("players").focus();
-      }
-    });
+    this.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape") {
+          this.closeChoices();
+          this.togglePlayers(false);
+          this.releaseShuttle();
+          this.q("players").focus();
+        }
+      },
+      { signal: this.lifecycle.signal },
+    );
     window.addEventListener(
       "blur",
       () => {
         finishScrub();
         release();
       },
-      { signal: this.listeners.signal },
+      { signal: this.lifecycle.signal },
     );
     this.lastFrame = performance.now();
     this.q("speed").value = String(this.clock.playbackRate);
     this.q("trails").value = String(this.trailMode);
-    this.require<HTMLElement>(".history-chat").addEventListener("scroll", (event) => {
-      const chat = event.currentTarget as HTMLElement;
-      this.chatPinned = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 20;
-    });
+    this.require<HTMLElement>(".history-chat").addEventListener(
+      "scroll",
+      (event) => {
+        const chat = event.currentTarget as HTMLElement;
+        this.chatPinned = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 20;
+      },
+      { signal: this.lifecycle.signal, passive: true },
+    );
     this.sync();
-    this.frame = requestAnimationFrame((time) => this.tickFrame(time));
+    this.lifecycle.frame((time) => this.tickFrame(time));
     this.refresh(true).then(() => this.pollLive());
-    this.liveTimer = window.setInterval(() => this.pollLive(), 1000);
-    this.refreshTimer = window.setInterval(() => this.refresh(), 45000);
+    this.lifecycle.interval(() => this.pollLive(), 1000);
+    this.lifecycle.interval(() => this.refresh(), 45000);
   }
   closeChoices() {
     this.require<HTMLDetailsElement>(".history-event-control").open = false;
-    for (const kind of ["speed", "trails"]) {
+    for (const kind of ["speed", "trails"] as const) {
       const menu = this.require<HTMLElement>(`.history-${kind}-popover`);
       menu.hidePopover?.();
       menu.hidden = true;
@@ -568,12 +653,12 @@ export class ReplayPanel extends HTMLElement {
   close() {
     this.closeChoices();
     this.opened = false;
-    clearInterval(this.chatTimer);
+    this.lifecycle.clearInterval(this.chatTimer);
     this.clock.isPlaying = false;
     this.releaseShuttle();
     this.togglePlayers(false);
-    this.heatAbort?.abort();
-    this.activityAbort?.abort();
+    this.requests.abort("heatmap");
+    this.requests.abort("activity");
     this.require<HTMLElement>("section").hidden = true;
     this.q("open").hidden = false;
     if (this.mobileQuery.matches && this.require<HTMLElement>(".history-chat-panel").hidden)
@@ -582,7 +667,7 @@ export class ReplayPanel extends HTMLElement {
     this.q("open").focus();
   }
   closeChat() {
-    clearInterval(this.chatTimer);
+    this.lifecycle.clearInterval(this.chatTimer);
     this.require<HTMLElement>(".history-chat-panel").hidden = true;
     this.q("webchat").hidden = false;
     this.q("webchat").setAttribute("aria-expanded", "false");
@@ -653,9 +738,9 @@ export class ReplayPanel extends HTMLElement {
   async refresh(reset = false) {
     if (this.refreshing) return;
     this.refreshing = true;
-    this.manifestAbort = new AbortController();
+    const controller = this.requests.start("manifest");
     try {
-      const m = await this.historyClient.manifest(this.manifestAbort.signal);
+      const m = await this.historyClient.manifest(controller.signal);
       const previous = this.manifest;
       const changed =
         reset ||
@@ -675,7 +760,7 @@ export class ReplayPanel extends HTMLElement {
         }
       }
       if (!this.integration) {
-        this.integration = await this.historyClient.integration(this.manifestAbort.signal);
+        this.integration = await this.historyClient.integration(controller.signal);
       }
       if (!this.cache || this.cache.duration !== m.chunkDurationMs) {
         this.cache?.clear();
@@ -695,6 +780,7 @@ export class ReplayPanel extends HTMLElement {
     } catch (error) {
       this.report(error);
     } finally {
+      this.requests.finish("manifest", controller);
       this.refreshing = false;
     }
   }
@@ -731,9 +817,7 @@ export class ReplayPanel extends HTMLElement {
     await this.reloadRange();
   }
   async loadActivity() {
-    this.activityAbort?.abort();
-    const controller = new AbortController();
-    this.activityAbort = controller;
+    const controller = this.requests.start("activity");
     const { from, to } = this.clock,
       chart = this.require<HTMLElement>(".history-histogram");
     const caption = this.require<HTMLElement>(".history-density-status");
@@ -787,6 +871,8 @@ export class ReplayPanel extends HTMLElement {
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
         caption.textContent = errorMessage(error);
+    } finally {
+      this.requests.finish("activity", controller);
     }
   }
   async reloadRange() {
@@ -797,8 +883,8 @@ export class ReplayPanel extends HTMLElement {
     this.pendingBucket = this.loadedBucket = undefined;
     this.fullTrails = null;
     this.trailDataKey = null;
-    this.trailAbort?.abort();
-    this.heatAbort?.abort();
+    this.requests.abort("trails");
+    this.requests.abort("heatmap");
     this.heatRows = null;
     this.heatKey = this.trailKey = null;
     this.updateOverlays();
@@ -809,7 +895,7 @@ export class ReplayPanel extends HTMLElement {
   sync() {
     const c = this.clock,
       valid = Number.isFinite(c.time);
-    for (const name of ["timeline", "back", "forward", "play", "latest", "trails", "heat"])
+    for (const name of ["timeline", "back", "forward", "play", "latest", "trails", "heat"] as const)
       this.q(name).disabled = !valid;
     if (valid) {
       this.q("timeline").max = String(Math.max(1, c.to - c.from));
@@ -868,7 +954,7 @@ export class ReplayPanel extends HTMLElement {
     if (bucket !== this.loadedBucket && bucket !== this.pendingBucket) {
       // Throttle, rather than debounce: a held drag keeps updating the map.
       if (!this.seekTimer)
-        this.seekTimer = window.setTimeout(() => {
+        this.seekTimer = this.lifecycle.timeout(() => {
           this.seekTimer = undefined;
           this.loadWindow();
         }, 80);
@@ -911,7 +997,7 @@ export class ReplayPanel extends HTMLElement {
       ? Math.max(0, Math.min(time - this.lastFrame, 1000))
       : 0;
     this.lastFrame = time;
-    this.frame = requestAnimationFrame((t) => this.tickFrame(t));
+    this.lifecycle.frame((t) => this.tickFrame(t));
     if (this.manifest && this.cache) {
       if (!this.scrubbing && this.clock.rate) {
         this.clock.tick(delta);
@@ -1000,7 +1086,7 @@ export class ReplayPanel extends HTMLElement {
       this.isLive ? Math.floor(to / this.cache.duration) : to,
       full ? null : Math.floor(time / this.cache.duration),
     ]);
-    if (this.trailDataKey !== dataKey && !this.trailAbort) this.loadTrails(dataKey);
+    if (this.trailDataKey !== dataKey && !this.requests.pending("trails")) this.loadTrails(dataKey);
     const historyEngine = this.trailDataKey === dataKey ? this.fullTrails : null;
     const engine = this.isLive
       ? new ReplayEngine(
@@ -1128,7 +1214,7 @@ export class ReplayPanel extends HTMLElement {
         chat.append(empty);
       }
       if (follow)
-        requestAnimationFrame(() => {
+        this.lifecycle.frame(() => {
           chat.scrollTop = chat.scrollHeight;
         });
       const ticks = this.require<HTMLElement>(".history-events");
@@ -1189,8 +1275,7 @@ export class ReplayPanel extends HTMLElement {
   async pollLive() {
     if (!this.isConnected || this.liveLoading) return;
     this.liveLoading = true;
-    const controller = new AbortController();
-    this.liveAbort = controller;
+    const controller = this.requests.start("live");
     try {
       const data = await this.historyClient.live(controller.signal);
       if (
@@ -1224,6 +1309,7 @@ export class ReplayPanel extends HTMLElement {
       if (!(error instanceof DOMException && error.name === "AbortError"))
         this.status.textContent = "Live updates unavailable";
     } finally {
+      this.requests.finish("live", controller);
       this.liveLoading = false;
     }
   }
@@ -1249,10 +1335,8 @@ export class ReplayPanel extends HTMLElement {
     }
   }
   async loadRangeEvents() {
-    this.rangeEventAbort?.abort();
     if (!this.cache || !this.manifest) return;
-    const controller = new AbortController();
-    this.rangeEventAbort = controller;
+    const controller = this.requests.start("range-events");
     const duration = this.cache.duration;
     const first = Math.floor(this.clock.from / duration) * duration;
     const last = Math.floor(this.clock.to / duration) * duration;
@@ -1277,14 +1361,13 @@ export class ReplayPanel extends HTMLElement {
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) this.report(error);
     } finally {
-      if (this.rangeEventAbort === controller) this.rangeEventAbort = undefined;
+      this.requests.finish("range-events", controller);
     }
   }
   async loadTrails(dataKey: string): Promise<void> {
     if (!this.cache) return;
     const cache = this.cache;
-    const controller = new AbortController();
-    this.trailAbort = controller;
+    const controller = this.requests.start("trails");
     const duration = cache.duration;
     const from =
       this.trailMode === Infinity
@@ -1344,18 +1427,16 @@ export class ReplayPanel extends HTMLElement {
         this.sync();
       }
     } finally {
-      if (this.trailAbort === controller) {
-        this.trailAbort = undefined;
+      if (this.requests.current("trails", controller)) {
         if (this.fullTrails) this.updateOverlays();
       }
+      this.requests.finish("trails", controller);
     }
   }
   async loadHeat(): Promise<void> {
     if (!this.manifest) return;
     const manifest = this.manifest;
-    this.heatAbort?.abort();
-    const controller = new AbortController();
-    this.heatAbort = controller;
+    const controller = this.requests.start("heatmap");
     try {
       const plan = heatmapPlan(this.clock.from, this.clock.to, manifest.chunkDurationMs),
         cells = new Map();
@@ -1381,22 +1462,18 @@ export class ReplayPanel extends HTMLElement {
       this.updateOverlays();
     } catch (error) {
       this.report(error);
+    } finally {
+      this.requests.finish("heatmap", controller);
     }
   }
   disconnectedCallback(): void {
-    clearInterval(this.chatTimer);
-    clearInterval(this.liveTimer);
-    clearInterval(this.refreshTimer);
-    clearTimeout(this.seekTimer);
-    this.liveAbort?.abort();
-    this.manifestAbort?.abort();
-    this.heatAbort?.abort();
-    this.trailAbort?.abort();
-    this.rangeEventAbort?.abort();
-    this.activityAbort?.abort();
+    this.lifecycle.dispose();
+    this.requests.abortAll();
     this.cache?.clear();
     this.adapter?.dispose();
-    if (this.frame !== undefined) cancelAnimationFrame(this.frame);
-    this.listeners.abort();
+    this.adapter = undefined;
+    this.telemetryCache = undefined;
+    this.cache = undefined;
+    unmountReplayPanelView(this);
   }
 }
