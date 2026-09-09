@@ -12,4 +12,15 @@ describe("player preferences", () => {
 
     expect(preferences.players()).toEqual([]);
   });
+
+  it("persists history and chat visibility independently", () => {
+    expect(preferences.historyOpen()).toBe(false);
+    expect(preferences.chatOpen()).toBe(false);
+
+    preferences.saveHistoryOpen(true);
+    preferences.saveChatOpen(true);
+
+    expect(preferences.historyOpen()).toBe(true);
+    expect(preferences.chatOpen()).toBe(true);
+  });
 });

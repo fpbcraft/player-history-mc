@@ -7,7 +7,11 @@ const KEYS = {
   trails: "player-history-trails",
   heatmap: "player-history-heatmap",
   chatToken: "player-history-chat-token",
+  historyOpen: "player-history-open",
+  chatOpen: "player-history-chat-open",
 } as const;
+
+const readBoolean = (key: string): boolean => localStorage.getItem(key) === "true";
 
 const readArray = (key: string): unknown[] => {
   try {
@@ -55,4 +59,8 @@ export const preferences = {
     if (value) localStorage.setItem(KEYS.chatToken, value);
     else localStorage.removeItem(KEYS.chatToken);
   },
+  historyOpen: (): boolean => readBoolean(KEYS.historyOpen),
+  saveHistoryOpen: (value: boolean): void => localStorage.setItem(KEYS.historyOpen, String(value)),
+  chatOpen: (): boolean => readBoolean(KEYS.chatOpen),
+  saveChatOpen: (value: boolean): void => localStorage.setItem(KEYS.chatOpen, String(value)),
 };

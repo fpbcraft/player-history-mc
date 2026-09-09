@@ -2125,8 +2125,11 @@ ${payload}` : ""}`;
     hiddenEvents: "player-history-hidden-events",
     trails: "player-history-trails",
     heatmap: "player-history-heatmap",
-    chatToken: "player-history-chat-token"
+    chatToken: "player-history-chat-token",
+    historyOpen: "player-history-open",
+    chatOpen: "player-history-chat-open"
   };
+  var readBoolean = (key) => localStorage.getItem(key) === "true";
   var readArray = (key) => {
     try {
       const value = JSON.parse(localStorage.getItem(key) ?? "null");
@@ -2168,7 +2171,11 @@ ${payload}` : ""}`;
     saveChatToken: (value) => {
       if (value) localStorage.setItem(KEYS.chatToken, value);
       else localStorage.removeItem(KEYS.chatToken);
-    }
+    },
+    historyOpen: () => readBoolean(KEYS.historyOpen),
+    saveHistoryOpen: (value) => localStorage.setItem(KEYS.historyOpen, String(value)),
+    chatOpen: () => readBoolean(KEYS.chatOpen),
+    saveChatOpen: (value) => localStorage.setItem(KEYS.chatOpen, String(value))
   };
 
   // src/replay-panel-state.ts
@@ -3049,6 +3056,7 @@ ${payload}` : ""}`;
         },
         { signal: this.lifecycle.signal, passive: true }
       );
+      this.restoreVisibility();
       this.sync();
       this.lifecycle.frame((time) => this.tickFrame(time));
       this.refresh(true).then(() => this.pollLive());
@@ -3091,6 +3099,7 @@ ${payload}` : ""}`;
     async open() {
       if (this.mobileQuery.matches) this.closeChat();
       this.opened = true;
+      preferences.saveHistoryOpen(true);
       if (this.mobileQuery.matches) this.q("webchat").hidden = true;
       this.q("open").hidden = true;
       this.q("open").setAttribute("aria-expanded", "true");
@@ -3105,6 +3114,7 @@ ${payload}` : ""}`;
     async openChat() {
       const box = this.require(".history-chat-panel");
       box.hidden = false;
+      preferences.saveChatOpen(true);
       this.q("webchat").hidden = true;
       this.q("webchat").setAttribute("aria-expanded", "true");
       this.clearChatNotifications();
@@ -3122,6 +3132,7 @@ ${payload}` : ""}`;
     close() {
       this.closeChoices();
       this.opened = false;
+      preferences.saveHistoryOpen(false);
       this.lifecycle.clearInterval(this.chatTimer);
       this.clock.isPlaying = false;
       this.togglePlayers(false);
@@ -3137,9 +3148,24 @@ ${payload}` : ""}`;
     closeChat() {
       this.lifecycle.clearInterval(this.chatTimer);
       this.require(".history-chat-panel").hidden = true;
+      preferences.saveChatOpen(false);
       this.q("webchat").hidden = false;
       this.q("webchat").setAttribute("aria-expanded", "false");
       if (this.mobileQuery.matches && !this.opened) this.q("open").hidden = false;
+    }
+    restoreVisibility() {
+      const chatOpen = preferences.chatOpen();
+      const historyOpen = preferences.historyOpen() && !(this.mobileQuery.matches && chatOpen);
+      this.opened = historyOpen;
+      this.require("section").hidden = !historyOpen;
+      this.q("open").hidden = historyOpen || this.mobileQuery.matches && chatOpen;
+      this.q("open").setAttribute("aria-expanded", String(historyOpen));
+      this.require(".history-chat-panel").hidden = !chatOpen;
+      this.q("webchat").hidden = chatOpen || this.mobileQuery.matches && historyOpen;
+      this.q("webchat").setAttribute("aria-expanded", String(chatOpen));
+      if (!chatOpen) return;
+      this.pollChat();
+      this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2e3);
     }
     clearChatNotifications() {
       this.chatNotifications = [];

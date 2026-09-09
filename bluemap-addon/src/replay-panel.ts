@@ -505,6 +505,7 @@ export class ReplayPanel extends HTMLElement {
       },
       { signal: this.lifecycle.signal, passive: true },
     );
+    this.restoreVisibility();
     this.sync();
     this.lifecycle.frame((time) => this.tickFrame(time));
     this.refresh(true).then(() => this.pollLive());
@@ -547,6 +548,7 @@ export class ReplayPanel extends HTMLElement {
   async open() {
     if (this.mobileQuery.matches) this.closeChat();
     this.opened = true;
+    preferences.saveHistoryOpen(true);
     if (this.mobileQuery.matches) this.q("webchat").hidden = true;
     this.q("open").hidden = true;
     this.q("open").setAttribute("aria-expanded", "true");
@@ -561,6 +563,7 @@ export class ReplayPanel extends HTMLElement {
   async openChat() {
     const box = this.require<HTMLElement>(".history-chat-panel");
     box.hidden = false;
+    preferences.saveChatOpen(true);
     this.q("webchat").hidden = true;
     this.q("webchat").setAttribute("aria-expanded", "true");
     this.clearChatNotifications();
@@ -578,6 +581,7 @@ export class ReplayPanel extends HTMLElement {
   close() {
     this.closeChoices();
     this.opened = false;
+    preferences.saveHistoryOpen(false);
     this.lifecycle.clearInterval(this.chatTimer);
     this.clock.isPlaying = false;
     this.togglePlayers(false);
@@ -593,9 +597,24 @@ export class ReplayPanel extends HTMLElement {
   closeChat() {
     this.lifecycle.clearInterval(this.chatTimer);
     this.require<HTMLElement>(".history-chat-panel").hidden = true;
+    preferences.saveChatOpen(false);
     this.q("webchat").hidden = false;
     this.q("webchat").setAttribute("aria-expanded", "false");
     if (this.mobileQuery.matches && !this.opened) this.q("open").hidden = false;
+  }
+  private restoreVisibility(): void {
+    const chatOpen = preferences.chatOpen();
+    const historyOpen = preferences.historyOpen() && !(this.mobileQuery.matches && chatOpen);
+    this.opened = historyOpen;
+    this.require<HTMLElement>("section").hidden = !historyOpen;
+    this.q("open").hidden = historyOpen || (this.mobileQuery.matches && chatOpen);
+    this.q("open").setAttribute("aria-expanded", String(historyOpen));
+    this.require<HTMLElement>(".history-chat-panel").hidden = !chatOpen;
+    this.q("webchat").hidden = chatOpen || (this.mobileQuery.matches && historyOpen);
+    this.q("webchat").setAttribute("aria-expanded", String(chatOpen));
+    if (!chatOpen) return;
+    this.pollChat();
+    this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2_000);
   }
   private clearChatNotifications(): void {
     this.chatNotifications = [];
