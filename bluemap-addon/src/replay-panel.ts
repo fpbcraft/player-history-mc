@@ -96,6 +96,20 @@ export class ReplayPanel extends HTMLElement {
   private seenLiveChatEvents = new Set<string>();
   private liveChatInitialized = false;
 
+  private setTrailProgress(completed: number, total: number): void {
+    const progress = this.q("trail-progress");
+    const container = progress.closest<HTMLElement>(".history-trail-progress");
+    if (!container) return;
+    if (total <= 0) {
+      container.hidden = true;
+      return;
+    }
+    const percent = Math.min(100, Math.round((completed / total) * 100));
+    container.hidden = false;
+    progress.value = percent;
+    this.q("trail-progress-label").value = `${percent}%`;
+  }
+
   private get opened(): boolean {
     return this.panelState.panel === "open";
   }
@@ -1257,10 +1271,13 @@ export class ReplayPanel extends HTMLElement {
     let previousPlayers = new Set();
     this.statusCoordinator.show("loading", "Loading trails…");
     try {
-      if (Math.floor(to / duration) - Math.floor(from / duration) + 1 > 5000)
+      const chunkCount = Math.floor(to / duration) - Math.floor(from / duration) + 1;
+      this.setTrailProgress(0, chunkCount);
+      if (chunkCount > 5000)
         throw Error(
           "Full trails exceed 5,000 recording chunks. Choose a shorter range or 30s / 5m trails.",
         );
+      let completed = 0;
       for (let t = Math.floor(from / duration) * duration; t <= to; t += duration) {
         const data = await cache.read(t, controller.signal),
           seen = new Set();
@@ -1278,6 +1295,7 @@ export class ReplayPanel extends HTMLElement {
             throw Error("Full trails exceed the browser limit. Use 30s or 5m trails.");
         }
         previousPlayers = seen;
+        this.setTrailProgress(++completed, chunkCount);
       }
       if (controller.signal.aborted) return;
       this.trailDataKey = dataKey;
@@ -1300,6 +1318,7 @@ export class ReplayPanel extends HTMLElement {
         this.sync();
       }
     } finally {
+      if (this.requests.current("trails", controller)) this.setTrailProgress(0, 0);
       if (this.requests.current("trails", controller)) {
         if (this.fullTrails) this.updateOverlays();
       }

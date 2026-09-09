@@ -611,6 +611,21 @@ bluemap-player-replay .history-density-status {
   font-size: 10px;
   margin: 0 0 6px;
 }
+bluemap-player-replay .history-trail-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 8px;
+  color: var(--theme-fg-light, #aaa);
+  font-size: 11px;
+  margin: 0 0 6px;
+}
+bluemap-player-replay .history-trail-progress[hidden] { display: none; }
+bluemap-player-replay .history-trail-progress progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 5px;
+  accent-color: var(--history-accent);
+}
 bluemap-player-replay .history-tooltip {
   bottom: 74px;
 }

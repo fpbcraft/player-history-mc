@@ -2599,7 +2599,12 @@ ${payload}` : ""}`;
         /* @__PURE__ */ u2(SpeedControl, {})
       ] })
     ] }),
-    /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" })
+    /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" }),
+    /* @__PURE__ */ u2("div", { class: "history-trail-progress", hidden: true, role: "status", "aria-live": "polite", children: [
+      /* @__PURE__ */ u2("span", { children: "Loading trails" }),
+      /* @__PURE__ */ u2("output", { "data-control": "trail-progress-label", children: "0%" }),
+      /* @__PURE__ */ u2("progress", { "data-control": "trail-progress", max: "100", value: "0" })
+    ] })
   ] });
 
   // src/ui/replay-panel-view.tsx
@@ -2686,6 +2691,19 @@ ${payload}` : ""}`;
     chatNotifications = [];
     seenLiveChatEvents = /* @__PURE__ */ new Set();
     liveChatInitialized = false;
+    setTrailProgress(completed, total) {
+      const progress = this.q("trail-progress");
+      const container = progress.closest(".history-trail-progress");
+      if (!container) return;
+      if (total <= 0) {
+        container.hidden = true;
+        return;
+      }
+      const percent = Math.min(100, Math.round(completed / total * 100));
+      container.hidden = false;
+      progress.value = percent;
+      this.q("trail-progress-label").value = `${percent}%`;
+    }
     get opened() {
       return this.panelState.panel === "open";
     }
@@ -3742,10 +3760,13 @@ ${payload}` : ""}`;
       let previousPlayers = /* @__PURE__ */ new Set();
       this.statusCoordinator.show("loading", "Loading trails\u2026");
       try {
-        if (Math.floor(to / duration) - Math.floor(from / duration) + 1 > 5e3)
+        const chunkCount = Math.floor(to / duration) - Math.floor(from / duration) + 1;
+        this.setTrailProgress(0, chunkCount);
+        if (chunkCount > 5e3)
           throw Error(
             "Full trails exceed 5,000 recording chunks. Choose a shorter range or 30s / 5m trails."
           );
+        let completed = 0;
         for (let t2 = Math.floor(from / duration) * duration; t2 <= to; t2 += duration) {
           const data = await cache.read(t2, controller.signal), seen = /* @__PURE__ */ new Set();
           events.push(...data.events);
@@ -3762,6 +3783,7 @@ ${payload}` : ""}`;
               throw Error("Full trails exceed the browser limit. Use 30s or 5m trails.");
           }
           previousPlayers = seen;
+          this.setTrailProgress(++completed, chunkCount);
         }
         if (controller.signal.aborted) return;
         this.trailDataKey = dataKey;
@@ -3784,6 +3806,7 @@ ${payload}` : ""}`;
           this.sync();
         }
       } finally {
+        if (this.requests.current("trails", controller)) this.setTrailProgress(0, 0);
         if (this.requests.current("trails", controller)) {
           if (this.fullTrails) this.updateOverlays();
         }
