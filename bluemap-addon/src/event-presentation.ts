@@ -51,6 +51,7 @@ export const formatCoordinates = (point: HistoryPoint): string =>
   [point.x, point.y, point.z].map((value) => (value / 32).toFixed(1)).join(", ");
 
 const EVENT_PATHS: Record<string, string> = {
+  CHAT: "M3 4h18v13H9l-6 4z",
   CRAFT: "M3 3h18v18H3zM9 3v18m6-18v18M3 9h18M3 15h18",
   SMELT: "M13 2c2 7 7 8 7 13a8 8 0 01-16 0c0-3 2-5 5-7-1 5 3 6 4 1z",
   ENCHANT: "m4 20 12-12m-9 9-3-3M17 2v4m-2-2h4M5 3v4M3 5h4m12 10v6m-3-3h6",

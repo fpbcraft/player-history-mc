@@ -2,6 +2,12 @@ import { HistoryIcon } from "./history-icon.js";
 
 export const HistoryChat = () => (
   <>
+    <div
+      class="history-chat-notifications"
+      role="status"
+      aria-live="polite"
+      aria-label="New chat messages"
+    />
     <button
       type="button"
       name="webchat"

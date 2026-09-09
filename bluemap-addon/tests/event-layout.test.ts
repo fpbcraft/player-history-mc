@@ -29,7 +29,7 @@ test("event layout keeps crowded markers on their recorded coordinates", () => {
   for (const m of markers) {
     assert.equal(m.offsetX, 0);
     assert.equal(m.offsetY, 0);
-    assert.equal(m.element.style.translate, "0px 0px");
+    assert.equal(m.element.style.translate, "0 0");
     assert.equal(m.element.style["--connector-length"], "0px");
   }
 });
@@ -71,45 +71,4 @@ test("expanded event groups hide peers and collapse back to the count marker", (
   assert.equal(list.hidden, true);
   assert.equal(peer.element.hidden, false);
   assert.equal(group.element.attributes["aria-expanded"], "false");
-});
-test("chat bubbles stack vertically without overlap in timestamp order", () => {
-  globalThis.innerWidth = 1200;
-  globalThis.innerHeight = 800;
-  const adapter = Object.create(BlueMapAdapter.prototype);
-  const times = [30, 10, 20];
-  const markers = times.map((time) => {
-    const marker = {};
-    marker.element = {
-      className: "history-event history-chat-bubble",
-      dataset: { historyTime: String(time) },
-      style: {
-        setProperty(name, value) {
-          this[name] = value;
-        },
-      },
-      getBoundingClientRect: () => ({
-        left: 500 + (marker.offsetX || 0),
-        top: 350 + (marker.offsetY || 0),
-        width: 220,
-        height: 64,
-      }),
-    };
-    return marker;
-  });
-  adapter.eventMarkers = new Map(markers.map((marker, index) => [index, marker]));
-  adapter.layoutEvents();
-  const byTime = markers.toSorted(
-    (left, right) =>
-      Number(left.element.dataset.historyTime) - Number(right.element.dataset.historyTime),
-  );
-  assert.deepEqual(
-    byTime.map((marker) => marker.offsetX),
-    [0, 0, 0],
-  );
-  assert.deepEqual(
-    byTime.map((marker) => marker.offsetY),
-    [0, 72, 144],
-  );
-  for (let index = 1; index < byTime.length; index++)
-    assert.ok(byTime[index].offsetY - byTime[index - 1].offsetY >= 72);
 });

@@ -6,7 +6,6 @@ import type {
   Mesh,
   Raycaster,
 } from "./bluemap-types.js";
-import { layoutEventMarkers } from "./event-layout.js";
 import {
   createEventIcon,
   eventColor,
@@ -22,7 +21,6 @@ import type {
   HistoryEvent,
   HistoryPoint,
   HistoryRegistry,
-  JsonObject,
   PlayerState,
   PointSegment,
 } from "./types.js";
@@ -391,35 +389,7 @@ export class BlueMapAdapter {
         m.element.style.color = eventColor(e.type);
         m.element.style.borderColor = playerColor(e.point.player);
         const svg = createEventIcon(e.type);
-        if (e.type === "CHAT") {
-          let payload: JsonObject = {};
-          try {
-            const parsed: unknown =
-              typeof e.payload === "string" ? JSON.parse(e.payload) : e.payload;
-            if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-              payload = parsed as JsonObject;
-          } catch {}
-          m.element.className += " history-chat-bubble";
-          const player = registry.players?.find((player) => player.id === e.point.player);
-          const head = document.createElement("img");
-          head.className = "history-chat-bubble-head";
-          head.alt = "";
-          const root = this.app.mapViewer.map?.data?.mapDataRoot;
-          head.src =
-            player?.uuid && root ? `${root}/assets/playerheads/${player.uuid}.png` : FALLBACK_HEAD;
-          head.onerror = () => {
-            head.onerror = null;
-            head.src = FALLBACK_HEAD;
-          };
-          const copy = document.createElement("span");
-          copy.className = "history-chat-bubble-copy";
-          const meta = document.createElement("strong");
-          meta.textContent = `${names.get(e.point.player) || e.point.player} · ${formatShortTimestamp(e.point.time)}`;
-          const message = document.createElement("span");
-          message.textContent = String(payload?.message || "");
-          copy.append(meta, message);
-          m.element.append(head, copy);
-        } else if (bucket.length > 1) {
+        if (bucket.length > 1) {
           m.element.classList.add("history-event-group");
           const count = document.createElement("span");
           count.className = "history-event-count";
@@ -453,11 +423,11 @@ export class BlueMapAdapter {
           }
           m.element.append(svg, count, list);
         } else m.element.append(svg);
-        if (e.type !== "CHAT" && bucket.length === 1) this.focusTooltip(m.element);
+        if (bucket.length === 1) this.focusTooltip(m.element);
         this.events.add(m);
       }
       const payload = eventDetails(e.payload, registry, e.type);
-      if (e.type !== "CHAT" && bucket.length === 1) {
+      if (bucket.length === 1) {
         const label = e.type.toLowerCase().replaceAll("_", " ");
         const showPosition = [
           "BLOCK_BREAK",
@@ -478,14 +448,10 @@ export class BlueMapAdapter {
       m.element.onclick = (event) => {
         event?.stopPropagation?.();
         if (m.element.querySelector?.(".history-event-list")) this.expandEventGroup(m);
-        else if (e.type !== "CHAT") m.element.focus?.();
+        else m.element.focus?.();
       };
-      if (e.type !== "CHAT") {
-        m.element.tabIndex = 0;
-        m.element.setAttribute("role", "button");
-      }
-      if (e.type === "CHAT") m.element.dataset.historyTime = String(e.point.time);
-      else delete m.element.dataset.historyTime;
+      m.element.tabIndex = 0;
+      m.element.setAttribute("role", "button");
       if (bucket.length > 1) {
         m.element.setAttribute("aria-expanded", "false");
         m.element.setAttribute("aria-label", `${bucket.length} events; click to expand`);
@@ -511,7 +477,12 @@ export class BlueMapAdapter {
         marker.element.hidden = marker !== this.expandedGroup;
   }
   layoutEvents(): void {
-    layoutEventMarkers(this.eventMarkers.values());
+    for (const marker of this.eventMarkers.values()) {
+      marker.offsetX = 0;
+      marker.offsetY = 0;
+      marker.element.style.translate = "0 0";
+      marker.element.style.setProperty?.("--connector-length", "0px");
+    }
   }
   setHeatmap(
     rows: [number, number, number, number, number][],

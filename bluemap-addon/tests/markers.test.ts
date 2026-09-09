@@ -225,7 +225,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     adapter.layoutEvents();
     assert.equal(event.offsetX, 0, "event marker remains anchored to its trail coordinate");
     assert.equal(event.offsetY, 0, "event marker remains anchored to its trail coordinate");
-    assert.equal(event.element.style.translate, "0px 0px");
+    assert.equal(event.element.style.translate, "0 0");
     adapter.setEvents(
       [
         {
@@ -274,17 +274,10 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       undefined,
       { players: [{ id: 1, uuid: "abc" }] },
     );
-    const bubble = adapter.events.children[0].element;
-    assert.equal(
-      bubble.dataset.historyTooltip,
-      undefined,
-      "chat bubbles have no redundant tooltip",
-    );
-    assert.equal(bubble.children.length, 2, "chat bubble includes a player head and message");
-    assert.equal(bubble.children[0].src, "maps/world/assets/playerheads/abc.png");
-    assert.match(bubble.children[1].children[0].textContent, /Test player · \d{2}:\d{2}:\d{2}/);
-    assert.equal(bubble.children[1].children[1].textContent, "<b>Hello</b>");
-    assert.match(bubble.className, /history-chat-bubble/);
+    const chatIcon = adapter.events.children[0].element;
+    assert.equal(chatIcon.children.length, 1, "chat renders as an icon-only map event");
+    assert.doesNotMatch(chatIcon.className, /history-chat-bubble/);
+    assert.match(chatIcon.dataset.historyTooltip, /<b>Hello<\/b>/);
     adapter.dispose();
   } finally {
     for (const key of keys) {

@@ -814,21 +814,6 @@ bluemap-player-replay .history-secondary > div > button { font-size: 20px; }
   bluemap-player-replay .history-heading .history-event-control { position: static; grid-area: 1 / 2; }
   bluemap-player-replay .history-heading [name="close"] { grid-column: 3; }
 }
-.history-event::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: var(--connector-length, 0px);
-  height: 1px;
-  background: currentColor;
-  transform-origin: left center;
-  transform: rotate(var(--connector-angle, 0rad)) translateX(var(--connector-start, 0px));
-  pointer-events: none;
-  z-index: -1;
-  opacity: .7;
-}
-
 .history-event-group {
   width: 30px;
   height: 30px;
@@ -852,41 +837,63 @@ bluemap-player-replay .history-secondary > div > button { font-size: 20px; }
 .history-event-group.expanded .history-event-count { display: none; }
 .history-event-group.expanded { z-index: 5; }
 
-.history-chat-bubble {
-  width: max-content;
-  max-width: min(260px, 68vw);
-  height: auto;
-  min-height: 34px;
-  padding: 6px 9px;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
-  align-items: start;
-  gap: 7px;
-  border-radius: 10px;
-  color: white !important;
-  font: 12px/1.35 system-ui;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
 bluemap-player-replay .history-webchat { margin-top: 8px; }
 bluemap-player-replay .history-webchat-feed { max-height: 150px; overflow: auto; font-size: 12px; overflow-wrap: anywhere; }
 bluemap-player-replay [name="chat-status"] { display: block; font-size: 12px; overflow-wrap: anywhere; }
-.history-chat-bubble-head {
-  width: 24px;
-  height: 24px;
-  image-rendering: pixelated;
-  border-radius: 2px;
+bluemap-player-replay .history-chat-notifications {
+  position: fixed;
+  z-index: 1002;
+  left: 16px;
+  bottom: max(82px, calc(env(safe-area-inset-bottom) + 58px));
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  gap: 8px;
+  pointer-events: none;
 }
-.history-chat-bubble-copy {
+bluemap-player-replay .history-chat-notification {
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--theme-fg, #eee);
+  background: color-mix(in srgb, var(--theme-bg, #181818) 96%, transparent);
+  border: 1px solid #8886;
+  border-left: 3px solid var(--history-accent);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px #0009;
+  backdrop-filter: blur(12px);
+  white-space: normal;
+  text-align: left;
+  pointer-events: auto;
+  animation: history-chat-notification-in 180ms ease-out;
+}
+bluemap-player-replay .history-chat-notification > img,
+bluemap-player-replay .history-chat-notification > span[aria-hidden="true"] {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  image-rendering: pixelated;
+  border-radius: 4px;
+}
+bluemap-player-replay .history-chat-notification > span:last-child {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
 }
-.history-chat-bubble-copy strong {
-  color: currentColor;
-  font-size: 10px;
-  font-weight: 650;
-  white-space: nowrap;
+bluemap-player-replay .history-chat-notification strong { overflow-wrap: anywhere; }
+bluemap-player-replay .history-chat-notification small { color: var(--theme-fg-light, #aaa); }
+bluemap-player-replay .history-chat-notification > span:last-child > span {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+@keyframes history-chat-notification-in {
+  from { opacity: 0; transform: translateY(8px); }
 }
 bluemap-player-replay .history-chat-form { display: flex; gap: 6px; }
 bluemap-player-replay [name="chat-message"] { min-width: 0; flex: 1; padding: 8px; background: #222; color: white; border: 1px solid #8885; border-radius: 4px; }

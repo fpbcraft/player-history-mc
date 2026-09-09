@@ -1,55 +1,5 @@
 "use strict";
 (() => {
-  // src/event-layout.ts
-  var GAP = 8;
-  var horizontallyOverlaps = (left, right) => Math.abs(left.x - right.x) < (left.width + right.width) / 2 + GAP;
-  var applyOffset = (marker, x2, y2, bounds) => {
-    marker.offsetX = x2;
-    marker.offsetY = y2;
-    marker.element.style.translate = `${x2}px ${y2}px`;
-    const distance = Math.hypot(x2, y2);
-    const horizontal = distance ? Math.abs(x2 / distance) : 0;
-    const vertical = distance ? Math.abs(y2 / distance) : 0;
-    const edge = Math.min(
-      horizontal ? bounds.width / 2 / horizontal : Infinity,
-      vertical ? bounds.height / 2 / vertical : Infinity
-    );
-    marker.element.style.setProperty?.("--connector-start", `${Math.min(edge, distance)}px`);
-    marker.element.style.setProperty?.("--connector-length", `${Math.max(0, distance - edge)}px`);
-    marker.element.style.setProperty?.("--connector-angle", `${Math.atan2(-y2, -x2)}rad`);
-  };
-  var layoutEventMarkers = (markers) => {
-    const bubbles = [];
-    for (const marker of markers) {
-      const bounds = marker.element.getBoundingClientRect();
-      const originX = bounds.left + bounds.width / 2 - (marker.offsetX ?? 0);
-      const originY = bounds.top + bounds.height / 2 - (marker.offsetY ?? 0);
-      applyOffset(marker, 0, 0, bounds);
-      if (String(marker.element.className).includes("history-chat-bubble") && bounds.width && bounds.height)
-        bubbles.push({
-          marker,
-          bounds,
-          originX,
-          originY,
-          time: Number(marker.element.dataset.historyTime ?? 0)
-        });
-    }
-    bubbles.sort((left, right) => left.time - right.time);
-    const occupied = [];
-    for (const { marker, bounds, originX, originY } of bubbles) {
-      const candidate = { x: originX, y: originY, width: bounds.width, height: bounds.height };
-      for (let pass = 0; pass <= occupied.length; pass++) {
-        const collision = occupied.find(
-          (previous) => horizontallyOverlaps(previous, candidate) && candidate.y - candidate.height / 2 < previous.y + previous.height / 2 + GAP && candidate.y + candidate.height / 2 > previous.y - previous.height / 2 - GAP
-        );
-        if (!collision) break;
-        candidate.y = collision.y + (collision.height + candidate.height) / 2 + GAP;
-      }
-      occupied.push(candidate);
-      applyOffset(marker, 0, candidate.y - originY, bounds);
-    }
-  };
-
   // src/event-presentation.ts
   var EVENT_TYPES = [
     "CHAT",
@@ -92,6 +42,7 @@
   });
   var formatCoordinates = (point) => [point.x, point.y, point.z].map((value) => (value / 32).toFixed(1)).join(", ");
   var EVENT_PATHS = {
+    CHAT: "M3 4h18v13H9l-6 4z",
     CRAFT: "M3 3h18v18H3zM9 3v18m6-18v18M3 9h18M3 15h18",
     SMELT: "M13 2c2 7 7 8 7 13a8 8 0 01-16 0c0-3 2-5 5-7-1 5 3 6 4 1z",
     ENCHANT: "m4 20 12-12m-9 9-3-3M17 2v4m-2-2h4M5 3v4M3 5h4m12 10v6m-3-3h6",
@@ -522,6 +473,8 @@ ${lines.join("\n")}` : "";
     if (type === "QUIT") return "Left the game";
     if (type === "RESPAWN") return "Respawned";
     if (type === "DEATH") return typeof payload.message === "string" ? payload.message : "Died";
+    if (type === "CHAT")
+      return typeof payload.message === "string" ? payload.message : "Chat message";
     const fields = type ? EVENT_FIELDS[type] : void 0;
     const details = fields ? Object.fromEntries(
       fields.flatMap((key) => {
@@ -904,34 +857,7 @@ Position: ${formatCoordinates(point)}`;
           m2.element.style.color = eventColor(e2.type);
           m2.element.style.borderColor = playerColor(e2.point.player);
           const svg = createEventIcon(e2.type);
-          if (e2.type === "CHAT") {
-            let payload2 = {};
-            try {
-              const parsed = typeof e2.payload === "string" ? JSON.parse(e2.payload) : e2.payload;
-              if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-                payload2 = parsed;
-            } catch {
-            }
-            m2.element.className += " history-chat-bubble";
-            const player = registry.players?.find((player2) => player2.id === e2.point.player);
-            const head = document.createElement("img");
-            head.className = "history-chat-bubble-head";
-            head.alt = "";
-            const root = this.app.mapViewer.map?.data?.mapDataRoot;
-            head.src = player?.uuid && root ? `${root}/assets/playerheads/${player.uuid}.png` : FALLBACK_HEAD;
-            head.onerror = () => {
-              head.onerror = null;
-              head.src = FALLBACK_HEAD;
-            };
-            const copy = document.createElement("span");
-            copy.className = "history-chat-bubble-copy";
-            const meta = document.createElement("strong");
-            meta.textContent = `${names.get(e2.point.player) || e2.point.player} \xB7 ${formatShortTimestamp(e2.point.time)}`;
-            const message = document.createElement("span");
-            message.textContent = String(payload2?.message || "");
-            copy.append(meta, message);
-            m2.element.append(head, copy);
-          } else if (bucket.length > 1) {
+          if (bucket.length > 1) {
             m2.element.classList.add("history-event-group");
             const count = document.createElement("span");
             count.className = "history-event-count";
@@ -962,11 +888,11 @@ Position: ${formatCoordinates(point)}`;
             }
             m2.element.append(svg, count, list);
           } else m2.element.append(svg);
-          if (e2.type !== "CHAT" && bucket.length === 1) this.focusTooltip(m2.element);
+          if (bucket.length === 1) this.focusTooltip(m2.element);
           this.events.add(m2);
         }
         const payload = eventDetails(e2.payload, registry, e2.type);
-        if (e2.type !== "CHAT" && bucket.length === 1) {
+        if (bucket.length === 1) {
           const label = e2.type.toLowerCase().replaceAll("_", " ");
           const showPosition = [
             "BLOCK_BREAK",
@@ -989,14 +915,10 @@ ${payload}` : ""}`;
         m2.element.onclick = (event) => {
           event?.stopPropagation?.();
           if (m2.element.querySelector?.(".history-event-list")) this.expandEventGroup(m2);
-          else if (e2.type !== "CHAT") m2.element.focus?.();
+          else m2.element.focus?.();
         };
-        if (e2.type !== "CHAT") {
-          m2.element.tabIndex = 0;
-          m2.element.setAttribute("role", "button");
-        }
-        if (e2.type === "CHAT") m2.element.dataset.historyTime = String(e2.point.time);
-        else delete m2.element.dataset.historyTime;
+        m2.element.tabIndex = 0;
+        m2.element.setAttribute("role", "button");
         if (bucket.length > 1) {
           m2.element.setAttribute("aria-expanded", "false");
           m2.element.setAttribute("aria-label", `${bucket.length} events; click to expand`);
@@ -1022,7 +944,12 @@ ${payload}` : ""}`;
           marker.element.hidden = marker !== this.expandedGroup;
     }
     layoutEvents() {
-      layoutEventMarkers(this.eventMarkers.values());
+      for (const marker of this.eventMarkers.values()) {
+        marker.offsetX = 0;
+        marker.offsetY = 0;
+        marker.element.style.translate = "0 0";
+        marker.element.style.setProperty?.("--connector-length", "0px");
+      }
     }
     setHeatmap(rows, size, opacity) {
       this.clearHeatmap();
@@ -1076,6 +1003,28 @@ ${payload}` : ""}`;
       this.clear(this.events);
       this.app.popupMarkerSet.remove(this.root);
     }
+  };
+
+  // src/event-notifications.ts
+  var firstAfter = (events, time) => {
+    let low = 0;
+    let high = events.length;
+    while (low < high) {
+      const middle = low + high >>> 1;
+      if ((events[middle]?.point.time ?? Infinity) <= time) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  };
+  var chatEventsBetween = (events, from, to, selectedPlayers) => {
+    if (to <= from || events.length === 0) return [];
+    const chats = [];
+    for (let index = firstAfter(events, from); index < events.length; index++) {
+      const event = events[index];
+      if (!event || event.point.time > to) break;
+      if (event.type === "CHAT" && selectedPlayers.has(event.point.player)) chats.push(event);
+    }
+    return chats;
   };
 
   // src/http-client.ts
@@ -2310,6 +2259,32 @@ ${payload}` : ""}`;
     R(/* @__PURE__ */ u2(ActivityHistogram, { ...props }), root);
   };
 
+  // src/ui/chat-notification-view.tsx
+  var ChatNotifications = ({
+    notifications,
+    onOpen
+  }) => /* @__PURE__ */ u2(S, { children: notifications.map((notification) => /* @__PURE__ */ u2(
+    "button",
+    {
+      type: "button",
+      class: "history-chat-notification",
+      onClick: onOpen,
+      "aria-label": `Open chat: ${notification.name}: ${notification.message}`,
+      children: [
+        notification.head ? /* @__PURE__ */ u2("img", { src: notification.head, alt: "" }) : /* @__PURE__ */ u2("span", { "aria-hidden": "true", children: "\u25CF" }),
+        /* @__PURE__ */ u2("span", { children: [
+          /* @__PURE__ */ u2("strong", { children: notification.name }),
+          /* @__PURE__ */ u2("small", { children: notification.time }),
+          /* @__PURE__ */ u2("span", { children: notification.message })
+        ] })
+      ]
+    },
+    notification.id
+  )) });
+  var renderChatNotifications = (root, notifications, onOpen) => {
+    R(/* @__PURE__ */ u2(ChatNotifications, { notifications, onOpen }), root);
+  };
+
   // src/ui/event-filter-view.tsx
   var eventLabel = (type) => type.toLowerCase().replaceAll("_", " ");
   var EventFilter = ({ types, disabled, onChange }) => /* @__PURE__ */ u2(S, { children: [...types].map((type) => /* @__PURE__ */ u2("label", { children: [
@@ -2347,6 +2322,15 @@ ${payload}` : ""}`;
 
   // src/ui/history-chat.tsx
   var HistoryChat = () => /* @__PURE__ */ u2(S, { children: [
+    /* @__PURE__ */ u2(
+      "div",
+      {
+        class: "history-chat-notifications",
+        role: "status",
+        "aria-live": "polite",
+        "aria-label": "New chat messages"
+      }
+    ),
     /* @__PURE__ */ u2(
       "button",
       {
@@ -2692,6 +2676,9 @@ ${payload}` : ""}`;
     filterRevision = 0;
     healthToken = {};
     trailMode = 6e4;
+    chatNotifications = [];
+    seenLiveChatEvents = /* @__PURE__ */ new Set();
+    liveChatInitialized = false;
     get opened() {
       return this.panelState.panel === "open";
     }
@@ -2794,6 +2781,9 @@ ${payload}` : ""}`;
       this.isLive = true;
       this.liveEvents = [];
       this.livePoints = [];
+      this.chatNotifications = [];
+      this.seenLiveChatEvents = /* @__PURE__ */ new Set();
+      this.liveChatInitialized = false;
       this.mobileQuery = matchMedia("(max-width: 600px)");
       this.engine = new ReplayEngine();
       this.names = /* @__PURE__ */ new Map();
@@ -2826,22 +2816,7 @@ ${payload}` : ""}`;
       this.statusCoordinator = new StatusCoordinator(this.require(".history-status"));
       this.chatClient = new ChatClient(() => this.chatToken);
       this.chatToken = preferences.chatToken();
-      this.q("webchat").onclick = async () => {
-        const box = this.require(".history-chat-panel");
-        box.hidden = false;
-        this.q("webchat").hidden = true;
-        this.q("webchat").setAttribute("aria-expanded", "true");
-        if (this.mobileQuery.matches) {
-          if (this.opened) this.close();
-          this.q("open").hidden = true;
-        }
-        await this.refresh(true);
-        await this.loadRangeEvents();
-        this.updateOverlays();
-        this.lifecycle.clearInterval(this.chatTimer);
-        this.pollChat();
-        this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2e3);
-      };
+      this.q("webchat").onclick = () => this.openChat();
       this.q("chat-close").onclick = () => this.closeChat();
       this.q("chat-connect").onclick = async () => {
         try {
@@ -3127,6 +3102,23 @@ ${payload}` : ""}`;
       this.goNow();
       await this.refresh(true);
     }
+    async openChat() {
+      const box = this.require(".history-chat-panel");
+      box.hidden = false;
+      this.q("webchat").hidden = true;
+      this.q("webchat").setAttribute("aria-expanded", "true");
+      this.clearChatNotifications();
+      if (this.mobileQuery.matches) {
+        if (this.opened) this.close();
+        this.q("open").hidden = true;
+      }
+      await this.refresh(true);
+      await this.loadRangeEvents();
+      this.updateOverlays();
+      this.lifecycle.clearInterval(this.chatTimer);
+      this.pollChat();
+      this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2e3);
+    }
     close() {
       this.closeChoices();
       this.opened = false;
@@ -3148,6 +3140,50 @@ ${payload}` : ""}`;
       this.q("webchat").hidden = false;
       this.q("webchat").setAttribute("aria-expanded", "false");
       if (this.mobileQuery.matches && !this.opened) this.q("open").hidden = false;
+    }
+    clearChatNotifications() {
+      this.chatNotifications = [];
+      renderChatNotifications(
+        this.require(".history-chat-notifications"),
+        this.chatNotifications,
+        () => void this.openChat()
+      );
+    }
+    notifyLiveChat(event, registry = this.manifest?.registry) {
+      if (!this.require(".history-chat-panel").hidden) return;
+      const player = registry?.players.find((candidate) => candidate.id === event.point.player);
+      const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
+      const id = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
+      this.chatNotifications = [
+        ...this.chatNotifications,
+        {
+          id,
+          ...player?.uuid && mapRoot ? { head: `${mapRoot}/assets/playerheads/${player.uuid}.png` } : {},
+          message: eventDetails(event.payload, {}, "CHAT"),
+          name: player?.name ?? this.names.get(event.point.player) ?? "Player",
+          time: formatDate(event.point.time, false)
+        }
+      ].slice(-4);
+      const root = this.require(".history-chat-notifications");
+      const renderNotifications = () => renderChatNotifications(root, this.chatNotifications, () => void this.openChat());
+      renderNotifications();
+      this.lifecycle.timeout(() => {
+        this.chatNotifications = this.chatNotifications.filter((item) => item.id !== id);
+        renderNotifications();
+      }, 7e3);
+    }
+    notifyPlaybackChats(from, to) {
+      if (this.disabledEvents.has("CHAT")) return;
+      const seen = /* @__PURE__ */ new Set();
+      for (const event of [
+        ...chatEventsBetween(this.rangeEvents, from, to, this.selection),
+        ...chatEventsBetween(this.liveEvents, from, to, this.selection)
+      ]) {
+        const key = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        this.notifyLiveChat(event);
+      }
     }
     goNow() {
       this.isLive = true;
@@ -3457,7 +3493,9 @@ ${payload}` : ""}`;
       this.lifecycle.frame((t2) => this.tickFrame(t2));
       if (this.manifest && this.cache) {
         if (!this.scrubbing && this.clock.rate) {
+          const previousTime = this.clock.time;
           this.clock.tick(delta);
+          this.notifyPlaybackChats(previousTime, this.clock.time);
           this.seek(this.clock.time);
         }
         this.render();
@@ -3572,6 +3610,19 @@ ${payload}` : ""}`;
           return;
         this.livePoints = Array.isArray(data.points) ? data.points.slice(-2e4) : [];
         this.liveEvents = Array.isArray(data.events) ? data.events.slice(-1e3) : [];
+        for (const event of this.liveEvents) {
+          if (event.type !== "CHAT") continue;
+          const key = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
+          if (this.liveChatInitialized && !this.seenLiveChatEvents.has(key))
+            this.notifyLiveChat(event, data.registry);
+          this.seenLiveChatEvents.add(key);
+        }
+        while (this.seenLiveChatEvents.size > 2e3) {
+          const oldest = this.seenLiveChatEvents.values().next().value;
+          if (oldest === void 0) break;
+          this.seenLiveChatEvents.delete(oldest);
+        }
+        this.liveChatInitialized = true;
         this.eventRevision++;
         if (!this.manifest) await this.refresh();
         if (this.manifest && data.registry) this.manifest.registry = data.registry;

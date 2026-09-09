@@ -261,6 +261,8 @@ export const eventDetails = (
   if (type === "QUIT") return "Left the game";
   if (type === "RESPAWN") return "Respawned";
   if (type === "DEATH") return typeof payload.message === "string" ? payload.message : "Died";
+  if (type === "CHAT")
+    return typeof payload.message === "string" ? payload.message : "Chat message";
   const fields = type ? EVENT_FIELDS[type] : undefined;
   const details: JsonObject = fields
     ? Object.fromEntries(

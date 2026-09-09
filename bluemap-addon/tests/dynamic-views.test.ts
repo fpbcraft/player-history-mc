@@ -3,6 +3,7 @@
 import { render } from "preact";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HistoryEvent } from "../src/types.js";
+import { renderChatNotifications } from "../src/ui/chat-notification-view.js";
 import { renderEventFilter } from "../src/ui/event-filter-view.js";
 import { renderHistoryEvents } from "../src/ui/history-events-view.js";
 import { renderPlayerFilter } from "../src/ui/player-filter-view.js";
@@ -62,5 +63,21 @@ describe("declarative replay lists", () => {
     render(null, filters);
     render(null, chat);
     render(null, ticks);
+  });
+
+  it("renders transient chat notifications as an accessible action", () => {
+    const root = document.createElement("div");
+    const onOpen = vi.fn();
+    renderChatNotifications(
+      root,
+      [{ id: "one", message: "hello", name: "Alex", time: "12:00" }],
+      onOpen,
+    );
+
+    const notification = root.querySelector<HTMLButtonElement>(".history-chat-notification");
+    expect(notification?.textContent).toContain("Alex");
+    notification?.click();
+    expect(onOpen).toHaveBeenCalledOnce();
+    render(null, root);
   });
 });

@@ -1,5 +1,6 @@
 import { BlueMapAdapter } from "./bluemap-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
+import { chatEventsBetween } from "./event-notifications.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
@@ -20,10 +21,11 @@ import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-st
 import { addActivityBins, clamp, ReplayClock } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
-import { describeState, TelemetryCache } from "./telemetry.js";
+import { describeState, eventDetails, TelemetryCache } from "./telemetry.js";
 import { formatDate } from "./time-format.js";
 import type { HistoryEvent, HistoryManifest, HistoryPoint, IntegrationMapping } from "./types.js";
 import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
+import { type ChatNotification, renderChatNotifications } from "./ui/chat-notification-view.js";
 import { renderEventFilter } from "./ui/event-filter-view.js";
 import { renderPlayerFilter } from "./ui/player-filter-view.js";
 import { mountReplayPanelView, unmountReplayPanelView } from "./ui/replay-panel-view.js";
@@ -90,6 +92,9 @@ export class ReplayPanel extends HTMLElement {
   private filterRevision = 0;
   private healthToken: object = {};
   private trailMode = 60_000;
+  private chatNotifications: ChatNotification[] = [];
+  private seenLiveChatEvents = new Set<string>();
+  private liveChatInitialized = false;
 
   private get opened(): boolean {
     return this.panelState.panel === "open";
@@ -219,6 +224,9 @@ export class ReplayPanel extends HTMLElement {
     this.isLive = true;
     this.liveEvents = [];
     this.livePoints = [];
+    this.chatNotifications = [];
+    this.seenLiveChatEvents = new Set();
+    this.liveChatInitialized = false;
     this.mobileQuery = matchMedia("(max-width: 600px)");
     this.engine = new ReplayEngine();
     this.names = new Map();
@@ -249,22 +257,7 @@ export class ReplayPanel extends HTMLElement {
     this.statusCoordinator = new StatusCoordinator(this.require<HTMLElement>(".history-status"));
     this.chatClient = new ChatClient(() => this.chatToken);
     this.chatToken = preferences.chatToken();
-    this.q("webchat").onclick = async () => {
-      const box = this.require<HTMLElement>(".history-chat-panel");
-      box.hidden = false;
-      this.q("webchat").hidden = true;
-      this.q("webchat").setAttribute("aria-expanded", "true");
-      if (this.mobileQuery.matches) {
-        if (this.opened) this.close();
-        this.q("open").hidden = true;
-      }
-      await this.refresh(true);
-      await this.loadRangeEvents();
-      this.updateOverlays();
-      this.lifecycle.clearInterval(this.chatTimer);
-      this.pollChat();
-      this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2000);
-    };
+    this.q("webchat").onclick = () => this.openChat();
     this.q("chat-close").onclick = () => this.closeChat();
     this.q("chat-connect").onclick = async () => {
       try {
@@ -565,6 +558,23 @@ export class ReplayPanel extends HTMLElement {
     this.goNow();
     await this.refresh(true);
   }
+  async openChat() {
+    const box = this.require<HTMLElement>(".history-chat-panel");
+    box.hidden = false;
+    this.q("webchat").hidden = true;
+    this.q("webchat").setAttribute("aria-expanded", "true");
+    this.clearChatNotifications();
+    if (this.mobileQuery.matches) {
+      if (this.opened) this.close();
+      this.q("open").hidden = true;
+    }
+    await this.refresh(true);
+    await this.loadRangeEvents();
+    this.updateOverlays();
+    this.lifecycle.clearInterval(this.chatTimer);
+    this.pollChat();
+    this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2000);
+  }
   close() {
     this.closeChoices();
     this.opened = false;
@@ -586,6 +596,55 @@ export class ReplayPanel extends HTMLElement {
     this.q("webchat").hidden = false;
     this.q("webchat").setAttribute("aria-expanded", "false");
     if (this.mobileQuery.matches && !this.opened) this.q("open").hidden = false;
+  }
+  private clearChatNotifications(): void {
+    this.chatNotifications = [];
+    renderChatNotifications(
+      this.require<HTMLElement>(".history-chat-notifications"),
+      this.chatNotifications,
+      () => void this.openChat(),
+    );
+  }
+
+  private notifyLiveChat(event: HistoryEvent, registry = this.manifest?.registry): void {
+    if (!this.require<HTMLElement>(".history-chat-panel").hidden) return;
+    const player = registry?.players.find((candidate) => candidate.id === event.point.player);
+    const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
+    const id = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
+    this.chatNotifications = [
+      ...this.chatNotifications,
+      {
+        id,
+        ...(player?.uuid && mapRoot
+          ? { head: `${mapRoot}/assets/playerheads/${player.uuid}.png` }
+          : {}),
+        message: eventDetails(event.payload, {}, "CHAT"),
+        name: player?.name ?? this.names.get(event.point.player) ?? "Player",
+        time: formatDate(event.point.time, false),
+      },
+    ].slice(-4);
+    const root = this.require<HTMLElement>(".history-chat-notifications");
+    const renderNotifications = () =>
+      renderChatNotifications(root, this.chatNotifications, () => void this.openChat());
+    renderNotifications();
+    this.lifecycle.timeout(() => {
+      this.chatNotifications = this.chatNotifications.filter((item) => item.id !== id);
+      renderNotifications();
+    }, 7_000);
+  }
+
+  private notifyPlaybackChats(from: number, to: number): void {
+    if (this.disabledEvents.has("CHAT")) return;
+    const seen = new Set<string>();
+    for (const event of [
+      ...chatEventsBetween(this.rangeEvents, from, to, this.selection),
+      ...chatEventsBetween(this.liveEvents, from, to, this.selection),
+    ]) {
+      const key = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      this.notifyLiveChat(event);
+    }
   }
   goNow() {
     this.isLive = true;
@@ -933,7 +992,9 @@ export class ReplayPanel extends HTMLElement {
     this.lifecycle.frame((t) => this.tickFrame(t));
     if (this.manifest && this.cache) {
       if (!this.scrubbing && this.clock.rate) {
+        const previousTime = this.clock.time;
         this.clock.tick(delta);
+        this.notifyPlaybackChats(previousTime, this.clock.time);
         this.seek(this.clock.time);
       }
       this.render();
@@ -1065,6 +1126,19 @@ export class ReplayPanel extends HTMLElement {
         return;
       this.livePoints = Array.isArray(data.points) ? data.points.slice(-20000) : [];
       this.liveEvents = Array.isArray(data.events) ? data.events.slice(-1000) : [];
+      for (const event of this.liveEvents) {
+        if (event.type !== "CHAT") continue;
+        const key = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
+        if (this.liveChatInitialized && !this.seenLiveChatEvents.has(key))
+          this.notifyLiveChat(event, data.registry);
+        this.seenLiveChatEvents.add(key);
+      }
+      while (this.seenLiveChatEvents.size > 2_000) {
+        const oldest = this.seenLiveChatEvents.values().next().value;
+        if (oldest === undefined) break;
+        this.seenLiveChatEvents.delete(oldest);
+      }
+      this.liveChatInitialized = true;
       this.eventRevision++;
       if (!this.manifest) await this.refresh();
       if (this.manifest && data.registry) this.manifest.registry = data.registry;
