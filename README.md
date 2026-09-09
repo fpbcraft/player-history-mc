@@ -1,15 +1,15 @@
-# Player History 0.8.13
+# Player History 0.8.14
 
 Two server-side **Minecraft 1.21.1 / NeoForge 21.1.248+ / Java 21** mods:
 
 - **Player History Recorder** records movement, configurable state and activity, and publishes a versioned dataset. It does not depend on BlueMap.
 - **Player History BlueMap** installs the replay viewer into **BlueMap 5.x**, links the public dataset, and maps BlueMap map IDs to Minecraft dimensions. It does not depend on recorder classes and can view an existing compatible dataset.
 
-Install `player-history-recorder-0.8.13.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.13.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
+Install `player-history-recorder-0.8.14.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.14.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 
-The viewer defaults to a three-hour range, live mode and one-minute trails. It includes playback speed, a ±120× elastic shuttle, activity histogram, custom date/time range, persistent player selection, trails and heatmap. Ranges include **last hour, 3 hours, 6 hours, 24 hours, 48 hours, week, 30 days, last N days, all history and custom dates**. Historical players appear as local BlueMap skin heads, with names/details on hover or keyboard focus. Trails and event icons share each player's color. Trail hover places a dot at the selected segment position and interpolates that point's historical timestamp without crossing discontinuities.
+The viewer defaults to a three-hour range, live mode and one-minute trails. It includes playback speed, an activity histogram, Grafana-style relative/absolute time selection, persistent player selection, trails and heatmap. Ranges include **last hour, 3, 6 and 12 hours, today, yesterday, 24 and 48 hours, week, 30 days, last N days, all history and custom dates**. Historical players appear as local BlueMap skin heads, with names/details on hover or keyboard focus. Trails and event icons share each player's color. Trail hover places a dot at the selected segment position and interpolates that point's historical timestamp without crossing discontinuities.
 
 ## Build
 
@@ -56,6 +56,10 @@ Viewer fixes in 0.8.1: immutable filenames for all helper assets prevent mixed c
 
 0.8.1 adds public chat recording, near-real-time event/chat display while preserving historical batches, and a collapsible mobile panel. Clicking trails/events opens details without seeking. Live uses BlueMap's native player heads without historical duplicates. Item pickup/drop, block place/break and container-open start hidden in fresh viewer preferences; enable them in Events.
 
+
+## Version 0.8.14
+
+The viewer has a maintainable component-based panel, a Grafana-style date range picker, inline playback controls, compact trail-anchored event icons, and persistent History/Chat visibility. Chat events appear as map icons; when Chat is closed, live and replay playback messages appear as bottom-left notifications. Trail loading reports an inline percentage without shifting the layout and skips known data gaps using bounded mobile-aware concurrency.
 
 ## Version 0.8.13
 
