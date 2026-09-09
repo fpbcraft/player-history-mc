@@ -10,16 +10,23 @@ Match the recorder's publishing path. Relative paths resolve under the Minecraft
 
 For manual deployment, place the independent `bluemap-addon/dist/` contents in `<webroot>/player-history/`, link `data` to the recorder's public directory, provide `integration.json`, and register the script/style via BlueMap's addon configuration. Do not serve the private world/history directory. If the bridge logs a link failure, create the directory link using the host's filesystem tools and reload BlueMap. A reverse proxy or separate host can serve a copied public dataset with the same URL layout; keep retention synchronized there.
 
-Frontend development requires only Node:
+Frontend development requires Node and a running BlueMap site with a compatible Player History viewer JAR installed once. From the repository root, proxy either a local or hosted instance:
 
 ```sh
-cd bluemap-addon
-npm test
-npm run build
-BLUEMAP_WEBROOT=/absolute/path/to/bluemap/web npm run watch
+npm install --prefix bluemap-addon
+npm run dev -- --target http://127.0.0.1:8100
+npm run dev -- --target https://map.fpbcraft.com
 ```
 
-Run `npm install` once to install the pinned TypeScript, esbuild, Vitest and Biome development dependencies. The watch task rebuilds the JavaScript bundle and copies stylesheet changes; refresh the browser to load them. No Minecraft restart is required for UI-only edits. BlueMap reload/startup reinstalls bundled assets, so rebuild the bridge JAR before distributing those edits.
+BrowserSync prints and opens the local development URL on port 3000 by default; its HTTP or HTTPS scheme follows the target. Use `--port <number>` to choose another port and `--no-open` to leave the browser closed. To test from a phone on the same network, bind to every local interface and open one of the Phone URLs printed by the development command:
+
+```sh
+npm run dev -- --target http://127.0.0.1:8100 --host 0.0.0.0
+```
+
+The proxy loads the complete target BlueMap site, including map and live data, Player History data, web-chat requests and event streams. It replaces any registered stable or versioned `player-history*.js` and `.css` URL with the latest local build and disables caching for those responses. TypeScript and stylesheet changes rebuild automatically and refresh the page. A failed TypeScript build prints diagnostics and leaves the last successful bundle available. Playback preferences remain in local storage, and BlueMap's URL hash restores the camera after a full-page refresh.
+
+This workflow never writes into the BlueMap webroot. UI-only edits need no JAR rebuild or Minecraft restart. Java, recorder, integration and production-release changes still require rebuilding the bridge JAR and restarting or reloading the server. The production build remains `npm run build`; Gradle packages the stable files in `bluemap-addon/dist/`, and the installed bridge creates its versioned copies.
 
 Players use local skin-head markers without persistent names. Names, timestamps and available state appear on hover/focus. Events use compact SVG glyphs colored by event type, surrounded by player-colored rings, with no name pill. Click/Enter/Space opens event details without changing playback time. Trail hit testing uses BlueMap's Line2 intersections, retains timestamps alongside geometry, splits long geometry into at most 255-segment parts and coalesces pointer work with animation frames. Its dot sits at the same interpolated coordinate used by the tooltip. Escape, pointer leave, dragging and disposal clear the tooltip/dot.
 

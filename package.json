@@ -4,6 +4,7 @@
   "scripts": {
     "build": "npm --prefix bluemap-addon run build",
     "test": "npm --prefix bluemap-addon test",
-    "check": "npm --prefix bluemap-addon run check"
+    "check": "npm --prefix bluemap-addon run check",
+    "dev": "npm --prefix bluemap-addon run dev --"
   }
 }

@@ -20,6 +20,14 @@ npm test
 npm --prefix bluemap-addon run build
 ```
 
+For live UI development against an already-running BlueMap instance:
+
+```sh
+npm run dev -- --target http://127.0.0.1:8100
+```
+
+The local proxy rebuilds TypeScript and CSS and refreshes the browser without rebuilding a JAR or restarting Minecraft. See [BlueMap installation and live frontend development](docs/bluemap-addon.md) for hosted targets, phone testing and options.
+
 Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
 
 ## Documentation
@@ -28,7 +36,7 @@ Both mod builds are independent. Use Java 21. JARs are in each module's `build/l
 - [Configuration and complete example](docs/configuration.md)
 - [Public protocol](docs/public-protocol.md)
 - [Binary storage](docs/storage-format.md)
-- [BlueMap installation and frontend watch workflow](docs/bluemap-addon.md)
+- [BlueMap installation and live frontend development](docs/bluemap-addon.md)
 - [Migration from the combined mod](docs/migration.md)
 - [Verification and limits](docs/verification.md)
 
