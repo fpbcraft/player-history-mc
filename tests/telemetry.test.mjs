@@ -5,6 +5,7 @@ import {
   stateAt,
   TelemetryCache,
   describeState,
+  chatMessage,
 } from "../bluemap-addon/src/telemetry.js";
 const a = { player: 1, time: 0, x: -320, y: 0, z: 0, world: 0, flags: 0 };
 const b = { ...a, time: 10000, x: 0 };
@@ -73,6 +74,14 @@ test("state and inventory reconstruction respects unknown and disabled fields", 
     /Health: unknown/,
   );
 });
+
+test("chat display includes Minecraft-style status and death messages", () => {
+  assert.equal(chatMessage("CHAT", "Alex", { message: "hello" }), "Alex: hello");
+  assert.equal(chatMessage("JOIN", "Alex"), "Alex joined the game");
+  assert.equal(chatMessage("QUIT", "Alex"), "Alex left the game");
+  assert.equal(chatMessage("DEATH", "Alex", { message: "Alex fell from a high place" }), "Alex fell from a high place");
+});
+
 test("missing state chunks never extrapolate from another chunk; cache is bounded", async () => {
   let requests = 0;
   const cache = new TelemetryCache(

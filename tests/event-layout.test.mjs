@@ -34,23 +34,23 @@ test('live movement extends batched trails without duplicate points or teleport 
 });
 test('expanded event groups hide peers and collapse back to the count marker', () => {
   const adapter = Object.create(BlueMapAdapter.prototype);
-  const element = (fan = null) => ({
+  const element = (list = null) => ({
     hidden: false,
     attributes: {},
     classList: { add() {}, remove() {} },
-    querySelector: () => fan,
+    querySelector: () => list,
     setAttribute(name, value) { this.attributes[name] = value; },
   });
-  const fan = { hidden: true };
-  const group = { element: element(fan) };
+  const list = { hidden: true, classList: { toggle() {} } };
+  const group = { element: element(list) };
   const peer = { element: element() };
   adapter.eventMarkers = new Map([[1, group], [2, peer]]);
   adapter.expandEventGroup(group);
-  assert.equal(fan.hidden, false);
+  assert.equal(list.hidden, false);
   assert.equal(peer.element.hidden, true);
   assert.equal(group.element.attributes['aria-expanded'], 'true');
   adapter.collapseEventGroup();
-  assert.equal(fan.hidden, true);
+  assert.equal(list.hidden, true);
   assert.equal(peer.element.hidden, false);
   assert.equal(group.element.attributes['aria-expanded'], 'false');
 });

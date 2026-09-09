@@ -182,6 +182,11 @@ public final class PlayerHistoryMod {
   }
 
   private void event(ServerPlayer p, String type, int flags, boolean include) {
+    event(p, type, flags, include, null);
+  }
+
+  private void event(
+      ServerPlayer p, String type, int flags, boolean include, String message) {
     if (store == null) return;
     if (!allowed(p)) {
       hide(p);
@@ -191,12 +196,19 @@ public final class PlayerHistoryMod {
     var ps = new ArrayList<Point>();
     if (old != null && (flags & Point.BREAK) != 0) ps.add(old.with(current.time(), Point.OFFLINE));
     ps.add(current);
-    String payload = old == null ? "{}" : JsonFiles.GSON.toJson(Map.of("from", old, "to", current));
+    var payload = new LinkedHashMap<String, Object>();
+    if (old != null) {
+      payload.put("from", old);
+      payload.put("to", current);
+    }
+    if (message != null && !message.isBlank())
+      payload.put("message", message.substring(0, Math.min(512, message.length())));
+    String payloadJson = JsonFiles.GSON.toJson(payload);
     if ((flags & Point.BREAK) != 0) telemetry.boundary(p);
     if ((flags & Point.OFFLINE) != 0) telemetry.end(p);
     store.offer(
         HistoryConfig.tracks("movement") ? ps : List.of(),
-        include ? List.of(new HistoryEvent(current, type, payload)) : List.of());
+        include ? List.of(new HistoryEvent(current, type, payloadJson)) : List.of());
     sampler.reset(current.player());
     if (current.online()) visible.put(p.getUUID(), current);
     else visible.remove(p.getUUID());
@@ -224,7 +236,12 @@ public final class PlayerHistoryMod {
 
   private void death(LivingDeathEvent e) {
     if (e.getEntity() instanceof ServerPlayer p)
-      event(p, "DEATH", Point.OFFLINE, HistoryConfig.DEATHS.get());
+      event(
+          p,
+          "DEATH",
+          Point.OFFLINE,
+          HistoryConfig.DEATHS.get(),
+          p.getCombatTracker().getDeathMessage().getString());
   }
 
   private void teleport(TeleportCompletedEvent e) {

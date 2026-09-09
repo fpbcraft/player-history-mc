@@ -1,4 +1,4 @@
 plugins { id 'base'; id 'net.neoforged.moddev' version '2.0.146' apply false }
-allprojects { version = '0.8.4'; group = 'dev.playerhistory'; repositories { mavenCentral() } }
+allprojects { version = '0.8.9'; group = 'dev.playerhistory'; repositories { mavenCentral() } }
 tasks.register('test') { dependsOn ':recorder-neoforge:test', ':bluemap-neoforge:test' }
 tasks.named('build') { dependsOn ':recorder-neoforge:build', ':bluemap-neoforge:build' }

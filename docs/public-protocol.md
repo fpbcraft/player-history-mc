@@ -37,6 +37,6 @@ BlueMap's `player-history/integration.json` is separate, addon-owned configurati
 
 ## Live events
 
-`live.json` is a replaceable, non-authoritative snapshot with `protocolVersion: 2`, `generatedAt`, `registry` and `events` using the historical event shape. The recorder worker publishes at most every 250 ms, retaining at most 1,000 events from the last five minutes. The viewer polls once per second and ignores snapshots older than ten seconds. Historical chunk batching remains unchanged. This provides near-real-time public chat and event display, not guaranteed delivery; historical chunks remain authoritative. The file is overwritten on restart and is not an archive.
+`live.json` is a replaceable, non-authoritative snapshot with `protocolVersion: 2`, `generatedAt`, `registry`, recent `points` and `events` using the historical shapes. The recorder worker publishes at most every 250 ms, retaining at most 1,000 events from the last five minutes. The viewer polls once per second and ignores snapshots older than ten seconds. Historical chunk batching remains unchanged. This provides near-real-time public chat and event display, not guaranteed delivery; historical chunks remain authoritative. The file is overwritten on restart and is not an archive.
 
 `CHAT` payloads contain `message`: public chat text capped at 512 characters and subject to the existing event payload limit. Commands and private messages are not captured. Recorder visibility/exclusion rules apply.

@@ -51,7 +51,6 @@ public final class HistoryStore implements AutoCloseable {
   private final ArrayDeque<HistoryEvent> liveEvents = new ArrayDeque<>();
   private long lastLiveFlush;
   private final ArrayDeque<Point> livePoints = new ArrayDeque<>();
-
   private void publishLive(long now) throws IOException {
     while (!liveEvents.isEmpty()
         && (liveEvents.size() > 1000 || liveEvents.peekFirst().point().time() < now - 300000))

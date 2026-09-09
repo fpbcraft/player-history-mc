@@ -110,19 +110,26 @@ export class TelemetryCache {
     return stateAt(players.get(player) ?? [], player, time);
   }
 }
+const formatValue = (value) =>
+  value == null
+    ? "unknown"
+    : typeof value === "number"
+      ? String(Number(value.toFixed(1)))
+      : String(value);
+
 export function describeState(state, registry, capabilities = {}) {
   if (!state) return "\nNo state recorded at this time";
   const lines = [];
   const fields = [
-    ["health", "health", "Health"],
-    ["food", "food", "Food"],
-    ["xp", "xpLevel", "XP level"],
+    ["health", "health", "♥ Health"],
+    ["food", "food", "◆ Food"],
+    ["xp", "xpLevel", "✦ XP level"],
     ["game-mode", "gameMode", "Game mode"],
   ];
   for (const [cap, key, label] of fields)
     if (capabilities[cap])
       lines.push(
-        `${label}: ${state[key] ?? "unknown"}${key === "health" && state.maxHealth != null ? ` / ${state.maxHealth}` : ""}`,
+        `${label}: ${formatValue(state[key])}${key === "health" && state.maxHealth != null ? ` / ${formatValue(state.maxHealth)}` : ""}`,
       );
   const item = (value) =>
     !value
@@ -130,13 +137,13 @@ export function describeState(state, registry, capabilities = {}) {
       : value.count === 0
         ? "empty"
         : `${readableName(registry.items?.find((row) => row.id === value.item)?.key ?? "unknown item")} ×${value.count}${value.damage ? ` (damage ${value.damage})` : ""}${value.name ? ` · ${value.name}` : ""}`;
-  if (capabilities["held-item"]) lines.push(`Held: ${item(state.heldItem)}`);
+  if (capabilities["held-item"]) lines.push(`⛏ Held: ${item(state.heldItem)}`);
   if (capabilities.equipment)
     for (const slot of ["head", "chest", "legs", "feet", "offhand"])
-      lines.push(`${slot}: ${item(state["equipment:" + slot])}`);
+      lines.push(`▣ ${readableName(slot)}: ${item(state["equipment:" + slot])}`);
   if (capabilities.effects)
     lines.push(
-      `Effects: ${
+      `✦ Effects: ${
         state.effects == null
           ? "unknown"
           : Object.entries(state.effects)
@@ -151,7 +158,7 @@ export function describeState(state, registry, capabilities = {}) {
       key.startsWith("slot:"),
     );
     lines.push(
-      `Inventory: ${slots.length ? slots.map(([key, value]) => `${key.slice(5)}: ${item(value)}`).join("; ") : "unknown"}`,
+      `▦ Inventory: ${slots.length ? slots.map(([key, value]) => `${key.slice(5)}: ${item(value)}`).join("; ") : "unknown"}`,
     );
   }
   return lines.length ? "\n" + lines.join("\n") : "";
@@ -164,6 +171,14 @@ export const readableName = (value) =>
     .replaceAll("_", " ")
     .replaceAll("-", " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+export function chatMessage(type, name, payload = {}) {
+  if (type === "CHAT") return `${name}: ${payload.message || ""}`;
+  if (type === "JOIN") return `${name} joined the game`;
+  if (type === "QUIT") return `${name} left the game`;
+  if (type === "DEATH") return payload.message || `${name} died`;
+  return payload.message || "";
+}
+
 export function eventDetails(payload, registry = {}) {
   if (typeof payload === "string") {
     try {

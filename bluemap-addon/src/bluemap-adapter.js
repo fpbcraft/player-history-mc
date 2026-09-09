@@ -36,6 +36,15 @@ export const eventColor = (type) => {
         );
   return `hsl(${hue}, 82%, 66%)`;
 };
+export const meterLevels = (value, maximum, limit = 20) => {
+  if (!Number.isFinite(value) || !Number.isFinite(maximum) || maximum <= 0)
+    return [];
+  const slots = Math.max(1, Math.min(limit, Math.ceil(maximum / 2)));
+  return Array.from({ length: slots }, (_, index) => {
+    const remaining = Math.max(0, Math.min(2, value - index * 2));
+    return remaining >= 2 ? "full" : remaining > 0 ? "half" : "empty";
+  });
+};
 const fallbackHead =
   "data:image/svg+xml," +
   encodeURIComponent(
@@ -181,6 +190,11 @@ export class BlueMapAdapter {
     );
   }
   hover(event) {
+    if (this.expandedGroup && !event?.target?.closest?.(".history-event-list-item")) {
+      this.tooltip.hidden = true;
+      this.hoverDot.element.hidden = true;
+      return;
+    }
     if (!event || event.buttons || event.pointerType === "touch") {
       this.tooltip.hidden = true;
       this.hoverDot.element.hidden = true;
@@ -189,7 +203,7 @@ export class BlueMapAdapter {
     this.hoverState = null;
     this.hoverDot.element.hidden = true;
     const annotation = event.target.closest?.(
-      ".history-event-detail, .history-event, .history-player",
+      ".history-event-list-item, .history-event, .history-player",
     );
     let text = annotation?.dataset.historyTooltip;
     if (annotation?.dataset.player)
@@ -272,30 +286,67 @@ export class BlueMapAdapter {
   collapseEventGroup() {
     for (const marker of this.eventMarkers.values()) {
       marker.element.hidden = false;
-      const fan = marker.element.querySelector?.(".history-event-fan");
-      if (fan) fan.hidden = true;
+      const list = marker.element.querySelector?.(".history-event-list");
+      if (list) list.hidden = true;
       marker.element.classList?.remove("expanded");
       marker.element.setAttribute?.("aria-expanded", "false");
     }
     this.expandedGroup = null;
   }
   expandEventGroup(marker) {
-    const fan = marker.element.querySelector?.(".history-event-fan");
-    if (!fan) return;
+    const list = marker.element.querySelector?.(".history-event-list");
+    if (!list) return;
     if (this.expandedGroup === marker) {
       this.collapseEventGroup();
       return;
     }
     this.collapseEventGroup();
     this.expandedGroup = marker;
+    if (this.tooltip) this.tooltip.hidden = true;
+    if (this.hoverDot?.element) this.hoverDot.element.hidden = true;
     for (const other of this.eventMarkers.values())
       other.element.hidden = other !== marker;
-    fan.hidden = false;
+    const bounds = marker.element.getBoundingClientRect?.();
+    list.classList?.toggle("align-left", Boolean(bounds && bounds.left > innerWidth / 2));
+    list.hidden = false;
     marker.element.classList.add("expanded");
     marker.element.setAttribute("aria-expanded", "true");
   }
   get mapId() {
     return this.app.mapViewer.map?.data?.id ?? this.app.mapViewer.map?.id;
+  }
+  focusPoint(point) {
+    const controls = this.app.mapViewer.controlsManager;
+    if (!controls?.position?.set || !point) return false;
+    controls.position.set(point.x / 32, point.y / 32, point.z / 32);
+    controls.updateCamera?.();
+    return true;
+  }
+  createVitals() {
+    const vitals = document.createElement("div");
+    vitals.className = "history-player-vitals";
+    vitals.hidden = true;
+    const health = document.createElement("div");
+    health.className = "history-vital-row history-health-hearts";
+    health.setAttribute("aria-label", "Health");
+    vitals.append(health);
+    return vitals;
+  }
+  renderVitals(vitals, state = {}) {
+    const healthRow = vitals?.querySelector(".history-health-hearts");
+    if (!vitals || !healthRow) return;
+    healthRow.replaceChildren();
+    const health = meterLevels(state.health, state.maxHealth);
+    for (const level of health) {
+      const icon = document.createElement("i");
+      icon.className = "heart " + level;
+      healthRow.append(icon);
+    }
+    healthRow.setAttribute(
+      "aria-label",
+      health.length ? "Health " + state.health + " of " + state.maxHealth : "Health unknown",
+    );
+    vitals.hidden = health.length === 0;
   }
   setPlayers(positions, names, players = []) {
     const keep = new Set();
@@ -320,12 +371,12 @@ export class BlueMapAdapter {
           head.onerror = null;
           head.src = fallbackHead;
         };
-        marker.element.append(head);
+        marker.element.append(this.createVitals(), head);
         marker.element.tabIndex = 0;
         this.focusTooltip(marker.element);
         this.players.add(marker);
       }
-      marker.element.dataset.historyTooltip = `${names.get(p.player) || p.player}\n${stamp(p.time)}\nPosition: ${coords(p)}`;
+      marker.element.dataset.historyTooltip = `♟ ${names.get(p.player) || p.player}\n◷ ${stamp(p.time)}\n⌖ ${coords(p)}`;
       marker.element.dataset.player = p.player;
       marker.element.dataset.time = p.time;
       marker.element.setAttribute(
@@ -340,13 +391,12 @@ export class BlueMapAdapter {
         this.players.remove(m);
     }
   }
+  setPlayerVitals(player, state = {}) {
+    const element = this.players.markers.get("p" + player)?.element;
+    this.renderVitals(element?.querySelector(".history-player-vitals"), state);
+  }
   setPlayerHealth(player, health, maxHealth) {
-    const element = this.players.markers.get(`p${player}`)?.element;
-    if (!element) return;
-    const known = Number.isFinite(health) && Number.isFinite(maxHealth) && maxHealth > 0;
-    element.classList.toggle("health-known", known);
-    if (known)
-      element.style.setProperty("--health", `${Math.max(0, Math.min(22, health / maxHealth * 22))}px`);
+    this.setPlayerVitals(player, { health, maxHealth });
   }
   clear(set) {
     for (const child of [...set.children]) {
@@ -418,36 +468,45 @@ export class BlueMapAdapter {
           const count = document.createElement("span");
           count.className = "history-event-count";
           count.textContent = String(bucket.length);
-          const fan = document.createElement("div");
-          fan.className = "history-event-fan";
-          fan.hidden = true;
-          for (let index = 0; index < bucket.length; index++) {
-            const item = bucket[index];
+          const list = document.createElement("div");
+          list.className = "history-event-list";
+          list.hidden = true;
+          for (const item of bucket) {
             const detail = document.createElement("button");
             detail.type = "button";
-            detail.className = "history-event-detail";
+            detail.className = "history-event-list-item";
             detail.style.color = eventColor(item.type);
-            detail.style.borderColor = playerColor(item.point.player);
-            const ring = Math.floor(index / 8);
-            const countInRing = Math.min(8, bucket.length - ring * 8);
-            const slot = index % 8;
-            const angle = -Math.PI / 2 + slot * Math.PI * 2 / countInRing;
-            detail.style.setProperty("--fan-angle", `${angle}rad`);
-            detail.style.setProperty("--fan-counter-angle", `${-angle}rad`);
-            detail.style.setProperty("--fan-radius", `${54 + ring * 42}px`);
+            detail.style.borderLeftColor = playerColor(item.point.player);
             const details = eventDetails(item.payload, registry);
-            detail.dataset.historyTooltip = `${names.get(item.point.player) || item.point.player} · ${item.type.toLowerCase().replaceAll("_", " ")}\n${stamp(item.point.time)}\nPosition: ${coords(item.point)}${details ? `\n${details}` : ""}`;
+            detail.dataset.historyTooltip =
+              (names.get(item.point.player) || item.point.player) +
+              " · " +
+              item.type.toLowerCase().replaceAll("_", " ") +
+              "\n" +
+              stamp(item.point.time) +
+              "\nPosition: " +
+              coords(item.point) +
+              (details ? "\n" + details : "");
             detail.setAttribute("aria-label", detail.dataset.historyTooltip);
-            detail.append(eventIcon(item.type));
+            const copy = document.createElement("span");
+            const title = document.createElement("strong");
+            title.textContent =
+              shortStamp(item.point.time) +
+              " · " +
+              item.type.toLowerCase().replaceAll("_", " ");
+            const description = document.createElement("small");
+            description.textContent = details || "Position: " + coords(item.point);
+            copy.append(title, description);
+            detail.append(eventIcon(item.type), copy);
             this.focusTooltip(detail);
             detail.onclick = (event) => {
               event.stopPropagation();
               detail.focus?.();
               detail.onfocus();
             };
-            fan.append(detail);
+            list.append(detail);
           }
-          m.element.append(svg, count, fan);
+          m.element.append(svg, count, list);
         } else m.element.append(svg);
         this.focusTooltip(m.element);
         this.events.add(m);
@@ -458,9 +517,10 @@ export class BlueMapAdapter {
         : `${names.get(e.point.player) || e.point.player} · ${e.type.toLowerCase().replaceAll("_", " ")}\n${stamp(e.point.time)}\nPosition: ${coords(e.point)}${payload ? "\n" + payload : ""}`;
       m.element.onclick = (event) => {
         event?.stopPropagation?.();
-        if (m.element.querySelector?.(".history-event-fan"))
+        if (m.element.querySelector?.(".history-event-list")) {
           this.expandEventGroup(m);
-        this.focusTooltip(m.element);
+          return;
+        }
         m.element.onfocus();
       };
       m.element.tabIndex = 0;
@@ -488,6 +548,24 @@ export class BlueMapAdapter {
   }
   layoutEvents() {
     const occupied = [];
+    const reserve = (element, protectHead = false) => {
+      const bounds = element?.getBoundingClientRect?.();
+      if (!bounds?.width || !bounds?.height) return;
+      const extra = protectHead ? 28 : 0;
+      occupied.push({
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + (bounds.height + extra) / 2,
+        width: bounds.width,
+        height: bounds.height + extra,
+      });
+    };
+    for (const marker of this.players?.markers?.values?.() || []) {
+        reserve(marker.element);
+        reserve(
+          marker.element.querySelector?.(".history-player-vitals"),
+          true,
+        );
+    }
     for (const marker of this.eventMarkers.values()) {
       const element = marker.element;
       const bounds = element.getBoundingClientRect();

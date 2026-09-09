@@ -1,15 +1,15 @@
 (async () => {
   const base = new URL("player-history/", location.href);
   const { ReplayEngine, ChunkCache, heatmapPlan, mergePoints, BREAK, CONTEXT } =
-    await import(new URL("replay-core.js?v=0.8.4", base));
+    await import(new URL("replay-core.js?v=0.8.9", base));
   const { ReplayClock, clamp, addActivityBins, visibleEvents } = await import(
-    new URL("replay-state.js?v=0.8.4", base)
+    new URL("replay-state.js?v=0.8.9", base)
   );
   const { BlueMapAdapter, playerColor, eventColor } = await import(
-    new URL("bluemap-adapter.js?v=0.8.4", base)
+    new URL("bluemap-adapter.js?v=0.8.9", base)
   );
-  const { TelemetryCache, describeState } = await import(
-    new URL("telemetry.js?v=0.8.4", base)
+  const { TelemetryCache, describeState, chatMessage } = await import(
+    new URL("telemetry.js?v=0.8.9", base)
   );
   if (customElements.get("bluemap-player-replay")) return;
   const date = (time, seconds = true) =>
@@ -51,13 +51,14 @@
             <button name="play" aria-label="Play replay">▶</button>
             <button name="latest" title="Follow live events and BlueMap player positions" aria-label="Follow live">NOW</button>
             <div class="history-speed"><button name="speed-button" type="button" aria-label="Playback speed" title="Playback speed" aria-expanded="false">⏱</button><div class="history-speed-popover history-popover history-choices" hidden>${[0.25, 0.5, 1, 2, 4, 8, 16, 32, 64].map(rate => `<button type="button" data-speed="${rate}" aria-pressed="${rate === 1}">${rate}×</button>`).join("")}<input name="speed" type="hidden" value="1"></div></div>
-            <div class="history-secondary"><div class="history-trails"><button name="trails-button" aria-label="Trail duration" title="Trails" aria-expanded="false">⌁</button><div class="history-trails-popover history-popover history-choices" hidden>${trailOptions.map(([value,label]) => `<button type="button" data-trail="${value}" aria-pressed="${value === 0}">${label}</button>`).join("")}<input name="trails" type="hidden" value="0"></div></div>
+            <div class="history-secondary"><div class="history-trails"><button name="trails-button" aria-label="Trail duration" title="Trails" aria-expanded="false">⌁</button><div class="history-trails-popover history-popover history-choices" hidden>${trailOptions.map(([value,label]) => `<button type="button" data-trail="${value}" aria-pressed="${value === 60000}">${label}</button>`).join("")}<input name="trails" type="hidden" value="60000"></div></div>
               <div class="history-player-control"><button name="players" aria-expanded="false" aria-controls="history-players" aria-label="Filter players" title="Players">♙</button>
                 <div id="history-players" class="history-popover" hidden><div class="history-popover-heading">Players<button name="all">Select all</button></div><div class="history-player-list"></div></div></div>
               <details class="history-event-control"><summary aria-label="Event filters" title="Event filters">⚙</summary><div class="history-event-options history-popover"><div class="history-event-filter-list"></div><small>Unchecked types are hidden from this viewer.</small></div></details><button name="heat" aria-pressed="false" title="Time spent in the replay range; completed recording chunks" aria-label="Heatmap">▦</button><button name="webchat" aria-label="Web chat" title="Web chat">☏</button></div>
           </div>
           <div class="history-webchat" hidden><div class="history-webchat-feed" aria-live="polite"></div><button name="chat-connect">Connect Minecraft account</button><button name="chat-logout" hidden>Log out</button><output name="chat-status"></output><form class="history-chat-form" hidden><input name="chat-message" aria-label="Chat message" maxlength="256" placeholder="Message the server…" required><button type="submit">Send</button></form></div><div class="history-chat" aria-live="polite" aria-label="Chat history for selected range"></div><div class="history-status" role="status">Live · local time</div>
-        </section>`;
+        </section>
+        <aside class="history-chat-panel" hidden aria-label="Web chat"><div class="history-chat-heading"><strong>Chat</strong><button name="chat-close" aria-label="Close chat">×</button></div><div class="history-chat-content"></div></aside>`;
       this.q = (name) => this.querySelector(`[name="${name}"]`);
       const icons = {
         players: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
@@ -66,8 +67,27 @@
         "speed-button": "M3 18a10 10 0 1 1 18 0M12 14l5-6M5 18h14",
       };
       for (const [name, path] of Object.entries(icons)) this.q(name).innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
-      this.querySelector(".history-heading").append(this.querySelector(".history-event-control"));
       const eventControl = this.querySelector(".history-event-control");
+      const heading = this.querySelector(".history-heading");
+      const headerTools = document.createElement("div");
+      headerTools.className = "history-header-tools";
+      for (const selector of [".history-trails", ".history-player-control", '[name="heat"]'])
+        headerTools.append(this.querySelector(selector));
+      headerTools.append(eventControl);
+      heading.insertBefore(headerTools, this.q("compact"));
+      const secondary = this.querySelector(".history-secondary");
+      const chatLauncher = this.q("webchat");
+      chatLauncher.classList.add("history-chat-launcher");
+      chatLauncher.setAttribute("aria-controls", "history-chat-panel");
+      chatLauncher.setAttribute("aria-expanded", "false");
+      this.append(chatLauncher);
+      const chatPanel = this.querySelector(".history-chat-panel");
+      chatPanel.id = "history-chat-panel";
+      const chatContent = this.querySelector(".history-chat-content");
+      const webchat = this.querySelector(".history-webchat");
+      webchat.hidden = false;
+      chatContent.append(this.querySelector(".history-chat"), webchat);
+      secondary.remove();
       const eventMenu = this.querySelector(".history-event-options");
       eventMenu.setAttribute("popover", "manual");
       eventControl.ontoggle = () => this.showMenu(eventMenu, eventControl.querySelector("summary"), eventControl.open);
@@ -178,11 +198,19 @@
       this.status = this.querySelector(".history-status");
       this.chatToken = localStorage.getItem("player-history-chat-token") || "";
       this.q("webchat").onclick = () => {
-        const box = this.querySelector(".history-webchat");
-        box.hidden = !box.hidden;
+        const box = this.querySelector(".history-chat-panel");
+        box.hidden = false;
+        this.q("webchat").hidden = true;
+        this.q("webchat").setAttribute("aria-expanded", "true");
+        if (this.mobileQuery.matches) {
+          if (this.opened) this.close();
+          this.q("open").hidden = true;
+        }
         clearInterval(this.chatTimer);
-        if (!box.hidden) { this.pollChat(); this.chatTimer = setInterval(() => this.pollChat(), 2000); }
+        this.pollChat();
+        this.chatTimer = setInterval(() => this.pollChat(), 2000);
       };
+      this.q("chat-close").onclick = () => this.closeChat();
       this.q("chat-connect").onclick = async () => {
         try {
           const pair = await this.chatRequest("pair");
@@ -496,7 +524,9 @@
       finally { this.chatLoading = false; }
     }
     async open() {
+      if (this.mobileQuery.matches) this.closeChat();
       this.opened = true;
+      if (this.mobileQuery.matches) this.q("webchat").hidden = true;
       this.q("open").hidden = true;
       this.q("open").setAttribute("aria-expanded", "true");
       this.querySelector("section").hidden = false;
@@ -518,8 +548,17 @@
       this.activityAbort?.abort();
       this.querySelector("section").hidden = true;
       this.q("open").hidden = false;
+      if (this.mobileQuery.matches && this.querySelector(".history-chat-panel").hidden)
+        this.q("webchat").hidden = false;
       this.q("open").setAttribute("aria-expanded", "false");
       this.q("open").focus();
+    }
+    closeChat() {
+      clearInterval(this.chatTimer);
+      this.querySelector(".history-chat-panel").hidden = true;
+      this.q("webchat").hidden = false;
+      this.q("webchat").setAttribute("aria-expanded", "false");
+      if (this.mobileQuery.matches && !this.opened) this.q("open").hidden = false;
     }
     goNow() {
       this.isLive = true;
@@ -821,6 +860,19 @@
       this.querySelectorAll("[data-trail]").forEach((button) =>
         button.setAttribute("aria-pressed", String(Number(button.dataset.trail) === this.trailMode)));
     }
+    async goToEvent(event) {
+      if (!event?.point) return;
+      this.seek(event.point.time);
+      const worldKey = this.manifest?.registry?.worlds?.find(
+        (world) => world.id === event.point.world,
+      )?.key;
+      const mapId = Object.entries(this.integration?.mapWorlds || {}).find(
+        ([, key]) => key === worldKey,
+      )?.[0];
+      if (mapId && mapId !== this.adapter?.mapId && window.bluemap?.switchMap)
+        await window.bluemap.switchMap(mapId, false);
+      this.adapter?.focusPoint(event.point);
+    }
     seek(time) {
       this.isLive = false;
       if (!this.manifest || !Number.isFinite(time)) return;
@@ -942,7 +994,7 @@
           ).then((states) => {
             if (this.healthToken !== token || this.isLive) return;
             for (const [player, state] of states)
-              this.adapter?.setPlayerHealth(player, state?.health, state?.maxHealth);
+              this.adapter?.setPlayerVitals(player, state);
           });
         }
         if (world === undefined)
@@ -1010,15 +1062,17 @@
           ],
         ),
       );
-      const timelineEvents = [...combined.values()]
+      const selectedTimelineEvents = [...combined.values()]
         .sort((a, b) => a.point.time - b.point.time)
         .filter(
           (event) =>
-            !this.disabledEvents.has(event.type) &&
             this.selection.has(event.point.player) &&
             event.point.time >= from &&
             event.point.time <= to,
         );
+      const timelineEvents = selectedTimelineEvents.filter(
+        (event) => !this.disabledEvents.has(event.type),
+      );
       const events = visibleEvents(
         timelineEvents,
         {
@@ -1045,13 +1099,15 @@
           this.manifest.registry,
         );
       }
-      const timelineEventKey = JSON.stringify([timelineEvents, from, to, [...this.names]]);
+      const chatEvents = selectedTimelineEvents
+        .filter((event) => ["CHAT", "JOIN", "QUIT", "DEATH"].includes(event.type))
+        .slice(-1000);
+      const timelineEventKey = JSON.stringify([chatEvents, from, to, [...this.names]]);
       if (this.timelineEventKey !== timelineEventKey) {
         this.timelineEventKey = timelineEventKey;
         const chat = this.querySelector(".history-chat");
         const follow = this.chatPinned;
         chat.replaceChildren();
-        const chatEvents = timelineEvents.filter((event) => event.type === "CHAT").slice(-1000);
         for (const event of chatEvents) {
           const row = document.createElement("div");
           let payload;
@@ -1068,30 +1124,55 @@
           time.className = "history-chat-time";
           time.title = "Go to this message";
           time.textContent = date(event.point.time);
-          time.onclick = () => this.seek(event.point.time);
+          time.onclick = (click) => { click.stopPropagation(); this.goToEvent(event); };
+          const head = document.createElement("img");
+          head.className = "history-chat-head";
+          head.alt = "";
+          const player = this.manifest.registry.players.find(
+            (player) => player.id === event.point.player,
+          );
+          const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
+          if (player?.uuid && mapRoot) head.src = `${mapRoot}/assets/playerheads/${player.uuid}.png`;
+          else head.hidden = true;
+          head.onerror = () => { head.hidden = true; };
           const message = document.createElement("span");
-          message.textContent = `${this.names.get(event.point.player) || "Player"}: ${payload.message || ""}`;
-          row.append(time, message);
+          const name = this.names.get(event.point.player) || "Player";
+          if (event.type !== "CHAT")
+            row.classList.add("history-chat-system", "history-chat-" + event.type.toLowerCase());
+          message.textContent = chatMessage(event.type, name, payload);
+          row.append(time, head, message);
+          row.tabIndex = 0;
+          row.setAttribute("role", "button");
+          row.title = "Show this message on the map";
+          row.onclick = () => this.goToEvent(event);
+          row.onkeydown = (key) => {
+            if (key.key === "Enter" || key.key === " ") {
+              key.preventDefault();
+              this.goToEvent(event);
+            }
+          };
           chat.append(row);
         }
         if (!chatEvents.length) {
           const empty = document.createElement("div");
           empty.className = "history-chat-empty";
-          empty.textContent = "No chat messages in this range";
+          empty.textContent = "No chat or player status messages in this range";
           chat.append(empty);
         }
         if (follow) requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; });
         const ticks = this.querySelector(".history-events");
         ticks.replaceChildren();
-        for (const event of chatEvents) {
+        for (const event of chatEvents.filter((event) => ["CHAT", "DEATH"].includes(event.type))) {
           const button = document.createElement("button");
-          button.className = "history-chat-tick";
+          button.className = event.type === "DEATH"
+            ? "history-timeline-event history-death-tick"
+            : "history-timeline-event history-chat-tick";
           button.title = `${date(event.point.time)} · ${event.type.toLowerCase().replaceAll("_", " ")} · ${this.names.get(event.point.player)}`;
           button.setAttribute("aria-label", button.title);
           button.style.color = eventColor(event.type);
           button.style.left = `${((event.point.time - from) / Math.max(1, to - from)) * 100}%`;
           button.onclick = () => {
-            this.seek(event.point.time);
+            this.goToEvent(event);
             this.adapter.tooltip.textContent = button.title;
             const bounds = button.getBoundingClientRect();
             this.adapter.tooltip.style.left =

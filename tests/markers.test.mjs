@@ -4,6 +4,7 @@ import {
   BlueMapAdapter,
   playerColor,
   eventColor,
+  meterLevels,
 } from "../bluemap-addon/src/bluemap-adapter.js";
 class Element {
   constructor() {
@@ -16,6 +17,18 @@ class Element {
   }
   append(...children) {
     this.children.push(...children);
+  }
+  replaceChildren(...children) {
+    this.children = children;
+  }
+  querySelector(selector) {
+    const className = selector.startsWith(".") ? selector.slice(1) : null;
+    for (const child of this.children) {
+      if (className && String(child.className || "").split(" ").includes(className)) return child;
+      const nested = child.querySelector?.(selector);
+      if (nested) return nested;
+    }
+    return null;
   }
   setAttribute(name, value) {
     this.attributes[name] = value;
@@ -78,6 +91,12 @@ class SetMarker extends Marker {
     this.markers.delete(m.id);
   }
 }
+test("Minecraft-style hearts use full, half, and empty icons", () => {
+  assert.deepEqual(meterLevels(17, 20), [
+    "full", "full", "full", "full", "full", "full", "full", "full", "half", "empty",
+  ]);
+  assert.deepEqual(meterLevels(undefined, 20), []);
+});
 test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
   const keys = [
     "document",
@@ -126,6 +145,16 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       },
     };
     const adapter = new BlueMapAdapter(app, api);
+    app.mapViewer.controlsManager = {
+      position: new Vector(),
+      updateCamera() { this.updated = true; },
+    };
+    assert.equal(adapter.focusPoint({ x: 320, y: 2048, z: -640 }), true);
+    assert.deepEqual(
+      { x: app.mapViewer.controlsManager.position.x, y: app.mapViewer.controlsManager.position.y, z: app.mapViewer.controlsManager.position.z },
+      { x: 10, y: 64, z: -20 },
+    );
+    assert.equal(app.mapViewer.controlsManager.updated, true);
     const names = new Map([[1, "Test player"]]);
     const point = {
       player: 1,
@@ -139,13 +168,16 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
     const head = adapter.players.children[0];
     assert.equal(head.element.textContent, "");
-    assert.equal(
-      head.element.children[0].src,
-      "maps/world/assets/playerheads/abc.png",
-    );
-    head.element.children[0].onerror();
-    assert.match(head.element.children[0].src, /^data:image\/svg\+xml,/);
-    assert.equal(head.element.children[0].onerror, null);
+    const image = head.element.children.find((child) => child.alt === "Player skin head");
+    assert.equal(image.src, "maps/world/assets/playerheads/abc.png");
+    image.onerror();
+    assert.match(image.src, /^data:image\/svg\+xml,/);
+    assert.equal(image.onerror, null);
+    adapter.setPlayerVitals(1, { health: 17, maxHealth: 20 });
+    const vitals = head.element.querySelector(".history-player-vitals");
+    assert.equal(vitals.hidden, false);
+    assert.equal(vitals.querySelector(".history-health-hearts").children.length, 10);
+    assert.equal(vitals.children.length, 1, "historical marker renders hearts only");
     head.element.onfocus();
     assert.match(adapter.tooltip.textContent, /Test player/);
     head.element.onblur();
