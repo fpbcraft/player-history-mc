@@ -225,7 +225,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     adapter.layoutEvents();
     assert.equal(event.offsetX, 0, "event marker remains anchored to its trail coordinate");
     assert.equal(event.offsetY, 0, "event marker remains anchored to its trail coordinate");
-    assert.equal(event.element.style.translate, "0 0");
+    assert.equal(event.element.style.translate, "0px 0px");
     adapter.setEvents(
       [
         {

@@ -6,6 +6,7 @@ import type {
   Mesh,
   Raycaster,
 } from "./bluemap-types.js";
+import { layoutEventMarkers } from "./event-layout.js";
 import {
   createEventIcon,
   eventColor,
@@ -483,6 +484,8 @@ export class BlueMapAdapter {
         m.element.tabIndex = 0;
         m.element.setAttribute("role", "button");
       }
+      if (e.type === "CHAT") m.element.dataset.historyTime = String(e.point.time);
+      else delete m.element.dataset.historyTime;
       if (bucket.length > 1) {
         m.element.setAttribute("aria-expanded", "false");
         m.element.setAttribute("aria-label", `${bucket.length} events; click to expand`);
@@ -508,13 +511,7 @@ export class BlueMapAdapter {
         marker.element.hidden = marker !== this.expandedGroup;
   }
   layoutEvents(): void {
-    for (const marker of this.eventMarkers.values()) {
-      marker.offsetX = 0;
-      marker.offsetY = 0;
-      marker.element.style.translate = "0 0";
-      marker.element.style.setProperty?.("--connector-start", "0px");
-      marker.element.style.setProperty?.("--connector-length", "0px");
-    }
+    layoutEventMarkers(this.eventMarkers.values());
   }
   setHeatmap(
     rows: [number, number, number, number, number][],

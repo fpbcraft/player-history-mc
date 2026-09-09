@@ -1,5 +1,55 @@
 "use strict";
 (() => {
+  // src/event-layout.ts
+  var GAP = 8;
+  var horizontallyOverlaps = (left, right) => Math.abs(left.x - right.x) < (left.width + right.width) / 2 + GAP;
+  var applyOffset = (marker, x2, y2, bounds) => {
+    marker.offsetX = x2;
+    marker.offsetY = y2;
+    marker.element.style.translate = `${x2}px ${y2}px`;
+    const distance = Math.hypot(x2, y2);
+    const horizontal = distance ? Math.abs(x2 / distance) : 0;
+    const vertical = distance ? Math.abs(y2 / distance) : 0;
+    const edge = Math.min(
+      horizontal ? bounds.width / 2 / horizontal : Infinity,
+      vertical ? bounds.height / 2 / vertical : Infinity
+    );
+    marker.element.style.setProperty?.("--connector-start", `${Math.min(edge, distance)}px`);
+    marker.element.style.setProperty?.("--connector-length", `${Math.max(0, distance - edge)}px`);
+    marker.element.style.setProperty?.("--connector-angle", `${Math.atan2(-y2, -x2)}rad`);
+  };
+  var layoutEventMarkers = (markers) => {
+    const bubbles = [];
+    for (const marker of markers) {
+      const bounds = marker.element.getBoundingClientRect();
+      const originX = bounds.left + bounds.width / 2 - (marker.offsetX ?? 0);
+      const originY = bounds.top + bounds.height / 2 - (marker.offsetY ?? 0);
+      applyOffset(marker, 0, 0, bounds);
+      if (String(marker.element.className).includes("history-chat-bubble") && bounds.width && bounds.height)
+        bubbles.push({
+          marker,
+          bounds,
+          originX,
+          originY,
+          time: Number(marker.element.dataset.historyTime ?? 0)
+        });
+    }
+    bubbles.sort((left, right) => left.time - right.time);
+    const occupied = [];
+    for (const { marker, bounds, originX, originY } of bubbles) {
+      const candidate = { x: originX, y: originY, width: bounds.width, height: bounds.height };
+      for (let pass = 0; pass <= occupied.length; pass++) {
+        const collision = occupied.find(
+          (previous) => horizontallyOverlaps(previous, candidate) && candidate.y - candidate.height / 2 < previous.y + previous.height / 2 + GAP && candidate.y + candidate.height / 2 > previous.y - previous.height / 2 - GAP
+        );
+        if (!collision) break;
+        candidate.y = collision.y + (collision.height + candidate.height) / 2 + GAP;
+      }
+      occupied.push(candidate);
+      applyOffset(marker, 0, candidate.y - originY, bounds);
+    }
+  };
+
   // src/event-presentation.ts
   var EVENT_TYPES = [
     "CHAT",
@@ -945,6 +995,8 @@ ${payload}` : ""}`;
           m2.element.tabIndex = 0;
           m2.element.setAttribute("role", "button");
         }
+        if (e2.type === "CHAT") m2.element.dataset.historyTime = String(e2.point.time);
+        else delete m2.element.dataset.historyTime;
         if (bucket.length > 1) {
           m2.element.setAttribute("aria-expanded", "false");
           m2.element.setAttribute("aria-label", `${bucket.length} events; click to expand`);
@@ -970,13 +1022,7 @@ ${payload}` : ""}`;
           marker.element.hidden = marker !== this.expandedGroup;
     }
     layoutEvents() {
-      for (const marker of this.eventMarkers.values()) {
-        marker.offsetX = 0;
-        marker.offsetY = 0;
-        marker.element.style.translate = "0 0";
-        marker.element.style.setProperty?.("--connector-start", "0px");
-        marker.element.style.setProperty?.("--connector-length", "0px");
-      }
+      layoutEventMarkers(this.eventMarkers.values());
     }
     setHeatmap(rows, size, opacity) {
       this.clearHeatmap();
