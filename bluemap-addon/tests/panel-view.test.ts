@@ -34,6 +34,7 @@ describe("replay panel view", () => {
     expect(rangeLabels).toEqual(expect.arrayContaining(["Last 12 hours", "Today", "Yesterday"]));
     expect(root.querySelector(".history-shuttle")).toBeNull();
     expect(root.querySelector(".history-window-selector")).toBeNull();
+    expect(root.querySelector('[name="compact"]')).toBeNull();
     const eventOverlay = root.querySelector(".history-events");
     expect(eventOverlay?.tagName).toBe("DIV");
     expect(eventOverlay?.closest("section")).toBe(root.querySelector("#history-transport"));

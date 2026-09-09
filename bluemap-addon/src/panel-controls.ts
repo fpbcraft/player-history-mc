@@ -7,7 +7,6 @@ export interface ReplayControls {
   "chat-message": HTMLInputElement;
   "chat-status": HTMLOutputElement;
   close: HTMLButtonElement;
-  compact: HTMLButtonElement;
   current: HTMLOutputElement;
   "date-from": HTMLInputElement;
   "date-to": HTMLInputElement;

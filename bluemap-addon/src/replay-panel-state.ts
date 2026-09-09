@@ -1,7 +1,6 @@
 export interface ReplayPanelState {
   panel: "closed" | "open";
   mode: "historical" | "live";
-  compact: boolean;
   scrubbing: boolean;
   heatmap: boolean;
   chatPinned: boolean;
@@ -14,7 +13,6 @@ export interface ReplayPanelState {
 export const createReplayPanelState = (): ReplayPanelState => ({
   panel: "closed",
   mode: "live",
-  compact: false,
   scrubbing: false,
   heatmap: false,
   chatPinned: true,

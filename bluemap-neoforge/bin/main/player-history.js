@@ -2171,7 +2171,6 @@ ${payload}` : ""}`;
   var createReplayPanelState = () => ({
     panel: "closed",
     mode: "live",
-    compact: false,
     scrubbing: false,
     heatmap: false,
     chatPinned: true,
@@ -2474,7 +2473,6 @@ ${payload}` : ""}`;
     /* @__PURE__ */ u2(RangeControl, {}),
     /* @__PURE__ */ u2("output", { name: "current", children: "\u2014" }),
     /* @__PURE__ */ u2(HeaderTools, {}),
-    /* @__PURE__ */ u2("button", { type: "button", name: "compact", "aria-label": "Expand controls", "aria-expanded": "false", children: "\u2303" }),
     /* @__PURE__ */ u2("button", { type: "button", name: "close", "aria-label": "Close history", children: "\xD7" })
   ] }) });
 
@@ -2637,12 +2635,6 @@ ${payload}` : ""}`;
     filterRevision = 0;
     healthToken = {};
     trailMode = 6e4;
-    get compact() {
-      return this.panelState.compact;
-    }
-    set compact(value) {
-      this.panelState.compact = value;
-    }
     get opened() {
       return this.panelState.panel === "open";
     }
@@ -2746,35 +2738,6 @@ ${payload}` : ""}`;
       this.liveEvents = [];
       this.livePoints = [];
       this.mobileQuery = matchMedia("(max-width: 600px)");
-      this.compact = this.mobileQuery.matches;
-      this.classList.toggle("compact", this.compact);
-      this.q("compact").onclick = () => {
-        this.closeChoices();
-        this.compact = !this.compact;
-        this.classList.toggle("compact", this.compact);
-        this.q("compact").setAttribute("aria-expanded", String(!this.compact));
-        this.q("compact").setAttribute(
-          "aria-label",
-          this.compact ? "Expand controls" : "Collapse controls"
-        );
-        this.q("compact").textContent = this.compact ? "\u2303" : "\u2304";
-        this.sync();
-      };
-      this.mobileQuery.addEventListener?.(
-        "change",
-        (event) => {
-          this.compact = event.matches;
-          this.classList.toggle("compact", this.compact);
-          this.q("compact").setAttribute("aria-expanded", String(!this.compact));
-          this.q("compact").setAttribute(
-            "aria-label",
-            this.compact ? "Expand controls" : "Collapse controls"
-          );
-          this.q("compact").textContent = this.compact ? "\u2303" : "\u2304";
-          this.sync();
-        },
-        { signal: this.lifecycle.signal }
-      );
       this.engine = new ReplayEngine();
       this.names = /* @__PURE__ */ new Map();
       this.selection = /* @__PURE__ */ new Set();

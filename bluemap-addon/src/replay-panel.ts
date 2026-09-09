@@ -91,14 +91,6 @@ export class ReplayPanel extends HTMLElement {
   private healthToken: object = {};
   private trailMode = 60_000;
 
-  private get compact(): boolean {
-    return this.panelState.compact;
-  }
-
-  private set compact(value: boolean) {
-    this.panelState.compact = value;
-  }
-
   private get opened(): boolean {
     return this.panelState.panel === "open";
   }
@@ -228,35 +220,6 @@ export class ReplayPanel extends HTMLElement {
     this.liveEvents = [];
     this.livePoints = [];
     this.mobileQuery = matchMedia("(max-width: 600px)");
-    this.compact = this.mobileQuery.matches;
-    this.classList.toggle("compact", this.compact);
-    this.q("compact").onclick = () => {
-      this.closeChoices();
-      this.compact = !this.compact;
-      this.classList.toggle("compact", this.compact);
-      this.q("compact").setAttribute("aria-expanded", String(!this.compact));
-      this.q("compact").setAttribute(
-        "aria-label",
-        this.compact ? "Expand controls" : "Collapse controls",
-      );
-      this.q("compact").textContent = this.compact ? "⌃" : "⌄";
-      this.sync();
-    };
-    this.mobileQuery.addEventListener?.(
-      "change",
-      (event) => {
-        this.compact = event.matches;
-        this.classList.toggle("compact", this.compact);
-        this.q("compact").setAttribute("aria-expanded", String(!this.compact));
-        this.q("compact").setAttribute(
-          "aria-label",
-          this.compact ? "Expand controls" : "Collapse controls",
-        );
-        this.q("compact").textContent = this.compact ? "⌃" : "⌄";
-        this.sync();
-      },
-      { signal: this.lifecycle.signal },
-    );
     this.engine = new ReplayEngine();
     this.names = new Map();
     this.selection = new Set();

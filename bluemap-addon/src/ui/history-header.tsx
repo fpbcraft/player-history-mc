@@ -140,9 +140,6 @@ export const HistoryHeader = () => (
       <RangeControl />
       <output name="current">—</output>
       <HeaderTools />
-      <button type="button" name="compact" aria-label="Expand controls" aria-expanded="false">
-        ⌃
-      </button>
       <button type="button" name="close" aria-label="Close history">
         ×
       </button>
