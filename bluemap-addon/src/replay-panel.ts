@@ -691,8 +691,14 @@ export class ReplayPanel extends HTMLElement {
       }
       if (!this.cache || this.cache.duration !== m.chunkDurationMs) {
         this.cache?.clear();
-        this.cache = new ChunkCache(new URL("data", BASE_URL).href, m.chunkDurationMs);
+        this.cache = new ChunkCache(
+          new URL("data", BASE_URL).href,
+          m.chunkDurationMs,
+          undefined,
+          m.chunkRanges,
+        );
       }
+      this.cache.setAvailableRanges(m.chunkRanges);
       for (const player of m.registry.players) {
         if (!this.hasSavedSelection && !this.names.has(player.id)) this.selection.add(player.id);
       }

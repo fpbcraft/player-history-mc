@@ -106,6 +106,28 @@ export const parseManifest = (value: unknown): HistoryManifest => {
     capabilities: parseCapabilities(value.capabilities),
     registry: parseRegistry(value.registry),
   };
+  if (value.chunkRanges !== undefined) {
+    if (!Array.isArray(value.chunkRanges) || value.chunkRanges.length > 100_000)
+      throw new Error("Invalid history chunk index");
+    result.chunkRanges = value.chunkRanges.map((range): [number, number] => {
+      if (
+        !Array.isArray(range) ||
+        range.length !== 2 ||
+        !range.every(Number.isFinite) ||
+        range[0] >= range[1] ||
+        range[0] % chunkDurationMs !== 0 ||
+        range[1] % chunkDurationMs !== 0
+      )
+        throw new Error("Invalid history chunk range");
+      return [range[0], range[1]];
+    });
+    for (let index = 1; index < result.chunkRanges.length; index++) {
+      const previous = result.chunkRanges[index - 1];
+      const current = result.chunkRanges[index];
+      if (!previous || !current || current[0] < previous[1])
+        throw new Error("History chunk ranges are not sorted");
+    }
+  }
   if (Number.isFinite(value.activityBucketMs))
     result.activityBucketMs = value.activityBucketMs as number;
   if (typeof value.activityReady === "boolean") result.activityReady = value.activityReady;

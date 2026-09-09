@@ -282,6 +282,21 @@
       capabilities: parseCapabilities(value.capabilities),
       registry: parseRegistry(value.registry)
     };
+    if (value.chunkRanges !== void 0) {
+      if (!Array.isArray(value.chunkRanges) || value.chunkRanges.length > 1e5)
+        throw new Error("Invalid history chunk index");
+      result.chunkRanges = value.chunkRanges.map((range) => {
+        if (!Array.isArray(range) || range.length !== 2 || !range.every(Number.isFinite) || range[0] >= range[1] || range[0] % chunkDurationMs !== 0 || range[1] % chunkDurationMs !== 0)
+          throw new Error("Invalid history chunk range");
+        return [range[0], range[1]];
+      });
+      for (let index = 1; index < result.chunkRanges.length; index++) {
+        const previous = result.chunkRanges[index - 1];
+        const current = result.chunkRanges[index];
+        if (!previous || !current || current[0] < previous[1])
+          throw new Error("History chunk ranges are not sorted");
+      }
+    }
     if (Number.isFinite(value.activityBucketMs))
       result.activityBucketMs = value.activityBucketMs;
     if (typeof value.activityReady === "boolean") result.activityReady = value.activityReady;
@@ -1288,10 +1303,11 @@ ${payload}` : ""}`;
     }
   };
   var ChunkCache = class {
-    constructor(base, duration, fetcher = (...args) => fetch(...args)) {
+    constructor(base, duration, fetcher = (...args) => fetch(...args), availableRanges) {
       this.base = base;
       this.duration = duration;
       this.fetcher = fetcher;
+      this.availableRanges = availableRanges;
     }
     base;
     duration;
@@ -1299,9 +1315,39 @@ ${payload}` : ""}`;
     fetcher;
     generation = 0;
     controller;
+    availableRanges;
+    setAvailableRanges(ranges) {
+      this.availableRanges = ranges;
+    }
+    isPublished(start) {
+      if (!this.availableRanges) return true;
+      let low = 0;
+      let high = this.availableRanges.length;
+      while (low < high) {
+        const middle = low + high >>> 1;
+        const range = this.availableRanges[middle];
+        if (!range || start < range[0]) high = middle;
+        else if (start >= range[1]) low = middle + 1;
+        else return true;
+      }
+      return false;
+    }
+    remember(start, chunk) {
+      this.cache.set(start, chunk);
+      while (this.cache.size > 3) {
+        const oldest = this.cache.keys().next().value;
+        if (oldest === void 0) break;
+        this.cache.delete(oldest);
+      }
+      return chunk;
+    }
     async read(start, signal) {
       const cached = this.cache.get(start);
       if (cached) return cached;
+      if (!this.isPublished(start)) {
+        const gap = parseChunk({ points: [], events: [] });
+        return this.remember(start, gap);
+      }
       const response = await this.fetcher(`${this.base}/chunks/${start}.json`, {
         cache: "no-store",
         ...signal ? { signal } : {}
@@ -1313,13 +1359,7 @@ ${payload}` : ""}`;
       if (text.length > 64 * 1024 * 1024) throw new Error("Chunk exceeds browser size limit");
       const chunk = parseChunk(JSON.parse(text));
       if (signal?.aborted) throw new DOMException("Obsolete read", "AbortError");
-      this.cache.set(start, chunk);
-      while (this.cache.size > 3) {
-        const oldest = this.cache.keys().next().value;
-        if (oldest === void 0) break;
-        this.cache.delete(oldest);
-      }
-      return chunk;
+      return this.remember(start, chunk);
     }
     async window(time) {
       this.controller?.abort();
@@ -3246,8 +3286,14 @@ ${payload}` : ""}`;
         }
         if (!this.cache || this.cache.duration !== m2.chunkDurationMs) {
           this.cache?.clear();
-          this.cache = new ChunkCache(new URL("data", BASE_URL).href, m2.chunkDurationMs);
+          this.cache = new ChunkCache(
+            new URL("data", BASE_URL).href,
+            m2.chunkDurationMs,
+            void 0,
+            m2.chunkRanges
+          );
         }
+        this.cache.setAvailableRanges(m2.chunkRanges);
         for (const player of m2.registry.players) {
           if (!this.hasSavedSelection && !this.names.has(player.id)) this.selection.add(player.id);
         }

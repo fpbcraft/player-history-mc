@@ -39,3 +39,39 @@ test("live parser validates complete points and registry entries", () => {
     /Invalid player/,
   );
 });
+
+test("manifest validates the optional published chunk index", () => {
+  const manifest = {
+    protocolVersion: 2,
+    earliestTimestamp: 100,
+    latestTimestamp: 500,
+    chunkDurationMs: 100,
+    capabilities: {},
+    registry,
+  };
+  assert.deepEqual(
+    parseManifest({
+      ...manifest,
+      chunkRanges: [
+        [100, 300],
+        [400, 500],
+      ],
+    }).chunkRanges,
+    [
+      [100, 300],
+      [400, 500],
+    ],
+  );
+  assert.throws(
+    () =>
+      parseManifest({
+        ...manifest,
+        chunkRanges: [
+          [100, 300],
+          [200, 400],
+        ],
+      }),
+    /not sorted/,
+  );
+  assert.throws(() => parseManifest({ ...manifest, chunkRanges: [[150, 300]] }), /chunk range/);
+});

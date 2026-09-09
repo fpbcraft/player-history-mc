@@ -54,6 +54,22 @@ test("cache stays bounded and missing chunks are gaps", async () => {
   for (let i = 0; i < 10; i++) await cache.window(i * 300000);
   assert.equal(cache.cache.size, 3);
 });
+test("published chunk ranges prevent network probes for known gaps", async () => {
+  let requests = 0;
+  const cache = new ChunkCache(
+    "/data",
+    100,
+    async () => {
+      requests++;
+      return { ok: true, text: async () => JSON.stringify({ points: [], events: [] }) };
+    },
+    [[100, 200]],
+  );
+  await cache.read(0);
+  await cache.read(100);
+  await cache.read(200);
+  assert.equal(requests, 1);
+});
 test("aggregate plan uses daily data and only edge fine data", () => {
   const plan = heatmapPlan(0, 90 * 86400000, 300000);
   assert.equal(plan.length, 90);

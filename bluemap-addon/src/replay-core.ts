@@ -102,18 +102,53 @@ export class ChunkCache {
   private readonly fetcher: Fetcher;
   private generation = 0;
   private controller?: AbortController;
+  private availableRanges: readonly [number, number][] | undefined;
 
   constructor(
     readonly base: string,
     readonly duration: number,
     fetcher: Fetcher = (...args) => fetch(...args),
+    availableRanges?: readonly [number, number][],
   ) {
     this.fetcher = fetcher;
+    this.availableRanges = availableRanges;
+  }
+
+  setAvailableRanges(ranges?: readonly [number, number][]): void {
+    this.availableRanges = ranges;
+  }
+
+  private isPublished(start: number): boolean {
+    if (!this.availableRanges) return true;
+    let low = 0;
+    let high = this.availableRanges.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      const range = this.availableRanges[middle];
+      if (!range || start < range[0]) high = middle;
+      else if (start >= range[1]) low = middle + 1;
+      else return true;
+    }
+    return false;
+  }
+
+  private remember(start: number, chunk: HistoryChunk): HistoryChunk {
+    this.cache.set(start, chunk);
+    while (this.cache.size > 3) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
+    return chunk;
   }
 
   async read(start: number, signal?: AbortSignal): Promise<HistoryChunk> {
     const cached = this.cache.get(start);
     if (cached) return cached;
+    if (!this.isPublished(start)) {
+      const gap = parseChunk({ points: [], events: [] });
+      return this.remember(start, gap);
+    }
     const response = await this.fetcher(`${this.base}/chunks/${start}.json`, {
       cache: "no-store",
       ...(signal ? { signal } : {}),
@@ -130,13 +165,7 @@ export class ChunkCache {
     if (text.length > 64 * 1024 * 1024) throw new Error("Chunk exceeds browser size limit");
     const chunk = parseChunk(JSON.parse(text) as unknown);
     if (signal?.aborted) throw new DOMException("Obsolete read", "AbortError");
-    this.cache.set(start, chunk);
-    while (this.cache.size > 3) {
-      const oldest = this.cache.keys().next().value;
-      if (oldest === undefined) break;
-      this.cache.delete(oldest);
-    }
-    return chunk;
+    return this.remember(start, chunk);
   }
 
   async window(time: number): Promise<HistoryChunk> {

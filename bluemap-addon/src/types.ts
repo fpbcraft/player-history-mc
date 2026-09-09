@@ -57,6 +57,7 @@ export interface HistoryManifest {
   earliestTimestamp: number;
   latestTimestamp: number;
   chunkDurationMs: number;
+  chunkRanges?: [number, number][];
   cellSize: number;
   activityBucketMs?: number;
   activityReady?: boolean;
