@@ -1,0 +1,58 @@
+export const RANGE_OPTIONS = [
+  ["0.041666666666666664", "Last hour"],
+  ["0.125", "Last 3 hours"],
+  ["0.25", "Last 6 hours"],
+  ["1", "Last 24 hours"],
+  ["2", "Last 48 hours"],
+  ["7", "Last week"],
+  ["30", "Last 30 days"],
+  ["all", "All history"],
+  ["custom", "Last N days…"],
+  ["dates", "Custom dates…"],
+] as const;
+
+export const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64] as const;
+
+export const TRAIL_OPTIONS = [
+  [0, "Off"],
+  [30_000, "30 seconds"],
+  [60_000, "1 minute"],
+  [300_000, "5 minutes"],
+  [900_000, "15 minutes"],
+  [3_600_000, "1 hour"],
+  [21_600_000, "6 hours"],
+  [Infinity, "Full range"],
+] as const;
+
+export const DEFAULT_DISABLED_EVENTS = [
+  "ITEM_PICKUP",
+  "ITEM_DROP",
+  "BLOCK_PLACE",
+  "BLOCK_BREAK",
+  "CONTAINER_OPEN",
+  "TELEPORT",
+] as const;
+
+export const KNOWN_EVENT_TYPES = [
+  "CHAT",
+  "JOIN",
+  "QUIT",
+  "RESPAWN",
+  "DEATH",
+  "TELEPORT",
+  "DIMENSION_CHANGE",
+  "BLOCK_BREAK",
+  "BLOCK_PLACE",
+  "CONTAINER_OPEN",
+  "DAMAGE_TAKEN",
+  "DAMAGE_DEALT",
+  "MOB_KILL",
+  "PLAYER_KILL",
+  "ADVANCEMENT",
+  "CRAFT",
+  "SMELT",
+  "ENCHANT",
+  "TRADE",
+  "ITEM_PICKUP",
+  "ITEM_DROP",
+] as const;

@@ -24,5 +24,8 @@
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
   },
-  "version": "0.8.13"
+  "version": "0.8.13",
+  "dependencies": {
+    "preact": "^10.29.8"
+  }
 }

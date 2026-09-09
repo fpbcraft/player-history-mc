@@ -1,7 +1,12 @@
 import { BlueMapAdapter, eventColor, playerColor } from "./bluemap-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
-import { initializePanelIcons, renderPanelTemplate, TRAIL_OPTIONS } from "./panel-template.js";
+import {
+  DEFAULT_DISABLED_EVENTS,
+  KNOWN_EVENT_TYPES,
+  SPEED_OPTIONS,
+  TRAIL_OPTIONS,
+} from "./panel-options.js";
 import { preferences } from "./preferences.js";
 import {
   BREAK,
@@ -27,6 +32,7 @@ import type {
   IntegrationMapping,
   JsonObject,
 } from "./types.js";
+import { mountReplayPanelView } from "./ui/replay-panel-view.js";
 
 declare global {
   interface Window {
@@ -117,7 +123,7 @@ export class ReplayPanel extends HTMLElement {
   private releaseShuttle: () => void = () => {};
 
   q<T extends HTMLElement = NamedControl>(name: string): T {
-    return this.require<T>(`[name="${name}"]`);
+    return this.require<T>(`[name="${name}"], [data-control="${name}"]`);
   }
 
   private require<T extends Element = HTMLElement>(selector: string): T {
@@ -127,29 +133,8 @@ export class ReplayPanel extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.innerHTML = renderPanelTemplate();
-    initializePanelIcons(this);
+    mountReplayPanelView(this);
     const eventControl = this.require<HTMLDetailsElement>(".history-event-control");
-    const heading = this.require<HTMLElement>(".history-heading");
-    const headerTools = document.createElement("div");
-    headerTools.className = "history-header-tools";
-    for (const selector of [".history-trails", ".history-player-control", '[name="heat"]'])
-      headerTools.append(this.require<HTMLElement>(selector));
-    headerTools.append(eventControl);
-    heading.insertBefore(headerTools, this.q("compact"));
-    const secondary = this.require<HTMLElement>(".history-secondary");
-    const chatLauncher = this.q("webchat");
-    chatLauncher.classList.add("history-chat-launcher");
-    chatLauncher.setAttribute("aria-controls", "history-chat-panel");
-    chatLauncher.setAttribute("aria-expanded", "false");
-    this.append(chatLauncher);
-    const chatPanel = this.require<HTMLElement>(".history-chat-panel");
-    chatPanel.id = "history-chat-panel";
-    const chatContent = this.require<HTMLElement>(".history-chat-content");
-    const webchat = this.require<HTMLElement>(".history-webchat");
-    webchat.hidden = false;
-    chatContent.append(this.require<HTMLElement>(".history-chat"), webchat);
-    secondary.remove();
     const eventMenu = this.require<HTMLElement>(".history-event-options");
     eventMenu.setAttribute("popover", "manual");
     eventControl.ontoggle = () =>
@@ -176,7 +161,7 @@ export class ReplayPanel extends HTMLElement {
         ? Infinity
         : Number(initialRange === "custom" ? this.q("days").value : initialRange) * 86400000;
     const savedSpeed = preferences.speed();
-    if (savedSpeed !== null && [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64].includes(savedSpeed))
+    if (savedSpeed !== null && SPEED_OPTIONS.includes(savedSpeed as (typeof SPEED_OPTIONS)[number]))
       this.clock.playbackRate = savedSpeed;
     this.isLive = true;
     this.liveEvents = [];
@@ -218,42 +203,13 @@ export class ReplayPanel extends HTMLElement {
       }
     } catch {}
     this.events = [];
-    this.disabledEvents = new Set([
-      "ITEM_PICKUP",
-      "ITEM_DROP",
-      "BLOCK_PLACE",
-      "BLOCK_BREAK",
-      "CONTAINER_OPEN",
-      "TELEPORT",
-    ]);
+    this.disabledEvents = new Set(DEFAULT_DISABLED_EVENTS);
     try {
       const saved = preferences.hiddenEvents();
       if (Array.isArray(saved))
         this.disabledEvents = new Set(saved.filter((type) => typeof type === "string"));
     } catch {}
-    this.eventTypes = new Set([
-      "CHAT",
-      "JOIN",
-      "QUIT",
-      "RESPAWN",
-      "DEATH",
-      "TELEPORT",
-      "DIMENSION_CHANGE",
-      "BLOCK_BREAK",
-      "BLOCK_PLACE",
-      "CONTAINER_OPEN",
-      "DAMAGE_TAKEN",
-      "DAMAGE_DEALT",
-      "MOB_KILL",
-      "PLAYER_KILL",
-      "ADVANCEMENT",
-      "CRAFT",
-      "SMELT",
-      "ENCHANT",
-      "TRADE",
-      "ITEM_PICKUP",
-      "ITEM_DROP",
-    ]);
+    this.eventTypes = new Set(KNOWN_EVENT_TYPES);
     this.renderEventFilters();
     const savedTrail = String(preferences.trails());
     this.trailMode = savedTrail === "Infinity" ? Infinity : Number(savedTrail ?? 60000);

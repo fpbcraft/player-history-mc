@@ -1,8 +1,8 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import browserSyncPackage from "browser-sync";
-import { scriptOutput, styleOutput } from "./frontend-build.mjs";
 import { playerHistoryAsset } from "./dev-options.mjs";
+import { scriptOutput, styleOutput } from "./frontend-build.mjs";
 
 const contentTypes = {
   js: "text/javascript; charset=utf-8",

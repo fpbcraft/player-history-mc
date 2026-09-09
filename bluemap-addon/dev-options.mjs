@@ -79,7 +79,6 @@ export function playerHistoryAsset(pathname) {
   return match?.[1];
 }
 
-
 export function lanDevelopmentUrls(interfaces, protocol, port) {
   return Object.values(interfaces)
     .flat()

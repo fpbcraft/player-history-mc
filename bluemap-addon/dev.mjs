@@ -1,6 +1,8 @@
 import { access, rename, rm } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { formatMessages } from "esbuild";
+import { lanDevelopmentUrls, parseDevOptions, usage } from "./dev-options.mjs";
+import { startDevelopmentProxy } from "./dev-server.mjs";
 import {
   copyStyles,
   createFrontendBuild,
@@ -9,8 +11,6 @@ import {
   verifyBundleSize,
   watchStyles,
 } from "./frontend-build.mjs";
-import { lanDevelopmentUrls, parseDevOptions, usage } from "./dev-options.mjs";
-import { startDevelopmentProxy } from "./dev-server.mjs";
 
 let options;
 try {
