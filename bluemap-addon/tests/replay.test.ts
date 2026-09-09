@@ -70,6 +70,13 @@ test("published chunk ranges prevent network probes for known gaps", async () =>
   await cache.read(200);
   assert.equal(requests, 1);
 });
+test("published chunk ranges produce only available starts", () => {
+  const cache = new ChunkCache("/data", 100, undefined, [
+    [100, 300],
+    [500, 600],
+  ]);
+  assert.deepEqual(cache.chunkStarts(0, 700, 10), [100, 200, 500]);
+});
 test("aggregate plan uses daily data and only edge fine data", () => {
   const plan = heatmapPlan(0, 90 * 86400000, 300000);
   assert.equal(plan.length, 90);

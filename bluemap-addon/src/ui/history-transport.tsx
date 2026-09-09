@@ -77,10 +77,5 @@ export const HistoryTransport = () => (
     <div class="history-density-status" hidden role="status">
       Recording density · all players · 1-minute resolution
     </div>
-    <div class="history-trail-progress" hidden role="status" aria-live="polite">
-      <span>Loading trails</span>
-      <output data-control="trail-progress-label">0%</output>
-      <progress data-control="trail-progress" max="100" value="0" />
-    </div>
   </>
 );

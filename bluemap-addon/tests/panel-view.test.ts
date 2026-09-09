@@ -26,10 +26,6 @@ describe("replay panel view", () => {
     expect(trailLabels).not.toEqual(expect.arrayContaining(["Off", "6 hours", "Full range"]));
     expect(root.querySelector('[data-control="trail-label"]')?.textContent?.trim()).toBe("1m");
     expect(root.querySelector('[data-control="player-count"]')?.textContent?.trim()).toBe("0");
-    expect(root.querySelector('[data-control="trail-progress"]')).toBeInstanceOf(
-      HTMLProgressElement,
-    );
-    expect(root.querySelector('[data-control="trail-progress-label"]')?.textContent).toBe("0%");
     expect(root.querySelector('[name="timeline"]')?.getAttribute("aria-label")).toBe(
       "Replay timeline",
     );

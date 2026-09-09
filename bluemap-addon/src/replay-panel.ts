@@ -1,6 +1,7 @@
 import { BlueMapAdapter } from "./bluemap-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { chatEventsBetween } from "./event-notifications.js";
+import { mapConcurrent } from "./history-loading.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
@@ -97,17 +98,14 @@ export class ReplayPanel extends HTMLElement {
   private liveChatInitialized = false;
 
   private setTrailProgress(completed: number, total: number): void {
-    const progress = this.q("trail-progress");
-    const container = progress.closest<HTMLElement>(".history-trail-progress");
-    if (!container) return;
-    if (total <= 0) {
-      container.hidden = true;
-      return;
-    }
+    if (total <= 0) return;
     const percent = Math.min(100, Math.round((completed / total) * 100));
-    container.hidden = false;
-    progress.value = percent;
-    this.q("trail-progress-label").value = `${percent}%`;
+    this.statusCoordinator.show("loading", `Loading trails… ${percent}%`);
+  }
+
+  private loadingConcurrency(): number {
+    if (this.mobileQuery.matches) return 2;
+    return Math.min(4, Math.max(2, navigator.hardwareConcurrency || 2));
   }
 
   private get opened(): boolean {
@@ -855,8 +853,14 @@ export class ReplayPanel extends HTMLElement {
     }
     caption.textContent = "Loading recording density…";
     try {
-      for (let start = first; start <= last; start += day) {
-        const rows = await this.historyClient.activity(start, controller.signal);
+      const starts = Array.from(
+        { length: Math.floor((last - first) / day) + 1 },
+        (_, index) => first + index * day,
+      );
+      const days = await mapConcurrent(starts, this.loadingConcurrency(), (start) =>
+        this.historyClient.activity(start, controller.signal),
+      );
+      for (const rows of days) {
         addActivityBins(bins, rows, from, to);
       }
       if (controller.signal.aborted || !this.opened) return;
@@ -1217,12 +1221,10 @@ export class ReplayPanel extends HTMLElement {
   }
   async loadRangeEvents() {
     if (!this.cache || !this.manifest) return;
+    const cache = this.cache;
     const controller = this.requests.start("range-events");
-    const duration = this.cache.duration;
-    const first = Math.floor(this.clock.from / duration) * duration;
-    const last = Math.floor(this.clock.to / duration) * duration;
-    const chunks = Math.floor((last - first) / duration) + 1;
-    if (chunks > 5000) {
+    const starts = cache.chunkStarts(this.clock.from, this.clock.to, 5000);
+    if (starts.length > 5000) {
       this.rangeEvents = [];
       this.eventRevision++;
       this.statusCoordinator.show(
@@ -1233,8 +1235,10 @@ export class ReplayPanel extends HTMLElement {
     }
     const events = [];
     try {
-      for (let time = first; time <= last; time += duration) {
-        const data = await this.cache.read(time, controller.signal);
+      const chunks = await mapConcurrent(starts, this.loadingConcurrency(), (time) =>
+        cache.read(time, controller.signal),
+      );
+      for (const data of chunks) {
         events.push(...data.events);
         if (events.length > 100000) throw Error("Too many events in this range");
       }
@@ -1269,24 +1273,33 @@ export class ReplayPanel extends HTMLElement {
     const points = [],
       events = [];
     let previousPlayers = new Set();
-    this.statusCoordinator.show("loading", "Loading trails…");
     try {
-      const chunkCount = Math.floor(to / duration) - Math.floor(from / duration) + 1;
-      this.setTrailProgress(0, chunkCount);
-      if (chunkCount > 5000)
+      const starts = cache.chunkStarts(from, to, 5000);
+      this.statusCoordinator.show("loading", `Loading trails… ${starts.length ? "0" : "100"}%`);
+      if (starts.length > 5000)
         throw Error(
           "Full trails exceed 5,000 recording chunks. Choose a shorter range or 30s / 5m trails.",
         );
-      let completed = 0;
-      for (let t = Math.floor(from / duration) * duration; t <= to; t += duration) {
-        const data = await cache.read(t, controller.signal),
-          seen = new Set();
+      const chunks = await mapConcurrent(
+        starts,
+        this.loadingConcurrency(),
+        (time) => cache.read(time, controller.signal),
+        (completed, total) => this.setTrailProgress(completed, total),
+      );
+      let previousStart: number | undefined;
+      for (let index = 0; index < chunks.length; index++) {
+        const data = chunks[index];
+        const t = starts[index];
+        if (!data || t === undefined) continue;
+        if (previousStart !== undefined && t !== previousStart + duration)
+          previousPlayers = new Set();
+        const seen = new Set<number>();
         events.push(...data.events);
         if (events.length > 100000)
           throw Error("Too many events in this range. Choose a shorter trail duration.");
         for (const point of data.points) {
           seen.add(point.player);
-          if (point.flags & CONTEXT && t !== Math.floor(from / duration) * duration) continue;
+          if (point.flags & CONTEXT && t !== starts[0]) continue;
           points.push(
             !previousPlayers.has(point.player) ? { ...point, flags: point.flags | BREAK } : point,
           );
@@ -1295,7 +1308,7 @@ export class ReplayPanel extends HTMLElement {
             throw Error("Full trails exceed the browser limit. Use 30s or 5m trails.");
         }
         previousPlayers = seen;
-        this.setTrailProgress(++completed, chunkCount);
+        previousStart = t;
       }
       if (controller.signal.aborted) return;
       this.trailDataKey = dataKey;
@@ -1318,8 +1331,8 @@ export class ReplayPanel extends HTMLElement {
         this.sync();
       }
     } finally {
-      if (this.requests.current("trails", controller)) this.setTrailProgress(0, 0);
       if (this.requests.current("trails", controller)) {
+        this.statusCoordinator.clear("loading");
         if (this.fullTrails) this.updateOverlays();
       }
       this.requests.finish("trails", controller);

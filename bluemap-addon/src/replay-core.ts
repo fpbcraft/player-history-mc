@@ -132,6 +132,30 @@ export class ChunkCache {
     return false;
   }
 
+  chunkStarts(from: number, to: number, limit: number): number[] {
+    const first = Math.floor(from / this.duration) * this.duration;
+    const last = Math.floor(to / this.duration) * this.duration;
+    const starts: number[] = [];
+    const append = (start: number, end: number) => {
+      for (let value = start; value <= end; value += this.duration) {
+        starts.push(value);
+        if (starts.length > limit) return false;
+      }
+      return true;
+    };
+    if (!this.availableRanges) {
+      append(first, last);
+      return starts;
+    }
+    for (const [rangeFrom, rangeTo] of this.availableRanges) {
+      if (rangeTo <= first || rangeFrom > last) continue;
+      const start = Math.max(first, Math.ceil(rangeFrom / this.duration) * this.duration);
+      const end = Math.min(last, rangeTo - this.duration);
+      if (start <= end && !append(start, end)) break;
+    }
+    return starts;
+  }
+
   private remember(start: number, chunk: HistoryChunk): HistoryChunk {
     this.cache.set(start, chunk);
     while (this.cache.size > 3) {

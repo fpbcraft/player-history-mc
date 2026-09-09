@@ -26,8 +26,6 @@ export interface ReplayControls {
   "speed-button": HTMLButtonElement;
   start: HTMLSpanElement;
   timeline: HTMLInputElement;
-  "trail-progress": HTMLProgressElement;
-  "trail-progress-label": HTMLOutputElement;
   "trail-label": HTMLSpanElement;
   trails: HTMLInputElement;
   "trails-button": HTMLButtonElement;
