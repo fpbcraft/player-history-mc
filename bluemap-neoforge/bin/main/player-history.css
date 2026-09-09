@@ -646,15 +646,6 @@ bluemap-player-replay .history-chat > .history-chat-row {
   padding: 3px 4px;
   border-radius: 4px;
   cursor: pointer;
-  width: 100%;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-bluemap-player-replay .history-chat > .history-chat-row:hover,
-bluemap-player-replay .history-chat > .history-chat-row:focus-visible {
-  background: #ffffff10;
 }
 bluemap-player-replay .history-chat-head {
   width: 20px;

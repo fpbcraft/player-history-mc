@@ -51,7 +51,6 @@ export class HistoryClient {
     if (response.status === 404) return [];
     if (!response.ok) throw new Error("Recording density unavailable");
     if (!response.json) throw new Error("Response is not JSON");
-    if (!response.json) throw new Error("Web chat returned an invalid response");
     const value: unknown = await response.json();
     if (!Array.isArray(value) || value.length > 1_440) throw new Error("Invalid recording density");
     return value.flatMap((row) =>

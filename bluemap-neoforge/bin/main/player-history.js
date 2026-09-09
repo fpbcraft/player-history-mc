@@ -1131,7 +1131,6 @@ ${payload}` : ""}`;
       if (response.status === 404) return [];
       if (!response.ok) throw new Error("Recording density unavailable");
       if (!response.json) throw new Error("Response is not JSON");
-      if (!response.json) throw new Error("Web chat returned an invalid response");
       const value = await response.json();
       if (!Array.isArray(value) || value.length > 1440) throw new Error("Invalid recording density");
       return value.flatMap(
@@ -1746,6 +1745,37 @@ ${payload}` : ""}`;
     abortAll() {
       for (const controller of this.active.values()) controller.abort();
       this.active.clear();
+    }
+  };
+
+  // src/status-coordinator.ts
+  var PRIORITY = {
+    error: 4,
+    range: 3,
+    loading: 2,
+    context: 1
+  };
+  var StatusCoordinator = class {
+    constructor(element) {
+      this.element = element;
+    }
+    element;
+    messages = /* @__PURE__ */ new Map();
+    show(channel, message) {
+      if (channel !== "error") this.messages.delete("error");
+      this.messages.set(channel, message);
+      this.render();
+    }
+    clear(channel) {
+      this.messages.delete(channel);
+      this.render();
+    }
+    render() {
+      let selected;
+      for (const channel of this.messages.keys()) {
+        if (!selected || PRIORITY[channel] > PRIORITY[selected]) selected = channel;
+      }
+      this.element.textContent = selected ? this.messages.get(selected) ?? "" : "";
     }
   };
 
@@ -2507,7 +2537,7 @@ ${payload}` : ""}`;
     adapter;
     fullTrails = null;
     heatRows = null;
-    status;
+    statusCoordinator;
     mobileQuery;
     controls = new PanelControls(this);
     lifecycle = new PanelLifecycle();
@@ -2702,7 +2732,7 @@ ${payload}` : ""}`;
       this.chatPinned = true;
       this.rangeEvents = [];
       this.requestId = 0;
-      this.status = this.require(".history-status");
+      this.statusCoordinator = new StatusCoordinator(this.require(".history-status"));
       this.chatClient = new ChatClient(() => this.chatToken);
       this.chatToken = preferences.chatToken();
       this.q("webchat").onclick = async () => {
@@ -3162,7 +3192,7 @@ ${payload}` : ""}`;
     }
     report(error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
-        this.status.textContent = errorMessage(error);
+        this.statusCoordinator.show("error", errorMessage(error));
     }
     async changeRange() {
       const choice = this.q("range").value;
@@ -3171,7 +3201,7 @@ ${payload}` : ""}`;
         this.isLive = false;
         const from = new Date(this.q("date-from").value).getTime(), to = new Date(this.q("date-to").value).getTime();
         if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
-          this.status.textContent = "Choose an end date after the start date.";
+          this.statusCoordinator.show("range", "Choose an end date after the start date.");
           return;
         }
         this.clock.customRange = { from, to };
@@ -3317,7 +3347,10 @@ ${payload}` : ""}`;
         this.events = data.events;
         this.eventRevision++;
         this.loadedBucket = bucket;
-        this.status.textContent = data.points.length ? this.isLive ? "Live \xB7 local time" : "Historical replay \xB7 local time" : "No recorded data in this window";
+        this.statusCoordinator.show(
+          "context",
+          data.points.length ? this.isLive ? "Live \xB7 local time" : "Historical replay \xB7 local time" : "No recorded data in this window"
+        );
         this.render();
         this.updateOverlays();
       } catch (error) {
@@ -3390,7 +3423,7 @@ ${payload}` : ""}`;
           });
         }
         if (world === void 0)
-          this.status.textContent = "This map has no matching recorded dimension.";
+          this.statusCoordinator.show("range", "This map has no matching recorded dimension.");
         if (this.lastMap !== this.adapter.mapId) {
           this.lastMap = this.adapter.mapId;
           this.updateOverlays();
@@ -3539,7 +3572,7 @@ ${payload}` : ""}`;
         }
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError"))
-          this.status.textContent = "Live updates unavailable";
+          this.statusCoordinator.show("error", "Live updates unavailable");
       } finally {
         this.requests.finish("live", controller);
         this.liveLoading = false;
@@ -3572,7 +3605,10 @@ ${payload}` : ""}`;
       if (chunks > 5e3) {
         this.rangeEvents = [];
         this.eventRevision++;
-        this.status.textContent = "Event and chat history needs a range under 5,000 chunks";
+        this.statusCoordinator.show(
+          "range",
+          "Event and chat history needs a range under 5,000 chunks"
+        );
         return;
       }
       const events = [];
@@ -3606,7 +3642,7 @@ ${payload}` : ""}`;
       const to = this.trailMode === Infinity ? this.clock.to : Math.min(this.clock.to, (Math.floor(this.clock.time / duration) + 1) * duration);
       const points = [], events = [];
       let previousPlayers = /* @__PURE__ */ new Set();
-      this.status.textContent = "Loading trails\u2026";
+      this.statusCoordinator.show("loading", "Loading trails\u2026");
       try {
         if (Math.floor(to / duration) - Math.floor(from / duration) + 1 > 5e3)
           throw Error(
@@ -3639,7 +3675,10 @@ ${payload}` : ""}`;
           }
         if (added) this.renderEventFilters();
         this.fullTrails = new ReplayEngine(points.sort((a2, b2) => a2.time - b2.time));
-        this.status.textContent = this.isLive ? "Live \xB7 local time" : "Historical replay \xB7 local time";
+        this.statusCoordinator.show(
+          "context",
+          this.isLive ? "Live \xB7 local time" : "Historical replay \xB7 local time"
+        );
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
           this.report(error);
@@ -3674,7 +3713,10 @@ ${payload}` : ""}`;
         if (controller.signal.aborted || !this.opened) return;
         this.heatRows = [...cells.values()];
         this.heatVersion = (this.heatVersion || 0) + 1;
-        this.status.textContent = cells.size ? "Heatmap \xB7 time spent \xB7 completed recording chunks" : "No completed heatmap data in this range";
+        this.statusCoordinator.show(
+          "context",
+          cells.size ? "Heatmap \xB7 time spent \xB7 completed recording chunks" : "No completed heatmap data in this range"
+        );
         this.updateOverlays();
       } catch (error) {
         this.report(error);

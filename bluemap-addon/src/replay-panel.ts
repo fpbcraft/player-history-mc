@@ -27,6 +27,7 @@ import {
   visibleEvents,
 } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
+import { StatusCoordinator } from "./status-coordinator.js";
 import { describeState, TelemetryCache } from "./telemetry.js";
 import type { HistoryEvent, HistoryManifest, HistoryPoint, IntegrationMapping } from "./types.js";
 import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
@@ -78,7 +79,7 @@ export class ReplayPanel extends HTMLElement {
   private adapter: BlueMapAdapter | undefined;
   private fullTrails: ReplayEngine | null = null;
   private heatRows: HeatmapRow[] | null = null;
-  private status!: HTMLElement;
+  private statusCoordinator!: StatusCoordinator;
   private mobileQuery!: MediaQueryList;
   private controls = new PanelControls(this);
   private lifecycle = new PanelLifecycle();
@@ -301,7 +302,7 @@ export class ReplayPanel extends HTMLElement {
     this.chatPinned = true;
     this.rangeEvents = [];
     this.requestId = 0;
-    this.status = this.require<HTMLElement>(".history-status");
+    this.statusCoordinator = new StatusCoordinator(this.require<HTMLElement>(".history-status"));
     this.chatClient = new ChatClient(() => this.chatToken);
     this.chatToken = preferences.chatToken();
     this.q("webchat").onclick = async () => {
@@ -780,7 +781,7 @@ export class ReplayPanel extends HTMLElement {
   }
   report(error: unknown): void {
     if (!(error instanceof DOMException && error.name === "AbortError"))
-      this.status.textContent = errorMessage(error);
+      this.statusCoordinator.show("error", errorMessage(error));
   }
   async changeRange() {
     const choice = this.q("range").value;
@@ -790,7 +791,7 @@ export class ReplayPanel extends HTMLElement {
       const from = new Date(this.q("date-from").value).getTime(),
         to = new Date(this.q("date-to").value).getTime();
       if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
-        this.status.textContent = "Choose an end date after the start date.";
+        this.statusCoordinator.show("range", "Choose an end date after the start date.");
         return;
       }
       this.clock.customRange = { from, to };
@@ -958,11 +959,14 @@ export class ReplayPanel extends HTMLElement {
       this.events = data.events;
       this.eventRevision++;
       this.loadedBucket = bucket;
-      this.status.textContent = data.points.length
-        ? this.isLive
-          ? "Live · local time"
-          : "Historical replay · local time"
-        : "No recorded data in this window";
+      this.statusCoordinator.show(
+        "context",
+        data.points.length
+          ? this.isLive
+            ? "Live · local time"
+            : "Historical replay · local time"
+          : "No recorded data in this window",
+      );
       this.render();
       this.updateOverlays();
     } catch (error) {
@@ -1050,7 +1054,7 @@ export class ReplayPanel extends HTMLElement {
         });
       }
       if (world === undefined)
-        this.status.textContent = "This map has no matching recorded dimension.";
+        this.statusCoordinator.show("range", "This map has no matching recorded dimension.");
       if (this.lastMap !== this.adapter.mapId) {
         this.lastMap = this.adapter.mapId;
         this.updateOverlays();
@@ -1219,7 +1223,7 @@ export class ReplayPanel extends HTMLElement {
       }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
-        this.status.textContent = "Live updates unavailable";
+        this.statusCoordinator.show("error", "Live updates unavailable");
     } finally {
       this.requests.finish("live", controller);
       this.liveLoading = false;
@@ -1251,7 +1255,10 @@ export class ReplayPanel extends HTMLElement {
     if (chunks > 5000) {
       this.rangeEvents = [];
       this.eventRevision++;
-      this.status.textContent = "Event and chat history needs a range under 5,000 chunks";
+      this.statusCoordinator.show(
+        "range",
+        "Event and chat history needs a range under 5,000 chunks",
+      );
       return;
     }
     const events = [];
@@ -1292,7 +1299,7 @@ export class ReplayPanel extends HTMLElement {
     const points = [],
       events = [];
     let previousPlayers = new Set();
-    this.status.textContent = "Loading trails…";
+    this.statusCoordinator.show("loading", "Loading trails…");
     try {
       if (Math.floor(to / duration) - Math.floor(from / duration) + 1 > 5000)
         throw Error(
@@ -1326,9 +1333,10 @@ export class ReplayPanel extends HTMLElement {
         }
       if (added) this.renderEventFilters();
       this.fullTrails = new ReplayEngine(points.sort((a, b) => a.time - b.time));
-      this.status.textContent = this.isLive
-        ? "Live · local time"
-        : "Historical replay · local time";
+      this.statusCoordinator.show(
+        "context",
+        this.isLive ? "Live · local time" : "Historical replay · local time",
+      );
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         this.report(error);
@@ -1365,9 +1373,12 @@ export class ReplayPanel extends HTMLElement {
       if (controller.signal.aborted || !this.opened) return;
       this.heatRows = [...cells.values()];
       this.heatVersion = (this.heatVersion || 0) + 1;
-      this.status.textContent = cells.size
-        ? "Heatmap · time spent · completed recording chunks"
-        : "No completed heatmap data in this range";
+      this.statusCoordinator.show(
+        "context",
+        cells.size
+          ? "Heatmap · time spent · completed recording chunks"
+          : "No completed heatmap data in this range",
+      );
       this.updateOverlays();
     } catch (error) {
       this.report(error);

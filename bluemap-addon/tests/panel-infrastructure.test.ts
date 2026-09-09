@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PanelLifecycle } from "../src/panel-lifecycle.js";
 import { RequestCoordinator } from "../src/request-coordinator.js";
+import { StatusCoordinator } from "../src/status-coordinator.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -56,5 +57,18 @@ describe("request coordinator", () => {
 
     expect(activity.signal.aborted).toBe(true);
     expect(live.signal.aborted).toBe(true);
+  });
+});
+
+describe("status coordinator", () => {
+  it("keeps a loading message from hiding a more important error", () => {
+    const element = document.createElement("output");
+    const status = new StatusCoordinator(element);
+
+    status.show("loading", "Loading trails…");
+    status.show("error", "The recording is unavailable");
+    expect(element.textContent).toBe("The recording is unavailable");
+    status.clear("error");
+    expect(element.textContent).toBe("Loading trails…");
   });
 });
