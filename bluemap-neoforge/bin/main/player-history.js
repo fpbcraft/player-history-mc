@@ -2729,6 +2729,7 @@ ${payload}` : ""}`;
     filterRevision = 0;
     healthToken = {};
     trailMode = 6e4;
+    rangeDomain = null;
     get compact() {
       return this.panelState.compact;
     }
@@ -2808,6 +2809,7 @@ ${payload}` : ""}`;
       this.registryRevision = 0;
       this.selectionRevision = 0;
       this.filterRevision = 0;
+      this.rangeDomain = null;
       this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       mountReplayPanelView(this);
       this.controls = new PanelControls(this);
@@ -3212,16 +3214,17 @@ ${payload}` : ""}`;
       this.clock.isPlaying = false;
       if (this.clock.customRange) {
         this.clock.customRange = null;
-        this.q("range").value = preferences.range() || "0.125";
+        const savedRange = preferences.range() || "0.125";
+        this.q("range").value = ["dates", "yesterday"].includes(savedRange) ? "0.125" : savedRange;
         this.require(".history-custom-dates").hidden = true;
       }
       if (this.manifest) {
-        this.clock.refresh(
-          this.manifest.earliestTimestamp,
-          Math.max(this.manifest.latestTimestamp, Date.now()),
-          true
-        );
+        const latest = Math.max(this.manifest.latestTimestamp, Date.now());
+        const calendar = calendarRange(this.q("range").value, latest);
+        if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
+        this.clock.refresh(this.manifest.earliestTimestamp, latest, true);
         this.clock.seek(this.clock.to);
+        this.rangeDomain = { from: this.clock.from, to: this.clock.to };
       }
       this.sync();
       this.render();
@@ -3305,6 +3308,8 @@ ${payload}` : ""}`;
         const calendar = calendarRange(this.q("range").value, latest);
         if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
         this.clock.refresh(m2.earliestTimestamp, latest, reset);
+        if (this.q("range").value !== "selection")
+          this.rangeDomain = { from: this.clock.from, to: this.clock.to };
         this.renderPlayers();
         if (changed) await this.reloadRange();
         else this.loadActivity();
@@ -3372,6 +3377,7 @@ ${payload}` : ""}`;
         this.manifest.earliestTimestamp,
         Math.max(this.manifest.latestTimestamp, Date.now())
       );
+      this.rangeDomain = { from: this.clock.from, to: this.clock.to };
       this.sync();
       await this.reloadRange();
     }
@@ -3444,8 +3450,8 @@ ${payload}` : ""}`;
         this.q("current").textContent = formatDate(c2.time);
         this.q("latest").disabled = this.isLive;
         this.q("latest").setAttribute("aria-pressed", String(this.isLive));
-        const rangeMinimum = Math.min(this.manifest?.earliestTimestamp ?? c2.from, c2.from);
-        const rangeMaximum = Math.max(this.manifest?.latestTimestamp ?? c2.to, c2.to, Date.now());
+        const rangeMinimum = Math.min(this.rangeDomain?.from ?? c2.from, c2.from);
+        const rangeMaximum = Math.max(this.rangeDomain?.to ?? c2.to, c2.to);
         const rangeSpan = Math.max(1, rangeMaximum - rangeMinimum);
         const rangeStep = Math.min(6e4, rangeSpan);
         const rangeStart = this.q("range-start");

@@ -88,6 +88,7 @@ export class ReplayPanel extends HTMLElement {
   private filterRevision = 0;
   private healthToken: object = {};
   private trailMode = 60_000;
+  private rangeDomain: { from: number; to: number } | null = null;
 
   private get compact(): boolean {
     return this.panelState.compact;
@@ -190,6 +191,7 @@ export class ReplayPanel extends HTMLElement {
     this.registryRevision = 0;
     this.selectionRevision = 0;
     this.filterRevision = 0;
+    this.rangeDomain = null;
     this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
     mountReplayPanelView(this);
     this.controls = new PanelControls(this);
@@ -611,16 +613,17 @@ export class ReplayPanel extends HTMLElement {
     this.clock.isPlaying = false;
     if (this.clock.customRange) {
       this.clock.customRange = null;
-      this.q("range").value = preferences.range() || "0.125";
+      const savedRange = preferences.range() || "0.125";
+      this.q("range").value = ["dates", "yesterday"].includes(savedRange) ? "0.125" : savedRange;
       this.require<HTMLElement>(".history-custom-dates").hidden = true;
     }
     if (this.manifest) {
-      this.clock.refresh(
-        this.manifest.earliestTimestamp,
-        Math.max(this.manifest.latestTimestamp, Date.now()),
-        true,
-      );
+      const latest = Math.max(this.manifest.latestTimestamp, Date.now());
+      const calendar = calendarRange(this.q("range").value, latest);
+      if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
+      this.clock.refresh(this.manifest.earliestTimestamp, latest, true);
       this.clock.seek(this.clock.to);
+      this.rangeDomain = { from: this.clock.from, to: this.clock.to };
     }
     this.sync();
     this.render();
@@ -710,6 +713,8 @@ export class ReplayPanel extends HTMLElement {
       const calendar = calendarRange(this.q("range").value, latest);
       if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
       this.clock.refresh(m.earliestTimestamp, latest, reset);
+      if (this.q("range").value !== "selection")
+        this.rangeDomain = { from: this.clock.from, to: this.clock.to };
       this.renderPlayers();
       if (changed) await this.reloadRange();
       else this.loadActivity();
@@ -781,6 +786,7 @@ export class ReplayPanel extends HTMLElement {
       this.manifest.earliestTimestamp,
       Math.max(this.manifest.latestTimestamp, Date.now()),
     );
+    this.rangeDomain = { from: this.clock.from, to: this.clock.to };
     this.sync();
     await this.reloadRange();
   }
@@ -866,8 +872,8 @@ export class ReplayPanel extends HTMLElement {
       this.q("current").textContent = formatDate(c.time);
       this.q("latest").disabled = this.isLive;
       this.q("latest").setAttribute("aria-pressed", String(this.isLive));
-      const rangeMinimum = Math.min(this.manifest?.earliestTimestamp ?? c.from, c.from);
-      const rangeMaximum = Math.max(this.manifest?.latestTimestamp ?? c.to, c.to, Date.now());
+      const rangeMinimum = Math.min(this.rangeDomain?.from ?? c.from, c.from);
+      const rangeMaximum = Math.max(this.rangeDomain?.to ?? c.to, c.to);
       const rangeSpan = Math.max(1, rangeMaximum - rangeMinimum);
       const rangeStep = Math.min(60_000, rangeSpan);
       const rangeStart = this.q("range-start");
