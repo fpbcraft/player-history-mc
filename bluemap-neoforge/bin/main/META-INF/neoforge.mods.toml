@@ -1,0 +1,23 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="playerhistory_bluemap"
+version="${version}"
+displayName="Player History BlueMap"
+description="Independent BlueMap history viewer and asset installer."
+[[dependencies.playerhistory_bluemap]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.248,)"
+side="SERVER"
+[[dependencies.playerhistory_bluemap]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+side="SERVER"
+[[dependencies.playerhistory_bluemap]]
+modId="bluemap"
+type="required"
+versionRange="[5,)"
+side="SERVER"
