@@ -127,6 +127,9 @@ class StateTest {
             com.google.gson.JsonObject.class);
     assertEquals(2, manifest.get("protocolVersion").getAsInt());
     assertEquals(t, manifest.get("latestTimestamp").getAsLong());
+    var chunkRange = manifest.getAsJsonArray("chunkRanges").get(0).getAsJsonArray();
+    assertEquals(bucket, chunkRange.get(0).getAsLong());
+    assertEquals(bucket + 60000, chunkRange.get(1).getAsLong());
     assertFalse(manifest.has("mapWorlds"));
     assertTrue(manifest.getAsJsonObject("capabilities").get("health").getAsBoolean());
   }
