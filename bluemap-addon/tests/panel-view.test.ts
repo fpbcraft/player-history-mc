@@ -22,6 +22,10 @@ describe("replay panel view", () => {
     expect(root.querySelector('[name="timeline"]')?.getAttribute("aria-label")).toBe(
       "Replay timeline",
     );
+    const eventOverlay = root.querySelector(".history-events");
+    expect(eventOverlay?.tagName).toBe("DIV");
+    expect(eventOverlay?.getAttribute("role")).toBe("group");
+    expect(eventOverlay?.closest("section")).toBe(root.querySelector("#history-transport"));
   });
 
   it("can be unmounted and mounted again without retaining view nodes", () => {

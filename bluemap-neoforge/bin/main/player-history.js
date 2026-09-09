@@ -2573,7 +2573,7 @@ ${payload}` : ""}`;
         }
       ),
       /* @__PURE__ */ u2("output", { class: "history-tooltip", hidden: true }),
-      /* @__PURE__ */ u2("section", { class: "history-events", "aria-label": "Events in loaded replay window" })
+      /* @__PURE__ */ u2("div", { class: "history-events", role: "group", "aria-label": "Events in loaded replay window" })
     ] }),
     /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" }),
     /* @__PURE__ */ u2("div", { class: "history-controls", children: [

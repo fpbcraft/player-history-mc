@@ -19,7 +19,7 @@ bluemap-player-replay *::after {
 bluemap-player-replay [hidden] {
   display: none !important;
 }
-bluemap-player-replay section,
+bluemap-player-replay > section,
 bluemap-player-replay > button,
 bluemap-player-replay .history-popover {
   background: color-mix(in srgb, var(--theme-bg, #181818) 92%, transparent);
@@ -29,7 +29,7 @@ bluemap-player-replay .history-popover {
   box-shadow: 0 3px 12px #0003;
   backdrop-filter: blur(12px);
 }
-bluemap-player-replay section {
+bluemap-player-replay > section {
   width: min(1000px, calc(100vw - 80px));
   padding: 10px 16px 8px;
 }
@@ -686,7 +686,7 @@ bluemap-player-replay .history-chat-time {
   bluemap-player-replay.compact .history-heading .history-event-control {
     display: none !important;
   }
-  bluemap-player-replay.compact section {
+  bluemap-player-replay.compact > section {
     padding-top: 8px;
     padding-bottom: 8px;
   }
@@ -713,7 +713,7 @@ bluemap-player-replay .history-chat-time {
     transform: none;
     bottom: max(8px, env(safe-area-inset-bottom));
   }
-  bluemap-player-replay section {
+  bluemap-player-replay > section {
     width: 100%;
     padding: 10px;
     max-height: 75dvh;

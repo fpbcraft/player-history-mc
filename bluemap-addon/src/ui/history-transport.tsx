@@ -67,7 +67,7 @@ export const HistoryTransport = () => (
         aria-label="Replay timeline"
       />
       <output class="history-tooltip" hidden />
-      <section class="history-events" aria-label="Events in loaded replay window" />
+      <div class="history-events" role="group" aria-label="Events in loaded replay window" />
     </div>
     <div class="history-density-status" hidden role="status">
       Recording density · all players · 1-minute resolution
