@@ -33,14 +33,14 @@ export const calendarRange = (
 export const SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64] as const;
 
 export const TRAIL_OPTIONS = [
-  [0, "Off"],
   [30_000, "30 seconds"],
   [60_000, "1 minute"],
   [300_000, "5 minutes"],
   [900_000, "15 minutes"],
+  [1_800_000, "30 minutes"],
   [3_600_000, "1 hour"],
-  [21_600_000, "6 hours"],
-  [Infinity, "Full range"],
+  [7_200_000, "2 hours"],
+  [10_800_000, "3 hours"],
 ] as const;
 
 export const trailDurationLabel = (value: number): string => {

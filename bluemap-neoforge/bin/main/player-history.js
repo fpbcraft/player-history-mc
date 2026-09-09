@@ -2073,14 +2073,14 @@ ${payload}` : ""}`;
   };
   var SPEED_OPTIONS = [0.25, 0.5, 1, 2, 4, 8, 16, 32, 64];
   var TRAIL_OPTIONS = [
-    [0, "Off"],
     [3e4, "30 seconds"],
     [6e4, "1 minute"],
     [3e5, "5 minutes"],
     [9e5, "15 minutes"],
+    [18e5, "30 minutes"],
     [36e5, "1 hour"],
-    [216e5, "6 hours"],
-    [Infinity, "Full range"]
+    [72e5, "2 hours"],
+    [108e5, "3 hours"]
   ];
   var trailDurationLabel = (value) => {
     if (value === Infinity) return "Full";

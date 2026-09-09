@@ -19,6 +19,11 @@ describe("replay panel view", () => {
     expect(root.querySelector('[name="webchat"] > svg')).not.toBeNull();
     expect(root.querySelectorAll(".history-speed-popover [data-speed]")).toHaveLength(9);
     expect(root.querySelectorAll(".history-trails-popover [data-trail]")).toHaveLength(8);
+    const trailLabels = [
+      ...root.querySelectorAll<HTMLButtonElement>(".history-trails-popover [data-trail]"),
+    ].map((option) => option.textContent?.trim());
+    expect(trailLabels).toEqual(expect.arrayContaining(["30 minutes", "2 hours", "3 hours"]));
+    expect(trailLabels).not.toEqual(expect.arrayContaining(["Off", "6 hours", "Full range"]));
     expect(root.querySelector('[data-control="trail-label"]')?.textContent?.trim()).toBe("1m");
     expect(root.querySelector('[data-control="player-count"]')?.textContent?.trim()).toBe("0");
     expect(root.querySelector('[name="timeline"]')?.getAttribute("aria-label")).toBe(
