@@ -287,8 +287,7 @@ bluemap-player-replay .history-secondary {
   gap: 3px;
 }
 bluemap-player-replay .history-controls {
-  gap: 12px;
-  justify-content: space-between;
+  gap: 6px;
 }
 bluemap-player-replay [name=play] {
   min-width: 76px;
@@ -454,10 +453,10 @@ bluemap-player-replay .history-heading [name=close] {
   right: 0;
 }
 bluemap-player-replay .history-controls {
-  display: grid;
-  grid-template-columns: 32px minmax(120px, 1fr) 32px 36px 36px 42px;
-  align-items: start;
+  display: flex;
+  align-items: center;
   gap: 6px;
+  padding-bottom: 7px;
 }
 bluemap-player-replay .history-controls > button {
   width: 32px;
@@ -475,10 +474,6 @@ bluemap-player-replay .history-controls [name=latest] {
   width: 36px;
   min-width: 36px;
   font-size: 13px;
-}
-bluemap-player-replay .history-window-selector {
-  max-width: none;
-  min-width: 0;
 }
 bluemap-player-replay .history-speed {
   position: relative;
@@ -580,6 +575,13 @@ bluemap-player-replay .history-trails {
 }
 bluemap-player-replay .history-timeline {
   height: 76px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+bluemap-player-replay .history-playback-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
 }
 bluemap-player-replay .history-timeline input[type=range] {
   position: absolute;
@@ -766,30 +768,36 @@ bluemap-player-replay .history-chat-time {
   }
   bluemap-player-replay .history-controls {
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 32px 36px 42px 32px;
+    grid-template-columns: 32px 36px 32px 42px 32px;
+    justify-content: center;
     gap: 4px;
     align-items: center;
+    padding: 0;
+    margin-top: 4px;
   }
   bluemap-player-replay .history-controls [name=back] {
     grid-area: 1 / 1;
   }
+  bluemap-player-replay .history-controls [name=play] {
+    grid-area: 1 / 2;
+  }
   bluemap-player-replay .history-controls [name=forward] {
     grid-area: 1 / 3;
   }
-  bluemap-player-replay .history-controls [name=play] {
-    grid-area: 1 / 4;
-  }
   bluemap-player-replay .history-controls [name=latest] {
-    grid-area: 1 / 5;
+    grid-area: 1 / 4;
     width: 42px;
     min-width: 42px;
   }
   bluemap-player-replay .history-speed {
-    grid-area: 1 / 6;
+    grid-area: 1 / 5;
   }
   bluemap-player-replay .history-speed > [name=speed-button] {
     width: 32px;
     min-width: 32px;
+  }
+  bluemap-player-replay .history-playback-row {
+    display: block;
   }
   bluemap-player-replay .history-secondary {
     grid-column: 1 / -1;
@@ -991,6 +999,11 @@ bluemap-player-replay button > svg {
   stroke-linecap: round;
   stroke-linejoin: round;
   vertical-align: middle;
+}
+bluemap-player-replay .history-seek-icon text {
+  fill: currentColor;
+  stroke: none;
+  font: 700 8px/1 system-ui;
 }
 bluemap-player-replay .history-popover[popover] {
   position: fixed;

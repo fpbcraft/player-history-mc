@@ -1739,6 +1739,15 @@ ${payload}` : ""}`;
     webchat: "M21 11a8 8 0 0 1-8 8H7l-5 3V11a9 9 0 0 1 19 0Z"
   };
   var HistoryIcon = ({ name }) => /* @__PURE__ */ u2("svg", { viewBox: "0 0 24 24", "aria-hidden": "true", children: /* @__PURE__ */ u2("path", { d: ICON_PATHS[name] }) });
+  var HistorySeekIcon = ({ direction }) => /* @__PURE__ */ u2("svg", { class: "history-seek-icon", viewBox: "0 0 24 24", "aria-hidden": "true", children: [
+    /* @__PURE__ */ u2(
+      "path",
+      {
+        d: direction === "back" ? "M7 7H3V3M3.7 7A9 9 0 1 1 4 17" : "M17 7h4V3m-.7 4A9 9 0 1 0 20 17"
+      }
+    ),
+    /* @__PURE__ */ u2("text", { x: "12", y: "15", "text-anchor": "middle", children: "5" })
+  ] });
   var TimelineEventIcon = ({ type }) => /* @__PURE__ */ u2("svg", { viewBox: "0 0 16 16", "aria-hidden": "true", children: /* @__PURE__ */ u2(
     "path",
     {
@@ -2502,56 +2511,58 @@ ${payload}` : ""}`;
       /* @__PURE__ */ u2("span", { "data-control": "start", children: "\u2014" }),
       /* @__PURE__ */ u2("span", { "data-control": "end", children: "\u2014" })
     ] }),
-    /* @__PURE__ */ u2("div", { class: "history-timeline", children: [
-      /* @__PURE__ */ u2(
-        "div",
-        {
-          class: "history-histogram",
-          role: "img",
-          "aria-label": "Recording density across the selected range"
-        }
-      ),
-      /* @__PURE__ */ u2(
-        "input",
-        {
-          name: "timeline",
-          type: "range",
-          min: "0",
-          max: "1",
-          step: "1",
-          value: "1",
-          "aria-label": "Replay timeline"
-        }
-      ),
-      /* @__PURE__ */ u2("output", { class: "history-tooltip", hidden: true }),
-      /* @__PURE__ */ u2("div", { class: "history-events" })
+    /* @__PURE__ */ u2("div", { class: "history-playback-row", children: [
+      /* @__PURE__ */ u2("div", { class: "history-timeline", children: [
+        /* @__PURE__ */ u2(
+          "div",
+          {
+            class: "history-histogram",
+            role: "img",
+            "aria-label": "Recording density across the selected range"
+          }
+        ),
+        /* @__PURE__ */ u2(
+          "input",
+          {
+            name: "timeline",
+            type: "range",
+            min: "0",
+            max: "1",
+            step: "1",
+            value: "1",
+            "aria-label": "Replay timeline"
+          }
+        ),
+        /* @__PURE__ */ u2("output", { class: "history-tooltip", hidden: true }),
+        /* @__PURE__ */ u2("div", { class: "history-events" })
+      ] }),
+      /* @__PURE__ */ u2("div", { class: "history-controls", children: [
+        /* @__PURE__ */ u2("button", { type: "button", name: "back", title: "Back five minutes", "aria-label": "Back five minutes", children: /* @__PURE__ */ u2(HistorySeekIcon, { direction: "back" }) }),
+        /* @__PURE__ */ u2("button", { type: "button", name: "play", "aria-label": "Play replay", children: "\u25B6" }),
+        /* @__PURE__ */ u2(
+          "button",
+          {
+            type: "button",
+            name: "forward",
+            title: "Forward five minutes",
+            "aria-label": "Forward five minutes",
+            children: /* @__PURE__ */ u2(HistorySeekIcon, { direction: "forward" })
+          }
+        ),
+        /* @__PURE__ */ u2(
+          "button",
+          {
+            type: "button",
+            name: "latest",
+            title: "Follow live events and BlueMap player positions",
+            "aria-label": "Follow live",
+            children: "NOW"
+          }
+        ),
+        /* @__PURE__ */ u2(SpeedControl, {})
+      ] })
     ] }),
-    /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" }),
-    /* @__PURE__ */ u2("div", { class: "history-controls", children: [
-      /* @__PURE__ */ u2("button", { type: "button", name: "back", title: "Back five minutes", "aria-label": "Back five minutes", children: "\u21B6" }),
-      /* @__PURE__ */ u2(
-        "button",
-        {
-          type: "button",
-          name: "forward",
-          title: "Forward five minutes",
-          "aria-label": "Forward five minutes",
-          children: "\u21B7"
-        }
-      ),
-      /* @__PURE__ */ u2("button", { type: "button", name: "play", "aria-label": "Play replay", children: "\u25B6" }),
-      /* @__PURE__ */ u2(
-        "button",
-        {
-          type: "button",
-          name: "latest",
-          title: "Follow live events and BlueMap player positions",
-          "aria-label": "Follow live",
-          children: "NOW"
-        }
-      ),
-      /* @__PURE__ */ u2(SpeedControl, {})
-    ] })
+    /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" })
   ] });
 
   // src/ui/replay-panel-view.tsx

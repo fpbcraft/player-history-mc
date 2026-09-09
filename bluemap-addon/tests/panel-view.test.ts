@@ -35,6 +35,16 @@ describe("replay panel view", () => {
     expect(root.querySelector(".history-shuttle")).toBeNull();
     expect(root.querySelector(".history-window-selector")).toBeNull();
     expect(root.querySelector('[name="compact"]')).toBeNull();
+    expect(
+      [
+        ...root.querySelectorAll<HTMLElement>(
+          ".history-controls > button, .history-controls > div",
+        ),
+      ].map((control) => control.getAttribute("name") ?? control.className),
+    ).toEqual(["back", "play", "forward", "latest", "history-speed"]);
+    expect(root.querySelector('[name="back"] .history-seek-icon text')?.textContent?.trim()).toBe(
+      "5",
+    );
     const eventOverlay = root.querySelector(".history-events");
     expect(eventOverlay?.tagName).toBe("DIV");
     expect(eventOverlay?.closest("section")).toBe(root.querySelector("#history-transport"));

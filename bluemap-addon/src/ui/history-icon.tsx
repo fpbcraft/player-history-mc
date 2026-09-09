@@ -18,6 +18,17 @@ export const HistoryIcon = ({ name }: { name: HistoryIconName }) => (
   </svg>
 );
 
+export const HistorySeekIcon = ({ direction }: { direction: "back" | "forward" }) => (
+  <svg class="history-seek-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d={direction === "back" ? "M7 7H3V3M3.7 7A9 9 0 1 1 4 17" : "M17 7h4V3m-.7 4A9 9 0 1 0 20 17"}
+    />
+    <text x="12" y="15" text-anchor="middle">
+      5
+    </text>
+  </svg>
+);
+
 export const TimelineEventIcon = ({ type }: { type: "chat" | "death" }) => (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <path
