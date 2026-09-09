@@ -674,9 +674,9 @@ bluemap-player-replay .history-chat {
 }
 bluemap-player-replay .history-chat > .history-chat-row {
   display: grid;
-  grid-template-columns: 8.5rem 20px minmax(0, 1fr);
+  grid-template-columns: 7rem 20px minmax(0, 1fr);
   align-items: start;
-  gap: 7px;
+  gap: 4px;
   padding: 3px 4px;
   border-radius: 4px;
   cursor: pointer;
@@ -702,12 +702,12 @@ bluemap-player-replay .history-chat-time {
   padding: 0;
   border: 0;
   text-align: left;
-  width: 8.5rem;
+  width: 7rem;
   white-space: nowrap;
 }
 @media (min-width: 901px) {
   bluemap-player-replay:has(> .history-chat-panel:not([hidden])) > section:not([hidden]) {
-    width: min(1000px, calc(100vw - 438px));
+    width: min(1000px, calc(100vw - 528px));
   }
 }
 
@@ -945,7 +945,7 @@ bluemap-player-replay > .history-chat-launcher {
 bluemap-player-replay > .history-chat-panel {
   left: 16px;
   bottom: max(24px, env(safe-area-inset-bottom));
-  width: min(390px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
   max-height: min(70dvh, 620px);
   padding: 10px;
   color: var(--theme-fg, #eee);

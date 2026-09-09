@@ -12,6 +12,8 @@ bluemap-player-replay .history-chat > .history-chat-row:focus-visible {
   background: #ffffff10;
 }
 
-bluemap-player-replay .history-chat-row > span:last-child {
+bluemap-player-replay .history-chat-message {
   min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

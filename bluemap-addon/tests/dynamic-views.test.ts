@@ -57,6 +57,7 @@ describe("declarative replay lists", () => {
 
     expect(filters.querySelector('input[aria-label="chat"]')).not.toBeNull();
     expect(chat.querySelector(".history-chat-row")?.textContent).toContain("hello");
+    expect(chat.querySelector(".history-chat-message")?.textContent).toContain("hello");
     expect(ticks.querySelector(".history-timeline-event")).not.toBeNull();
     render(null, filters);
     render(null, chat);

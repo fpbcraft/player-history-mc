@@ -77,7 +77,7 @@ const ChatHistory = ({
             ) : (
               <span />
             )}
-            <span>{chatMessage(event.type, name, payload)}</span>
+            <span class="history-chat-message">{chatMessage(event.type, name, payload)}</span>
           </button>
         );
       })}

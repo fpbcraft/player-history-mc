@@ -1806,7 +1806,7 @@ ${payload}` : ""}`;
                 }
               }
             ) : /* @__PURE__ */ u2("span", {}),
-            /* @__PURE__ */ u2("span", { children: chatMessage(event.type, name, payload) })
+            /* @__PURE__ */ u2("span", { class: "history-chat-message", children: chatMessage(event.type, name, payload) })
           ]
         },
         `${event.point.player}:${event.point.time}:${event.type}`
