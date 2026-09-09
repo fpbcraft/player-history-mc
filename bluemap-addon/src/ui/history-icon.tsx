@@ -1,4 +1,4 @@
-type HistoryIconName = "events" | "heat" | "players" | "speed" | "trails" | "webchat";
+type HistoryIconName = "events" | "heat" | "players" | "speed" | "time" | "trails" | "webchat";
 
 const ICON_PATHS: Record<HistoryIconName, string> = {
   events:
@@ -7,6 +7,7 @@ const ICON_PATHS: Record<HistoryIconName, string> = {
   players:
     "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
   speed: "M3 18a10 10 0 1 1 18 0M12 14l5-6M5 18h14",
+  time: "M12 8v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9",
   trails: "M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4M7 17c4 0 3-10 8-10h2",
   webchat: "M21 11a8 8 0 0 1-8 8H7l-5 3V11a9 9 0 0 1 19 0Z",
 };

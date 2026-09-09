@@ -24,17 +24,16 @@ describe("replay panel view", () => {
     expect(root.querySelector('[name="timeline"]')?.getAttribute("aria-label")).toBe(
       "Replay timeline",
     );
-    expect(root.querySelector('[name="range-start"]')?.getAttribute("aria-label")).toBe(
-      "Replay range start",
+    expect(root.querySelector('[name="range-button"]')?.getAttribute("aria-expanded")).toBe(
+      "false",
     );
-    expect(root.querySelector('[name="range-end"]')?.getAttribute("aria-label")).toBe(
-      "Replay range end",
-    );
-    const rangeLabels = [...root.querySelectorAll<HTMLOptionElement>('[name="range"] option')].map(
-      (option) => option.textContent?.trim(),
-    );
+    expect(root.querySelector(".history-absolute-range")).not.toBeNull();
+    const rangeLabels = [
+      ...root.querySelectorAll<HTMLButtonElement>(".history-range-options [data-range]"),
+    ].map((option) => option.textContent?.trim());
     expect(rangeLabels).toEqual(expect.arrayContaining(["Last 12 hours", "Today", "Yesterday"]));
     expect(root.querySelector(".history-shuttle")).toBeNull();
+    expect(root.querySelector(".history-window-selector")).toBeNull();
     const eventOverlay = root.querySelector(".history-events");
     expect(eventOverlay?.tagName).toBe("DIV");
     expect(eventOverlay?.closest("section")).toBe(root.querySelector("#history-transport"));

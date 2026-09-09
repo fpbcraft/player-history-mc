@@ -74,40 +74,70 @@ const HeaderTools = () => (
   </div>
 );
 
+const RangeControl = () => (
+  <div class="history-range">
+    <button
+      type="button"
+      name="range-button"
+      aria-label="Choose history range"
+      aria-expanded="false"
+    >
+      <HistoryIcon name="time" />
+      <span data-control="range-label">Last 3 hours</span>
+      <span aria-hidden="true">⌄</span>
+    </button>
+    <input name="range" type="hidden" value="0.125" />
+    <div class="history-range-popover history-popover" hidden>
+      <div class="history-absolute-range">
+        <strong>Absolute time range</strong>
+        <form class="history-custom-dates">
+          <label>
+            From <input name="date-from" type="datetime-local" step="1" required />
+          </label>
+          <label>
+            To <input name="date-to" type="datetime-local" step="1" required />
+          </label>
+          <button type="submit">Apply time range</button>
+        </form>
+        <form class="history-custom-days">
+          <label>
+            Last
+            <input
+              name="days"
+              aria-label="Number of days"
+              type="number"
+              min="1"
+              max="36500"
+              step="1"
+              value="14"
+              required
+            />
+            days
+          </label>
+          <button type="submit">Apply</button>
+        </form>
+      </div>
+      <div class="history-quick-ranges">
+        <strong>Quick ranges</strong>
+        <div class="history-range-options">
+          {RANGE_OPTIONS.filter(([value]) => value !== "custom" && value !== "dates").map(
+            ([value, label]) => (
+              <button type="button" data-range={value} aria-pressed={value === "0.125"}>
+                {label}
+              </button>
+            ),
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 export const HistoryHeader = () => (
   <>
     <div class="history-heading">
       <span>◷ History</span>
-      <label class="history-range">
-        Range
-        <select name="range" aria-label="History range">
-          {RANGE_OPTIONS.map(([value, label]) => (
-            <option value={value} selected={value === "0.125"}>
-              {label}
-            </option>
-          ))}
-          <option value="selection" hidden>
-            Selected range
-          </option>
-        </select>
-      </label>
-      <form class="history-custom-days" hidden>
-        <label>
-          Last
-          <input
-            name="days"
-            aria-label="Number of days"
-            type="number"
-            min="1"
-            max="36500"
-            step="1"
-            value="14"
-            required
-          />
-          days
-        </label>
-        <button type="submit">Apply</button>
-      </form>
+      <RangeControl />
       <output name="current">—</output>
       <HeaderTools />
       <button type="button" name="compact" aria-label="Expand controls" aria-expanded="false">
@@ -117,14 +147,5 @@ export const HistoryHeader = () => (
         ×
       </button>
     </div>
-    <form class="history-custom-dates" hidden>
-      <label>
-        From <input name="date-from" type="datetime-local" step="1" required />
-      </label>
-      <label>
-        To <input name="date-to" type="datetime-local" step="1" required />
-      </label>
-      <button type="submit">Apply dates</button>
-    </form>
   </>
 );

@@ -14,6 +14,9 @@ export const RANGE_OPTIONS = [
   ["dates", "Custom dates…"],
 ] as const;
 
+export const rangeOptionLabel = (value: string): string =>
+  RANGE_OPTIONS.find(([option]) => option === value)?.[1] ?? "Selected range";
+
 export const calendarRange = (
   value: string,
   now: number,

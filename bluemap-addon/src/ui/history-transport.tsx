@@ -1,6 +1,5 @@
 import { SPEED_OPTIONS } from "../panel-options.js";
 import { HistoryIcon } from "./history-icon.js";
-import { TimeRangeControl } from "./time-range-control.js";
 
 const SpeedControl = () => (
   <div class="history-speed">
@@ -55,7 +54,6 @@ export const HistoryTransport = () => (
       <button type="button" name="back" title="Back five minutes" aria-label="Back five minutes">
         ↶
       </button>
-      <TimeRangeControl />
       <button
         type="button"
         name="forward"

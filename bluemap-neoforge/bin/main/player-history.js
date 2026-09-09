@@ -1814,6 +1814,7 @@ ${payload}` : ""}`;
     heat: "M4 4h5v5H4zM10 4h5v5h-5zM16 4h4v5h-4zM4 10h5v5H4zM10 10h5v5h-5zM16 10h4v5h-4zM4 16h5v4H4zM10 16h5v4h-5zM16 16h4v4h-4z",
     players: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
     speed: "M3 18a10 10 0 1 1 18 0M12 14l5-6M5 18h14",
+    time: "M12 8v5l3 2M21 12a9 9 0 1 1-9-9 9 9 0 0 1 9 9",
     trails: "M5 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4M19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4M7 17c4 0 3-10 8-10h2",
     webchat: "M21 11a8 8 0 0 1-8 8H7l-5 3V11a9 9 0 0 1 19 0Z"
   };
@@ -2131,6 +2132,7 @@ ${payload}` : ""}`;
     ["custom", "Last N days\u2026"],
     ["dates", "Custom dates\u2026"]
   ];
+  var rangeOptionLabel = (value) => RANGE_OPTIONS.find(([option]) => option === value)?.[1] ?? "Selected range";
   var calendarRange = (value, now) => {
     const today = new Date(now);
     today.setHours(0, 0, 0, 0);
@@ -2488,86 +2490,73 @@ ${payload}` : ""}`;
       ] })
     ] })
   ] });
-  var HistoryHeader = () => /* @__PURE__ */ u2(S, { children: [
-    /* @__PURE__ */ u2("div", { class: "history-heading", children: [
-      /* @__PURE__ */ u2("span", { children: "\u25F7 History" }),
-      /* @__PURE__ */ u2("label", { class: "history-range", children: [
-        "Range",
-        /* @__PURE__ */ u2("select", { name: "range", "aria-label": "History range", children: [
-          RANGE_OPTIONS.map(([value, label]) => /* @__PURE__ */ u2("option", { value, selected: value === "0.125", children: label })),
-          /* @__PURE__ */ u2("option", { value: "selection", hidden: true, children: "Selected range" })
+  var RangeControl = () => /* @__PURE__ */ u2("div", { class: "history-range", children: [
+    /* @__PURE__ */ u2(
+      "button",
+      {
+        type: "button",
+        name: "range-button",
+        "aria-label": "Choose history range",
+        "aria-expanded": "false",
+        children: [
+          /* @__PURE__ */ u2(HistoryIcon, { name: "time" }),
+          /* @__PURE__ */ u2("span", { "data-control": "range-label", children: "Last 3 hours" }),
+          /* @__PURE__ */ u2("span", { "aria-hidden": "true", children: "\u2304" })
+        ]
+      }
+    ),
+    /* @__PURE__ */ u2("input", { name: "range", type: "hidden", value: "0.125" }),
+    /* @__PURE__ */ u2("div", { class: "history-range-popover history-popover", hidden: true, children: [
+      /* @__PURE__ */ u2("div", { class: "history-absolute-range", children: [
+        /* @__PURE__ */ u2("strong", { children: "Absolute time range" }),
+        /* @__PURE__ */ u2("form", { class: "history-custom-dates", children: [
+          /* @__PURE__ */ u2("label", { children: [
+            "From ",
+            /* @__PURE__ */ u2("input", { name: "date-from", type: "datetime-local", step: "1", required: true })
+          ] }),
+          /* @__PURE__ */ u2("label", { children: [
+            "To ",
+            /* @__PURE__ */ u2("input", { name: "date-to", type: "datetime-local", step: "1", required: true })
+          ] }),
+          /* @__PURE__ */ u2("button", { type: "submit", children: "Apply time range" })
+        ] }),
+        /* @__PURE__ */ u2("form", { class: "history-custom-days", children: [
+          /* @__PURE__ */ u2("label", { children: [
+            "Last",
+            /* @__PURE__ */ u2(
+              "input",
+              {
+                name: "days",
+                "aria-label": "Number of days",
+                type: "number",
+                min: "1",
+                max: "36500",
+                step: "1",
+                value: "14",
+                required: true
+              }
+            ),
+            "days"
+          ] }),
+          /* @__PURE__ */ u2("button", { type: "submit", children: "Apply" })
         ] })
       ] }),
-      /* @__PURE__ */ u2("form", { class: "history-custom-days", hidden: true, children: [
-        /* @__PURE__ */ u2("label", { children: [
-          "Last",
-          /* @__PURE__ */ u2(
-            "input",
-            {
-              name: "days",
-              "aria-label": "Number of days",
-              type: "number",
-              min: "1",
-              max: "36500",
-              step: "1",
-              value: "14",
-              required: true
-            }
-          ),
-          "days"
-        ] }),
-        /* @__PURE__ */ u2("button", { type: "submit", children: "Apply" })
-      ] }),
-      /* @__PURE__ */ u2("output", { name: "current", children: "\u2014" }),
-      /* @__PURE__ */ u2(HeaderTools, {}),
-      /* @__PURE__ */ u2("button", { type: "button", name: "compact", "aria-label": "Expand controls", "aria-expanded": "false", children: "\u2303" }),
-      /* @__PURE__ */ u2("button", { type: "button", name: "close", "aria-label": "Close history", children: "\xD7" })
-    ] }),
-    /* @__PURE__ */ u2("form", { class: "history-custom-dates", hidden: true, children: [
-      /* @__PURE__ */ u2("label", { children: [
-        "From ",
-        /* @__PURE__ */ u2("input", { name: "date-from", type: "datetime-local", step: "1", required: true })
-      ] }),
-      /* @__PURE__ */ u2("label", { children: [
-        "To ",
-        /* @__PURE__ */ u2("input", { name: "date-to", type: "datetime-local", step: "1", required: true })
-      ] }),
-      /* @__PURE__ */ u2("button", { type: "submit", children: "Apply dates" })
+      /* @__PURE__ */ u2("div", { class: "history-quick-ranges", children: [
+        /* @__PURE__ */ u2("strong", { children: "Quick ranges" }),
+        /* @__PURE__ */ u2("div", { class: "history-range-options", children: RANGE_OPTIONS.filter(([value]) => value !== "custom" && value !== "dates").map(
+          ([value, label]) => /* @__PURE__ */ u2("button", { type: "button", "data-range": value, "aria-pressed": value === "0.125", children: label })
+        ) })
+      ] })
     ] })
   ] });
-
-  // src/ui/time-range-control.tsx
-  var TimeRangeControl = () => /* @__PURE__ */ u2("div", { class: "history-window-selector", "data-control": "range-window", children: [
-    /* @__PURE__ */ u2("div", { class: "history-window-track", "aria-hidden": "true", children: /* @__PURE__ */ u2("i", {}) }),
-    /* @__PURE__ */ u2(
-      "input",
-      {
-        name: "range-start",
-        type: "range",
-        min: "0",
-        max: "1",
-        step: "1",
-        value: "0",
-        "aria-label": "Replay range start"
-      }
-    ),
-    /* @__PURE__ */ u2(
-      "input",
-      {
-        name: "range-end",
-        type: "range",
-        min: "0",
-        max: "1",
-        step: "1",
-        value: "1",
-        "aria-label": "Replay range end"
-      }
-    ),
-    /* @__PURE__ */ u2("div", { class: "history-window-labels", children: [
-      /* @__PURE__ */ u2("output", { name: "range-start-label", children: "\u2014" }),
-      /* @__PURE__ */ u2("output", { name: "range-end-label", children: "\u2014" })
-    ] })
-  ] });
+  var HistoryHeader = () => /* @__PURE__ */ u2(S, { children: /* @__PURE__ */ u2("div", { class: "history-heading", children: [
+    /* @__PURE__ */ u2("span", { children: "\u25F7 History" }),
+    /* @__PURE__ */ u2(RangeControl, {}),
+    /* @__PURE__ */ u2("output", { name: "current", children: "\u2014" }),
+    /* @__PURE__ */ u2(HeaderTools, {}),
+    /* @__PURE__ */ u2("button", { type: "button", name: "compact", "aria-label": "Expand controls", "aria-expanded": "false", children: "\u2303" }),
+    /* @__PURE__ */ u2("button", { type: "button", name: "close", "aria-label": "Close history", children: "\xD7" })
+  ] }) });
 
   // src/ui/history-transport.tsx
   var SpeedControl = () => /* @__PURE__ */ u2("div", { class: "history-speed", children: [
@@ -2622,7 +2611,6 @@ ${payload}` : ""}`;
     /* @__PURE__ */ u2("div", { class: "history-density-status", hidden: true, role: "status", children: "Recording density \xB7 all players \xB7 1-minute resolution" }),
     /* @__PURE__ */ u2("div", { class: "history-controls", children: [
       /* @__PURE__ */ u2("button", { type: "button", name: "back", title: "Back five minutes", "aria-label": "Back five minutes", children: "\u21B6" }),
-      /* @__PURE__ */ u2(TimeRangeControl, {}),
       /* @__PURE__ */ u2(
         "button",
         {
@@ -2729,7 +2717,6 @@ ${payload}` : ""}`;
     filterRevision = 0;
     healthToken = {};
     trailMode = 6e4;
-    rangeDomain = null;
     get compact() {
       return this.panelState.compact;
     }
@@ -2809,7 +2796,6 @@ ${payload}` : ""}`;
       this.registryRevision = 0;
       this.selectionRevision = 0;
       this.filterRevision = 0;
-      this.rangeDomain = null;
       this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       mountReplayPanelView(this);
       this.controls = new PanelControls(this);
@@ -2824,7 +2810,7 @@ ${payload}` : ""}`;
       this.require("#history-players").setAttribute("popover", "manual");
       this.clock = new ReplayClock();
       const savedRange = preferences.range();
-      if (savedRange && savedRange !== "dates" && [...this.q("range").options].some((option) => option.value === savedRange))
+      if (savedRange && savedRange !== "dates" && RANGE_OPTIONS.some(([value]) => value === savedRange))
         this.q("range").value = savedRange;
       const savedDays = preferences.days();
       if (savedDays !== null && Number.isInteger(savedDays) && savedDays > 0 && savedDays <= 36500)
@@ -2992,29 +2978,37 @@ ${payload}` : ""}`;
           };
         });
       }
-      this.q("range").onchange = () => {
-        const custom = this.q("range").value === "custom";
-        const dates = this.q("range").value === "dates";
-        this.require(".history-custom-dates").hidden = !dates;
-        if (dates) {
-          const local = (t2) => new Date(t2 - new Date(t2).getTimezoneOffset() * 6e4).toISOString().slice(0, 19);
+      const rangeMenu = this.require(".history-range-popover");
+      rangeMenu.setAttribute("popover", "manual");
+      this.q("range-button").onclick = () => {
+        const open = rangeMenu.hidden;
+        this.closeChoices();
+        if (open) {
+          const local = (time) => new Date(time - new Date(time).getTimezoneOffset() * 6e4).toISOString().slice(0, 19);
           if (this.manifest) {
             this.q("date-from").value = local(this.clock.from);
             this.q("date-to").value = local(this.clock.to);
           }
-          this.q("date-from").focus();
+          this.showMenu(rangeMenu, this.q("range-button"), true);
         }
-        this.require(".history-custom-days").hidden = !custom;
-        if (custom) this.q("days").focus();
-        else if (!dates) this.changeRange();
       };
+      rangeMenu.querySelectorAll("[data-range]").forEach((button) => {
+        button.onclick = () => {
+          this.q("range").value = button.dataset.range ?? "0.125";
+          this.closeChoices();
+          void this.changeRange();
+        };
+      });
       this.require(".history-custom-days").onsubmit = (event) => {
         event.preventDefault();
-        this.changeRange();
+        this.q("range").value = "custom";
+        this.closeChoices();
+        void this.changeRange();
       };
       this.require(".history-custom-dates").onsubmit = (event) => {
         event.preventDefault();
-        this.changeRange();
+        this.q("range").value = "dates";
+        void this.changeRange().then(() => this.closeChoices());
       };
       this.q("back").onclick = () => this.seek(this.clock.time - 3e5);
       this.q("forward").onclick = () => this.seek(this.clock.time + 3e5);
@@ -3062,11 +3056,6 @@ ${payload}` : ""}`;
         },
         { passive: false }
       );
-      for (const name of ["range-start", "range-end"]) {
-        const input = this.q(name);
-        input.oninput = () => this.selectTimelineRange(name, false);
-        input.onchange = () => this.selectTimelineRange(name, true);
-      }
       this.q("players").onclick = () => this.togglePlayers();
       this.q("all").onclick = () => {
         this.selection = new Set(this.names.keys());
@@ -3112,6 +3101,13 @@ ${payload}` : ""}`;
               this.q(`${kind}-button`).setAttribute("aria-expanded", "false");
             }
           }
+          if (!this.require(".history-range").contains(
+            event.target instanceof Node ? event.target : null
+          )) {
+            rangeMenu.hidePopover?.();
+            rangeMenu.hidden = true;
+            this.q("range-button").setAttribute("aria-expanded", "false");
+          }
         },
         { signal: this.lifecycle.signal }
       );
@@ -3152,6 +3148,10 @@ ${payload}` : ""}`;
         menu.hidden = true;
         this.q(`${kind}-button`).setAttribute("aria-expanded", "false");
       }
+      const rangeMenu = this.require(".history-range-popover");
+      rangeMenu.hidePopover?.();
+      rangeMenu.hidden = true;
+      this.q("range-button").setAttribute("aria-expanded", "false");
     }
     async pollChat() {
       if (this.chatLoading) return;
@@ -3216,7 +3216,6 @@ ${payload}` : ""}`;
         this.clock.customRange = null;
         const savedRange = preferences.range() || "0.125";
         this.q("range").value = ["dates", "yesterday"].includes(savedRange) ? "0.125" : savedRange;
-        this.require(".history-custom-dates").hidden = true;
       }
       if (this.manifest) {
         const latest = Math.max(this.manifest.latestTimestamp, Date.now());
@@ -3224,7 +3223,6 @@ ${payload}` : ""}`;
         if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
         this.clock.refresh(this.manifest.earliestTimestamp, latest, true);
         this.clock.seek(this.clock.to);
-        this.rangeDomain = { from: this.clock.from, to: this.clock.to };
       }
       this.sync();
       this.render();
@@ -3308,8 +3306,6 @@ ${payload}` : ""}`;
         const calendar = calendarRange(this.q("range").value, latest);
         if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
         this.clock.refresh(m2.earliestTimestamp, latest, reset);
-        if (this.q("range").value !== "selection")
-          this.rangeDomain = { from: this.clock.from, to: this.clock.to };
         this.renderPlayers();
         if (changed) await this.reloadRange();
         else this.loadActivity();
@@ -3325,28 +3321,6 @@ ${payload}` : ""}`;
     report(error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
         this.statusCoordinator.show("error", errorMessage(error));
-    }
-    selectTimelineRange(source, commit) {
-      if (!this.manifest) return;
-      const startInput = this.q("range-start");
-      const endInput = this.q("range-end");
-      const minimum = Number(startInput.min);
-      const maximum = Number(startInput.max);
-      const step = Math.min(Number(startInput.step), Math.max(1, maximum - minimum));
-      let from = Number(startInput.value);
-      let to = Number(endInput.value);
-      if (source === "range-start") from = Math.min(from, to - step);
-      else to = Math.max(to, from + step);
-      from = clamp(from, minimum, maximum - step);
-      to = clamp(to, minimum + step, maximum);
-      this.clock.customRange = { from, to };
-      this.clock.refresh(minimum, maximum);
-      this.isLive = false;
-      this.q("range").value = "selection";
-      this.require(".history-custom-days").hidden = true;
-      this.require(".history-custom-dates").hidden = true;
-      this.sync();
-      if (commit) void this.reloadRange();
     }
     async changeRange() {
       const choice = this.q("range").value;
@@ -3377,7 +3351,6 @@ ${payload}` : ""}`;
         this.manifest.earliestTimestamp,
         Math.max(this.manifest.latestTimestamp, Date.now())
       );
-      this.rangeDomain = { from: this.clock.from, to: this.clock.to };
       this.sync();
       await this.reloadRange();
     }
@@ -3450,34 +3423,18 @@ ${payload}` : ""}`;
         this.q("current").textContent = formatDate(c2.time);
         this.q("latest").disabled = this.isLive;
         this.q("latest").setAttribute("aria-pressed", String(this.isLive));
-        const rangeMinimum = Math.min(this.rangeDomain?.from ?? c2.from, c2.from);
-        const rangeMaximum = Math.max(this.rangeDomain?.to ?? c2.to, c2.to);
-        const rangeSpan = Math.max(1, rangeMaximum - rangeMinimum);
-        const rangeStep = Math.min(6e4, rangeSpan);
-        const rangeStart = this.q("range-start");
-        const rangeEnd = this.q("range-end");
-        for (const input of [rangeStart, rangeEnd]) {
-          input.min = String(rangeMinimum);
-          input.max = String(rangeMaximum);
-          input.step = String(rangeStep);
-        }
-        rangeStart.value = String(c2.from);
-        rangeEnd.value = String(c2.to);
-        rangeStart.setAttribute("aria-valuetext", formatDate(c2.from));
-        rangeEnd.setAttribute("aria-valuetext", formatDate(c2.to));
-        this.q("range-start-label").textContent = formatDate(c2.from, false);
-        this.q("range-end-label").textContent = formatDate(c2.to, false);
-        const selector = this.q("range-window");
-        selector.style.setProperty(
-          "--range-start",
-          `${(c2.from - rangeMinimum) / rangeSpan * 100}%`
-        );
-        selector.style.setProperty("--range-end", `${(c2.to - rangeMinimum) / rangeSpan * 100}%`);
         const tooltip = this.require(".history-tooltip");
         tooltip.hidden = !this.scrubbing;
         tooltip.textContent = formatDate(c2.time);
         tooltip.style.left = `${clamp((c2.time - c2.from) / Math.max(1, c2.to - c2.from) * 100, 14, 86)}%`;
       }
+      const rangeLabel = rangeOptionLabel(this.q("range").value);
+      this.q("range-label").textContent = rangeLabel;
+      this.q("range-button").title = `History range: ${rangeLabel}`;
+      this.q("range-button").setAttribute("aria-label", `Choose history range \xB7 ${rangeLabel}`);
+      this.require(".history-range-options").querySelectorAll("[data-range]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.range === this.q("range").value));
+      });
       this.q("play").textContent = c2.isPlaying ? "\u2161" : "\u25B6";
       this.q("play").setAttribute("aria-label", c2.isPlaying ? "Pause replay" : "Play replay");
       const playerCount = this.selection.size;

@@ -20,12 +20,9 @@ export interface ReplayControls {
   play: HTMLButtonElement;
   "player-count": HTMLSpanElement;
   players: HTMLButtonElement;
-  range: HTMLSelectElement;
-  "range-end": HTMLInputElement;
-  "range-end-label": HTMLOutputElement;
-  "range-start": HTMLInputElement;
-  "range-start-label": HTMLOutputElement;
-  "range-window": HTMLDivElement;
+  range: HTMLInputElement;
+  "range-button": HTMLButtonElement;
+  "range-label": HTMLSpanElement;
   speed: HTMLInputElement;
   "speed-button": HTMLButtonElement;
   start: HTMLSpanElement;

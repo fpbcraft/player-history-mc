@@ -8,6 +8,8 @@ import {
   calendarRange,
   DEFAULT_DISABLED_EVENTS,
   KNOWN_EVENT_TYPES,
+  RANGE_OPTIONS,
+  rangeOptionLabel,
   SPEED_OPTIONS,
   TRAIL_OPTIONS,
   trailDurationLabel,
@@ -88,7 +90,6 @@ export class ReplayPanel extends HTMLElement {
   private filterRevision = 0;
   private healthToken: object = {};
   private trailMode = 60_000;
-  private rangeDomain: { from: number; to: number } | null = null;
 
   private get compact(): boolean {
     return this.panelState.compact;
@@ -191,7 +192,6 @@ export class ReplayPanel extends HTMLElement {
     this.registryRevision = 0;
     this.selectionRevision = 0;
     this.filterRevision = 0;
-    this.rangeDomain = null;
     this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
     mountReplayPanelView(this);
     this.controls = new PanelControls(this);
@@ -210,7 +210,7 @@ export class ReplayPanel extends HTMLElement {
     if (
       savedRange &&
       savedRange !== "dates" &&
-      [...this.q("range").options].some((option) => option.value === savedRange)
+      RANGE_OPTIONS.some(([value]) => value === savedRange)
     )
       this.q("range").value = savedRange;
     const savedDays = preferences.days();
@@ -379,30 +379,38 @@ export class ReplayPanel extends HTMLElement {
         };
       });
     }
-    this.q("range").onchange = () => {
-      const custom = this.q("range").value === "custom";
-      const dates = this.q("range").value === "dates";
-      this.require<HTMLElement>(".history-custom-dates").hidden = !dates;
-      if (dates) {
-        const local = (t: number) =>
-          new Date(t - new Date(t).getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+    const rangeMenu = this.require<HTMLElement>(".history-range-popover");
+    rangeMenu.setAttribute("popover", "manual");
+    this.q("range-button").onclick = () => {
+      const open = rangeMenu.hidden;
+      this.closeChoices();
+      if (open) {
+        const local = (time: number) =>
+          new Date(time - new Date(time).getTimezoneOffset() * 60000).toISOString().slice(0, 19);
         if (this.manifest) {
           this.q("date-from").value = local(this.clock.from);
           this.q("date-to").value = local(this.clock.to);
         }
-        this.q("date-from").focus();
+        this.showMenu(rangeMenu, this.q("range-button"), true);
       }
-      this.require<HTMLElement>(".history-custom-days").hidden = !custom;
-      if (custom) this.q("days").focus();
-      else if (!dates) this.changeRange();
     };
+    rangeMenu.querySelectorAll<HTMLButtonElement>("[data-range]").forEach((button) => {
+      button.onclick = () => {
+        this.q("range").value = button.dataset.range ?? "0.125";
+        this.closeChoices();
+        void this.changeRange();
+      };
+    });
     this.require<HTMLFormElement>(".history-custom-days").onsubmit = (event) => {
       event.preventDefault();
-      this.changeRange();
+      this.q("range").value = "custom";
+      this.closeChoices();
+      void this.changeRange();
     };
     this.require<HTMLFormElement>(".history-custom-dates").onsubmit = (event) => {
       event.preventDefault();
-      this.changeRange();
+      this.q("range").value = "dates";
+      void this.changeRange().then(() => this.closeChoices());
     };
     this.q("back").onclick = () => this.seek(this.clock.time - 300000);
     this.q("forward").onclick = () => this.seek(this.clock.time + 300000);
@@ -454,11 +462,6 @@ export class ReplayPanel extends HTMLElement {
       },
       { passive: false },
     );
-    for (const name of ["range-start", "range-end"] as const) {
-      const input = this.q(name);
-      input.oninput = () => this.selectTimelineRange(name, false);
-      input.onchange = () => this.selectTimelineRange(name, true);
-    }
     this.q("players").onclick = () => this.togglePlayers();
     this.q("all").onclick = () => {
       this.selection = new Set(this.names.keys());
@@ -511,6 +514,15 @@ export class ReplayPanel extends HTMLElement {
             this.q(`${kind}-button`).setAttribute("aria-expanded", "false");
           }
         }
+        if (
+          !this.require<HTMLElement>(".history-range").contains(
+            event.target instanceof Node ? event.target : null,
+          )
+        ) {
+          rangeMenu.hidePopover?.();
+          rangeMenu.hidden = true;
+          this.q("range-button").setAttribute("aria-expanded", "false");
+        }
       },
       { signal: this.lifecycle.signal },
     );
@@ -551,6 +563,10 @@ export class ReplayPanel extends HTMLElement {
       menu.hidden = true;
       this.q(`${kind}-button`).setAttribute("aria-expanded", "false");
     }
+    const rangeMenu = this.require<HTMLElement>(".history-range-popover");
+    rangeMenu.hidePopover?.();
+    rangeMenu.hidden = true;
+    this.q("range-button").setAttribute("aria-expanded", "false");
   }
   private async pollChat(): Promise<void> {
     if (this.chatLoading) return;
@@ -615,7 +631,6 @@ export class ReplayPanel extends HTMLElement {
       this.clock.customRange = null;
       const savedRange = preferences.range() || "0.125";
       this.q("range").value = ["dates", "yesterday"].includes(savedRange) ? "0.125" : savedRange;
-      this.require<HTMLElement>(".history-custom-dates").hidden = true;
     }
     if (this.manifest) {
       const latest = Math.max(this.manifest.latestTimestamp, Date.now());
@@ -623,7 +638,6 @@ export class ReplayPanel extends HTMLElement {
       if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
       this.clock.refresh(this.manifest.earliestTimestamp, latest, true);
       this.clock.seek(this.clock.to);
-      this.rangeDomain = { from: this.clock.from, to: this.clock.to };
     }
     this.sync();
     this.render();
@@ -713,8 +727,6 @@ export class ReplayPanel extends HTMLElement {
       const calendar = calendarRange(this.q("range").value, latest);
       if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
       this.clock.refresh(m.earliestTimestamp, latest, reset);
-      if (this.q("range").value !== "selection")
-        this.rangeDomain = { from: this.clock.from, to: this.clock.to };
       this.renderPlayers();
       if (changed) await this.reloadRange();
       else this.loadActivity();
@@ -730,28 +742,6 @@ export class ReplayPanel extends HTMLElement {
   report(error: unknown): void {
     if (!(error instanceof DOMException && error.name === "AbortError"))
       this.statusCoordinator.show("error", errorMessage(error));
-  }
-  private selectTimelineRange(source: "range-start" | "range-end", commit: boolean): void {
-    if (!this.manifest) return;
-    const startInput = this.q("range-start");
-    const endInput = this.q("range-end");
-    const minimum = Number(startInput.min);
-    const maximum = Number(startInput.max);
-    const step = Math.min(Number(startInput.step), Math.max(1, maximum - minimum));
-    let from = Number(startInput.value);
-    let to = Number(endInput.value);
-    if (source === "range-start") from = Math.min(from, to - step);
-    else to = Math.max(to, from + step);
-    from = clamp(from, minimum, maximum - step);
-    to = clamp(to, minimum + step, maximum);
-    this.clock.customRange = { from, to };
-    this.clock.refresh(minimum, maximum);
-    this.isLive = false;
-    this.q("range").value = "selection";
-    this.require<HTMLElement>(".history-custom-days").hidden = true;
-    this.require<HTMLElement>(".history-custom-dates").hidden = true;
-    this.sync();
-    if (commit) void this.reloadRange();
   }
   async changeRange() {
     const choice = this.q("range").value;
@@ -786,7 +776,6 @@ export class ReplayPanel extends HTMLElement {
       this.manifest.earliestTimestamp,
       Math.max(this.manifest.latestTimestamp, Date.now()),
     );
-    this.rangeDomain = { from: this.clock.from, to: this.clock.to };
     this.sync();
     await this.reloadRange();
   }
@@ -872,34 +861,20 @@ export class ReplayPanel extends HTMLElement {
       this.q("current").textContent = formatDate(c.time);
       this.q("latest").disabled = this.isLive;
       this.q("latest").setAttribute("aria-pressed", String(this.isLive));
-      const rangeMinimum = Math.min(this.rangeDomain?.from ?? c.from, c.from);
-      const rangeMaximum = Math.max(this.rangeDomain?.to ?? c.to, c.to);
-      const rangeSpan = Math.max(1, rangeMaximum - rangeMinimum);
-      const rangeStep = Math.min(60_000, rangeSpan);
-      const rangeStart = this.q("range-start");
-      const rangeEnd = this.q("range-end");
-      for (const input of [rangeStart, rangeEnd]) {
-        input.min = String(rangeMinimum);
-        input.max = String(rangeMaximum);
-        input.step = String(rangeStep);
-      }
-      rangeStart.value = String(c.from);
-      rangeEnd.value = String(c.to);
-      rangeStart.setAttribute("aria-valuetext", formatDate(c.from));
-      rangeEnd.setAttribute("aria-valuetext", formatDate(c.to));
-      this.q("range-start-label").textContent = formatDate(c.from, false);
-      this.q("range-end-label").textContent = formatDate(c.to, false);
-      const selector = this.q("range-window");
-      selector.style.setProperty(
-        "--range-start",
-        `${((c.from - rangeMinimum) / rangeSpan) * 100}%`,
-      );
-      selector.style.setProperty("--range-end", `${((c.to - rangeMinimum) / rangeSpan) * 100}%`);
       const tooltip = this.require<HTMLElement>(".history-tooltip");
       tooltip.hidden = !this.scrubbing;
       tooltip.textContent = formatDate(c.time);
       tooltip.style.left = `${clamp(((c.time - c.from) / Math.max(1, c.to - c.from)) * 100, 14, 86)}%`;
     }
+    const rangeLabel = rangeOptionLabel(this.q("range").value);
+    this.q("range-label").textContent = rangeLabel;
+    this.q("range-button").title = `History range: ${rangeLabel}`;
+    this.q("range-button").setAttribute("aria-label", `Choose history range · ${rangeLabel}`);
+    this.require<HTMLElement>(".history-range-options")
+      .querySelectorAll<HTMLButtonElement>("[data-range]")
+      .forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.range === this.q("range").value));
+      });
     // Keep the visual control identical at every breakpoint; the accessible
     // label carries the full action name.
     this.q("play").textContent = c.isPlaying ? "Ⅱ" : "▶";
