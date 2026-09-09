@@ -639,7 +639,7 @@ bluemap-player-replay .history-chat {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
-bluemap-player-replay .history-chat > div {
+bluemap-player-replay .history-chat > .history-chat-row {
   display: grid;
   grid-template-columns: 8.5rem 20px minmax(0, 1fr);
   align-items: start;
@@ -647,10 +647,15 @@ bluemap-player-replay .history-chat > div {
   padding: 3px 4px;
   border-radius: 4px;
   cursor: pointer;
+  width: 100%;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
-bluemap-player-replay .history-chat > div:hover,
-bluemap-player-replay .history-chat > div:focus-visible {
+bluemap-player-replay .history-chat > .history-chat-row:hover,
+bluemap-player-replay .history-chat > .history-chat-row:focus-visible {
   background: #ffffff10;
 }
 bluemap-player-replay .history-chat-head {

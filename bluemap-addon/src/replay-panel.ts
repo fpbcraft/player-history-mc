@@ -1,4 +1,4 @@
-import { BlueMapAdapter, eventColor, playerColor } from "./bluemap-adapter.js";
+import { BlueMapAdapter } from "./bluemap-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
@@ -22,21 +22,19 @@ import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-st
 import {
   addActivityBins,
   clamp,
-  clusterTimelineEvents,
   combineProductionEvents,
   ReplayClock,
   visibleEvents,
 } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
-import { chatMessage, describeState, TelemetryCache } from "./telemetry.js";
-import type {
-  HistoryEvent,
-  HistoryManifest,
-  HistoryPoint,
-  IntegrationMapping,
-  JsonObject,
-} from "./types.js";
+import { describeState, TelemetryCache } from "./telemetry.js";
+import type { HistoryEvent, HistoryManifest, HistoryPoint, IntegrationMapping } from "./types.js";
+import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
+import { renderEventFilter } from "./ui/event-filter-view.js";
+import { renderHistoryEvents } from "./ui/history-events-view.js";
+import { renderPlayerFilter } from "./ui/player-filter-view.js";
 import { mountReplayPanelView, unmountReplayPanelView } from "./ui/replay-panel-view.js";
+import { renderWebChatFeed } from "./ui/webchat-feed-view.js";
 
 declare global {
   interface Window {
@@ -104,7 +102,10 @@ export class ReplayPanel extends HTMLElement {
   private heatKey: string | null = null;
   private healthKey: string | null = null;
   private timelineEventKey: string | null = null;
-  private chatFeedKey: string | undefined;
+  private eventRevision = 0;
+  private registryRevision = 0;
+  private selectionRevision = 0;
+  private filterRevision = 0;
   private healthToken: object = {};
   private trailMode = 60_000;
   private releaseShuttle: () => void = () => {};
@@ -206,6 +207,10 @@ export class ReplayPanel extends HTMLElement {
     this.lifecycle = new PanelLifecycle();
     this.requests = new RequestCoordinator();
     this.panelState = createReplayPanelState();
+    this.eventRevision = 0;
+    this.registryRevision = 0;
+    this.selectionRevision = 0;
+    this.filterRevision = 0;
     mountReplayPanelView(this);
     this.controls = new PanelControls(this);
     const eventControl = this.require<HTMLDetailsElement>(".history-event-control");
@@ -511,6 +516,7 @@ export class ReplayPanel extends HTMLElement {
     this.q("players").onclick = () => this.togglePlayers();
     this.q("all").onclick = () => {
       this.selection = new Set(this.names.keys());
+      this.selectionRevision++;
       preferences.savePlayers(this.selection);
       this.hasSavedSelection = true;
       this.renderPlayers();
@@ -619,17 +625,9 @@ export class ReplayPanel extends HTMLElement {
       if (session.linked) this.q("chat-status").textContent = `Connected as ${session.name}`;
       const data = await this.chatClient.feed();
       const feed = this.require<HTMLElement>(".history-webchat-feed");
-      const key = JSON.stringify(data.messages);
-      if (key !== this.chatFeedKey) {
-        this.chatFeedKey = key;
-        feed.replaceChildren();
-        for (const message of data.messages || []) {
-          const row = document.createElement("div");
-          row.textContent = `${message.web ? "[Web] " : ""}${message.name}: ${message.message}`;
-          feed.append(row);
-        }
-        feed.scrollTop = feed.scrollHeight;
-      }
+      const shouldFollow = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 20;
+      renderWebChatFeed(feed, data.messages);
+      if (shouldFollow) feed.scrollTop = feed.scrollHeight;
     } catch (error) {
       this.q("chat-status").textContent = errorMessage(error);
     } finally {
@@ -714,25 +712,19 @@ export class ReplayPanel extends HTMLElement {
   }
   renderPlayers() {
     const list = this.require<HTMLElement>(".history-player-list");
-    list.replaceChildren();
-    for (const [id, name] of this.names) {
-      const label = document.createElement("label"),
-        input = document.createElement("input");
-      input.type = "checkbox";
-      input.checked = this.selection.has(id);
-      input.onchange = () => {
-        input.checked ? this.selection.add(id) : this.selection.delete(id);
+    renderPlayerFilter(list, {
+      names: this.names,
+      selected: this.selection,
+      onChange: (id, selected) => {
+        if (selected) this.selection.add(id);
+        else this.selection.delete(id);
+        this.selectionRevision++;
         preferences.savePlayers(this.selection);
         this.hasSavedSelection = true;
         this.sync();
         this.updateOverlays();
-      };
-      const swatch = document.createElement("i");
-      swatch.className = "history-player-color";
-      swatch.style.background = playerColor(id);
-      label.append(input, swatch, document.createTextNode(name));
-      list.append(label);
-    }
+      },
+    });
     this.sync();
   }
   async refresh(reset = false) {
@@ -771,6 +763,8 @@ export class ReplayPanel extends HTMLElement {
       }
       this.names = new Map(m.registry.players.map((player) => [player.id, player.name]));
       this.selection = new Set([...this.selection].filter((id) => this.names.has(id)));
+      this.registryRevision++;
+      this.selectionRevision++;
       this.clock.refresh(m.earliestTimestamp, Math.max(m.latestTimestamp, Date.now()), reset);
       this.renderPlayers();
       if (changed) await this.reloadRange();
@@ -843,16 +837,7 @@ export class ReplayPanel extends HTMLElement {
       }
       if (controller.signal.aborted || !this.opened) return;
       const max = Math.max(0, ...bins);
-      for (let i = 0; i < bins.length; i++) {
-        const bar = document.createElement("span");
-        bar.style.height = (bins[i] ?? 0) > 0 ? `max(2px, ${((bins[i] ?? 0) / max) * 100}%)` : "0";
-        bar.title =
-          formatDate(from + ((to - from) * i) / count) +
-          " · " +
-          Math.round(bins[i] ?? 0).toLocaleString() +
-          " recorded samples (approx.)";
-        chart.append(bar);
-      }
+      renderActivityHistogram(chart, { bins, from, to, formatTime: formatDate });
       const total = Math.round(bins.reduce((a, b) => a + b, 0));
       caption.textContent =
         this.manifest.activityReady === false
@@ -971,6 +956,7 @@ export class ReplayPanel extends HTMLElement {
       if (bucket !== Math.floor(this.clock.time / this.cache.duration)) return;
       this.engine.setPoints(data.points);
       this.events = data.events;
+      this.eventRevision++;
       this.loadedBucket = bucket;
       this.status.textContent = data.points.length
         ? this.isLive
@@ -1043,10 +1029,9 @@ export class ReplayPanel extends HTMLElement {
               .map((point) => ({ ...point, time: this.clock.time }))
           : [];
       this.adapter.setPlayers(positions, this.names);
-      const healthKey = JSON.stringify([
-        Math.floor(this.clock.time / 1000),
-        positions.map((position) => position.player),
-      ]);
+      const healthKey = `${Math.floor(this.clock.time / 1000)}:${positions
+        .map((position) => position.player)
+        .join(",")}`;
       if (healthKey !== this.healthKey) {
         this.healthKey = healthKey;
         const token = {};
@@ -1080,12 +1065,12 @@ export class ReplayPanel extends HTMLElement {
       world = this.world();
     const full = this.trailMode === Infinity;
     const start = full ? from : Math.max(from, time - this.trailMode);
-    const dataKey = JSON.stringify([
+    const dataKey = [
       String(this.trailMode),
       this.isLive ? Math.floor(from / this.cache.duration) : from,
       this.isLive ? Math.floor(to / this.cache.duration) : to,
-      full ? null : Math.floor(time / this.cache.duration),
-    ]);
+      full ? "full" : Math.floor(time / this.cache.duration),
+    ].join(":");
     if (this.trailDataKey !== dataKey && !this.requests.pending("trails")) this.loadTrails(dataKey);
     const historyEngine = this.trailDataKey === dataKey ? this.fullTrails : null;
     const engine = this.isLive
@@ -1096,15 +1081,15 @@ export class ReplayPanel extends HTMLElement {
           ]),
         )
       : historyEngine;
-    const trailKey = JSON.stringify([
+    const trailKey = [
       dataKey,
       start,
       full ? to : time,
-      [...this.selection],
+      this.selectionRevision,
       world,
       !!engine,
-      [...this.names],
-    ]);
+      this.registryRevision,
+    ].join(":");
     if (trailKey !== this.trailKey) {
       this.trailKey = trailKey;
       this.adapter.setTrails(
@@ -1138,7 +1123,15 @@ export class ReplayPanel extends HTMLElement {
       trailMode: this.trailMode,
       disabled: this.disabledEvents,
     }).slice(-500);
-    const eventKey = JSON.stringify([events, world, from, to, [...this.names]]);
+    const eventKey = [
+      this.eventRevision,
+      this.filterRevision,
+      this.selectionRevision,
+      world,
+      from,
+      to,
+      this.registryRevision,
+    ].join(":");
     if (this.eventKey !== eventKey) {
       this.eventKey = eventKey;
       this.adapter.setEvents(
@@ -1151,112 +1144,30 @@ export class ReplayPanel extends HTMLElement {
     const chatEvents = selectedTimelineEvents
       .filter((event) => ["CHAT", "JOIN", "QUIT", "DEATH"].includes(event.type))
       .slice(-1000);
-    const timelineEventKey = JSON.stringify([chatEvents, from, to, [...this.names]]);
+    const timelineEventKey = `${this.eventRevision}:${this.registryRevision}:${from}:${to}`;
     if (this.timelineEventKey !== timelineEventKey) {
       this.timelineEventKey = timelineEventKey;
       const chat = this.require<HTMLElement>(".history-chat");
       const follow = this.chatPinned;
-      chat.replaceChildren();
-      for (const event of chatEvents) {
-        const row = document.createElement("div");
-        let payload: JsonObject = {};
-        try {
-          const parsed: unknown =
-            typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-            payload = parsed as JsonObject;
-        } catch {
-          continue;
-        }
-        const time = document.createElement("button");
-        time.type = "button";
-        time.className = "history-chat-time";
-        time.title = "Go to this message";
-        time.textContent = formatDate(event.point.time);
-        time.onclick = (click) => {
-          click.stopPropagation();
-          this.goToEvent(event);
-        };
-        const head = document.createElement("img");
-        head.className = "history-chat-head";
-        head.alt = "";
-        const player = this.manifest.registry.players.find(
-          (player) => player.id === event.point.player,
-        );
-        const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
-        if (player?.uuid && mapRoot) head.src = `${mapRoot}/assets/playerheads/${player.uuid}.png`;
-        else head.hidden = true;
-        head.onerror = () => {
-          head.hidden = true;
-        };
-        const message = document.createElement("span");
-        const name = this.names.get(event.point.player) || "Player";
-        if (event.type !== "CHAT")
-          row.classList.add("history-chat-system", `history-chat-${event.type.toLowerCase()}`);
-        message.textContent = chatMessage(event.type, name, payload);
-        row.append(time, head, message);
-        row.tabIndex = 0;
-        row.setAttribute("role", "button");
-        row.title = "Show this message on the map";
-        row.onclick = () => this.goToEvent(event);
-        row.onkeydown = (key) => {
-          if (key.key === "Enter" || key.key === " ") {
-            key.preventDefault();
-            this.goToEvent(event);
-          }
-        };
-        chat.append(row);
-      }
-      if (!chatEvents.length) {
-        const empty = document.createElement("div");
-        empty.className = "history-chat-empty";
-        empty.textContent = "No chat or player status messages in this range";
-        chat.append(empty);
-      }
+      const ticks = this.require<HTMLElement>(".history-events");
+      const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
+      renderHistoryEvents(chat, ticks, {
+        events: chatEvents,
+        from,
+        to,
+        timelineWidth: ticks.clientWidth,
+        names: this.names,
+        players: this.manifest.registry.players,
+        ...(mapRoot ? { mapRoot } : {}),
+        formatTime: formatDate,
+        onSelect: (event) => this.goToEvent(event),
+      });
       if (follow)
         this.lifecycle.frame(() => {
           chat.scrollTop = chat.scrollHeight;
         });
-      const ticks = this.require<HTMLElement>(".history-events");
-      ticks.replaceChildren();
-      const indicatorEvents = chatEvents.filter((event) => ["CHAT", "DEATH"].includes(event.type));
-      const threshold = ((to - from) * 18) / Math.max(1, ticks.clientWidth || 600);
-      for (const cluster of clusterTimelineEvents(indicatorEvents, threshold)) {
-        const button = document.createElement("button");
-        const hasChat = cluster.some((event) => event.type === "CHAT");
-        const hasDeath = cluster.some((event) => event.type === "DEATH");
-        button.className = `history-timeline-event ${hasChat && hasDeath ? "history-mixed-tick" : hasDeath ? "history-death-tick" : "history-chat-tick"}`;
-        const middle = cluster.reduce((sum, event) => sum + event.point.time, 0) / cluster.length;
-        button.style.left = `${((middle - from) / Math.max(1, to - from)) * 100}%`;
-        button.style.color = hasChat && hasDeath ? "#eee" : eventColor(hasDeath ? "DEATH" : "CHAT");
-        const bubble =
-          '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v9H7l-4 3v-3H2z"/></svg>';
-        const skull =
-          '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 7a5 5 0 0 1 10 0v4h-2v2H9v-2H7v2H5v-2H3zM5 7h2v2H5zm4 0h2v2H9z"/></svg>';
-        button.innerHTML =
-          (hasChat ? bubble : "") +
-          (hasDeath ? skull : "") +
-          (cluster.length > 1 ? `<b>${cluster.length}</b>` : "");
-        button.setAttribute(
-          "aria-label",
-          `${cluster.length} ${hasChat && hasDeath ? "chat and death" : hasDeath ? "death" : "chat"} event${cluster.length === 1 ? "" : "s"}; click repeatedly to cycle`,
-        );
-        let current = 0;
-        button.onclick = () => {
-          const event = cluster[current++ % cluster.length];
-          if (!event) return;
-          this.goToEvent(event);
-          button.title = `${formatDate(event.point.time)} · ${event.type.toLowerCase()} · ${this.names.get(event.point.player) || "Player"}`;
-        };
-        ticks.append(button);
-      }
     }
-    const heatKey = JSON.stringify([
-      this.heatVersion,
-      [...this.selection],
-      world,
-      this.heatEnabled,
-    ]);
+    const heatKey = [this.heatVersion, this.selectionRevision, world, this.heatEnabled].join(":");
     if (heatKey !== this.heatKey) {
       this.heatKey = heatKey;
       if (this.heatEnabled && this.heatRows) {
@@ -1287,6 +1198,7 @@ export class ReplayPanel extends HTMLElement {
         return;
       this.livePoints = Array.isArray(data.points) ? data.points.slice(-20000) : [];
       this.liveEvents = Array.isArray(data.events) ? data.events.slice(-1000) : [];
+      this.eventRevision++;
       if (!this.manifest) await this.refresh();
       if (this.manifest && data.registry) this.manifest.registry = data.registry;
       for (const player of data.registry?.players || []) {
@@ -1315,24 +1227,19 @@ export class ReplayPanel extends HTMLElement {
   }
   renderEventFilters() {
     const list = this.require<HTMLElement>(".history-event-filter-list");
-    list.replaceChildren();
-    for (const type of this.eventTypes) {
-      const label = document.createElement("label"),
-        input = document.createElement("input");
-      input.type = "checkbox";
-      input.setAttribute("aria-label", type.toLowerCase().replaceAll("_", " "));
-      input.checked = !this.disabledEvents.has(type);
-      input.onchange = () => {
-        if (input.checked) this.disabledEvents.delete(type);
+    renderEventFilter(list, {
+      types: this.eventTypes,
+      disabled: this.disabledEvents,
+      onChange: (type, visible) => {
+        if (visible) this.disabledEvents.delete(type);
         else this.disabledEvents.add(type);
+        this.filterRevision++;
         try {
           preferences.saveHiddenEvents(this.disabledEvents);
         } catch {}
         this.updateOverlays();
-      };
-      label.append(input, document.createTextNode(type.toLowerCase().replaceAll("_", " ")));
-      list.append(label);
-    }
+      },
+    });
   }
   async loadRangeEvents() {
     if (!this.cache || !this.manifest) return;
@@ -1343,6 +1250,7 @@ export class ReplayPanel extends HTMLElement {
     const chunks = Math.floor((last - first) / duration) + 1;
     if (chunks > 5000) {
       this.rangeEvents = [];
+      this.eventRevision++;
       this.status.textContent = "Event and chat history needs a range under 5,000 chunks";
       return;
     }
@@ -1355,6 +1263,7 @@ export class ReplayPanel extends HTMLElement {
       }
       if (controller.signal.aborted) return;
       this.rangeEvents = events.sort((a, b) => a.point.time - b.point.time);
+      this.eventRevision++;
       this.timelineEventKey = null;
       this.eventKey = null;
       this.updateOverlays();

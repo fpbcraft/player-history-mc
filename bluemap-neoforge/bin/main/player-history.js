@@ -2017,6 +2017,40 @@ ${payload}` : ""}`;
     return l.vnode && l.vnode(l2), l2;
   }
 
+  // src/ui/activity-histogram-view.tsx
+  var ActivityHistogram = ({ bins, from, to, formatTime }) => {
+    const max = Math.max(0, ...bins);
+    return /* @__PURE__ */ u2(S, { children: bins.map((count, index) => /* @__PURE__ */ u2(
+      "span",
+      {
+        style: { height: count > 0 ? `max(2px, ${count / max * 100}%)` : "0" },
+        title: `${formatTime(from + (to - from) * index / bins.length)} \xB7 ${Math.round(count).toLocaleString()} recorded samples (approx.)`
+      },
+      index
+    )) });
+  };
+  var renderActivityHistogram = (root, props) => {
+    R(/* @__PURE__ */ u2(ActivityHistogram, { ...props }), root);
+  };
+
+  // src/ui/event-filter-view.tsx
+  var eventLabel = (type) => type.toLowerCase().replaceAll("_", " ");
+  var EventFilter = ({ types, disabled, onChange }) => /* @__PURE__ */ u2(S, { children: [...types].map((type) => /* @__PURE__ */ u2("label", { children: [
+    /* @__PURE__ */ u2(
+      "input",
+      {
+        type: "checkbox",
+        "aria-label": eventLabel(type),
+        checked: !disabled.has(type),
+        onChange: (event) => onChange(type, event.currentTarget.checked)
+      }
+    ),
+    eventLabel(type)
+  ] }, type)) });
+  var renderEventFilter = (root, props) => {
+    R(/* @__PURE__ */ u2(EventFilter, { ...props }), root);
+  };
+
   // src/ui/history-icon.tsx
   var ICON_PATHS = {
     events: "M12 3v2m0 14v2M3 12h2m14 0h2M5.64 5.64l1.42 1.42m9.88 9.88 1.42 1.42m0-12.72-1.42 1.42M7.06 16.94l-1.42 1.42M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
@@ -2027,6 +2061,135 @@ ${payload}` : ""}`;
     webchat: "M21 11a8 8 0 0 1-8 8H7l-5 3V11a9 9 0 0 1 19 0Z"
   };
   var HistoryIcon = ({ name }) => /* @__PURE__ */ u2("svg", { viewBox: "0 0 24 24", "aria-hidden": "true", children: /* @__PURE__ */ u2("path", { d: ICON_PATHS[name] }) });
+  var TimelineEventIcon = ({ type }) => /* @__PURE__ */ u2("svg", { viewBox: "0 0 16 16", "aria-hidden": "true", children: /* @__PURE__ */ u2(
+    "path",
+    {
+      d: type === "chat" ? "M2 2h12v9H7l-4 3v-3H2z" : "M3 7a5 5 0 0 1 10 0v4h-2v2H9v-2H7v2H5v-2H3zM5 7h2v2H5zm4 0h2v2H9z"
+    }
+  ) });
+
+  // src/ui/history-events-view.tsx
+  var parsePayload2 = (event) => {
+    try {
+      const value = typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
+      return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    } catch {
+      return null;
+    }
+  };
+  var ChatHistory = ({
+    events,
+    names,
+    players,
+    mapRoot,
+    formatTime,
+    onSelect
+  }) => {
+    const uuids = new Map(players.map((player) => [player.id, player.uuid]));
+    const rows = events.flatMap((event) => {
+      const payload = parsePayload2(event);
+      if (!payload) return [];
+      return [{ event, payload }];
+    });
+    if (rows.length === 0) {
+      return /* @__PURE__ */ u2("div", { class: "history-chat-empty", children: "No chat or player status messages in this range" });
+    }
+    return /* @__PURE__ */ u2(S, { children: rows.map(({ event, payload }) => {
+      const name = names.get(event.point.player) ?? "Player";
+      const uuid = uuids.get(event.point.player);
+      const head = uuid && mapRoot ? `${mapRoot}/assets/playerheads/${uuid}.png` : void 0;
+      const classes = event.type === "CHAT" ? "history-chat-row" : `history-chat-row history-chat-system history-chat-${event.type.toLowerCase()}`;
+      return /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: classes,
+          title: "Show this message on the map",
+          onClick: () => onSelect(event),
+          children: [
+            /* @__PURE__ */ u2("span", { class: "history-chat-time", children: formatTime(event.point.time) }),
+            head ? /* @__PURE__ */ u2(
+              "img",
+              {
+                class: "history-chat-head",
+                src: head,
+                alt: "",
+                onError: (error) => {
+                  error.currentTarget.hidden = true;
+                }
+              }
+            ) : /* @__PURE__ */ u2("span", {}),
+            /* @__PURE__ */ u2("span", { children: chatMessage(event.type, name, payload) })
+          ]
+        },
+        `${event.point.player}:${event.point.time}:${event.type}`
+      );
+    }) });
+  };
+  var TimelineEvents = ({
+    events,
+    from,
+    to,
+    timelineWidth,
+    names,
+    formatTime,
+    onSelect
+  }) => {
+    const indicatorEvents = events.filter((event) => ["CHAT", "DEATH"].includes(event.type));
+    const threshold = (to - from) * 18 / Math.max(1, timelineWidth || 600);
+    return /* @__PURE__ */ u2(S, { children: clusterTimelineEvents(indicatorEvents, threshold).map((cluster) => {
+      const hasChat = cluster.some((event) => event.type === "CHAT");
+      const hasDeath = cluster.some((event) => event.type === "DEATH");
+      const kind = hasChat && hasDeath ? "chat and death" : hasDeath ? "death" : "chat";
+      const middle = cluster.reduce((sum, event) => sum + event.point.time, 0) / cluster.length;
+      let current = 0;
+      return /* @__PURE__ */ u2(
+        "button",
+        {
+          type: "button",
+          class: `history-timeline-event ${hasChat && hasDeath ? "history-mixed-tick" : hasDeath ? "history-death-tick" : "history-chat-tick"}`,
+          style: {
+            left: `${(middle - from) / Math.max(1, to - from) * 100}%`,
+            color: hasChat && hasDeath ? "#eee" : eventColor(hasDeath ? "DEATH" : "CHAT")
+          },
+          "aria-label": `${cluster.length} ${kind} event${cluster.length === 1 ? "" : "s"}; click repeatedly to cycle`,
+          onClick: (click) => {
+            const event = cluster[current++ % cluster.length];
+            if (!event) return;
+            onSelect(event);
+            click.currentTarget.title = `${formatTime(event.point.time)} \xB7 ${event.type.toLowerCase()} \xB7 ${names.get(event.point.player) ?? "Player"}`;
+          },
+          children: [
+            hasChat ? /* @__PURE__ */ u2(TimelineEventIcon, { type: "chat" }) : null,
+            hasDeath ? /* @__PURE__ */ u2(TimelineEventIcon, { type: "death" }) : null,
+            cluster.length > 1 ? /* @__PURE__ */ u2("b", { children: cluster.length }) : null
+          ]
+        },
+        `${cluster[0]?.point.time}:${cluster.length}:${kind}`
+      );
+    }) });
+  };
+  var renderHistoryEvents = (chatRoot, timelineRoot, props) => {
+    R(/* @__PURE__ */ u2(ChatHistory, { ...props }), chatRoot);
+    R(/* @__PURE__ */ u2(TimelineEvents, { ...props }), timelineRoot);
+  };
+
+  // src/ui/player-filter-view.tsx
+  var PlayerFilter = ({ names, selected, onChange }) => /* @__PURE__ */ u2(S, { children: [...names].map(([id, name]) => /* @__PURE__ */ u2("label", { children: [
+    /* @__PURE__ */ u2(
+      "input",
+      {
+        type: "checkbox",
+        checked: selected.has(id),
+        onChange: (event) => onChange(id, event.currentTarget.checked)
+      }
+    ),
+    /* @__PURE__ */ u2("i", { class: "history-player-color", style: { background: playerColor(id) } }),
+    name
+  ] }, id)) });
+  var renderPlayerFilter = (root, props) => {
+    R(/* @__PURE__ */ u2(PlayerFilter, { ...props }), root);
+  };
 
   // src/ui/history-chat.tsx
   var HistoryChat = () => /* @__PURE__ */ u2(S, { children: [
@@ -2303,6 +2466,17 @@ ${payload}` : ""}`;
     R(null, root);
   };
 
+  // src/ui/webchat-feed-view.tsx
+  var WebChatFeed = ({ messages }) => /* @__PURE__ */ u2(S, { children: messages.map((message, index) => /* @__PURE__ */ u2("div", { children: [
+    message.web ? "[Web] " : "",
+    message.name,
+    ": ",
+    message.message
+  ] }, `${message.name}:${message.message}:${index}`)) });
+  var renderWebChatFeed = (root, messages) => {
+    R(/* @__PURE__ */ u2(WebChatFeed, { messages }), root);
+  };
+
   // src/replay-panel.ts
   var BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
   var formatDate = (time, seconds = true) => new Date(time).toLocaleString(void 0, {
@@ -2357,7 +2531,10 @@ ${payload}` : ""}`;
     heatKey = null;
     healthKey = null;
     timelineEventKey = null;
-    chatFeedKey;
+    eventRevision = 0;
+    registryRevision = 0;
+    selectionRevision = 0;
+    filterRevision = 0;
     healthToken = {};
     trailMode = 6e4;
     releaseShuttle = () => {
@@ -2437,6 +2614,10 @@ ${payload}` : ""}`;
       this.lifecycle = new PanelLifecycle();
       this.requests = new RequestCoordinator();
       this.panelState = createReplayPanelState();
+      this.eventRevision = 0;
+      this.registryRevision = 0;
+      this.selectionRevision = 0;
+      this.filterRevision = 0;
       mountReplayPanelView(this);
       this.controls = new PanelControls(this);
       const eventControl = this.require(".history-event-control");
@@ -2730,6 +2911,7 @@ ${payload}` : ""}`;
       this.q("players").onclick = () => this.togglePlayers();
       this.q("all").onclick = () => {
         this.selection = new Set(this.names.keys());
+        this.selectionRevision++;
         preferences.savePlayers(this.selection);
         this.hasSavedSelection = true;
         this.renderPlayers();
@@ -2831,17 +3013,9 @@ ${payload}` : ""}`;
         if (session.linked) this.q("chat-status").textContent = `Connected as ${session.name}`;
         const data = await this.chatClient.feed();
         const feed = this.require(".history-webchat-feed");
-        const key = JSON.stringify(data.messages);
-        if (key !== this.chatFeedKey) {
-          this.chatFeedKey = key;
-          feed.replaceChildren();
-          for (const message of data.messages || []) {
-            const row = document.createElement("div");
-            row.textContent = `${message.web ? "[Web] " : ""}${message.name}: ${message.message}`;
-            feed.append(row);
-          }
-          feed.scrollTop = feed.scrollHeight;
-        }
+        const shouldFollow = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 20;
+        renderWebChatFeed(feed, data.messages);
+        if (shouldFollow) feed.scrollTop = feed.scrollHeight;
       } catch (error) {
         this.q("chat-status").textContent = errorMessage(error);
       } finally {
@@ -2924,24 +3098,19 @@ ${payload}` : ""}`;
     }
     renderPlayers() {
       const list = this.require(".history-player-list");
-      list.replaceChildren();
-      for (const [id, name] of this.names) {
-        const label = document.createElement("label"), input = document.createElement("input");
-        input.type = "checkbox";
-        input.checked = this.selection.has(id);
-        input.onchange = () => {
-          input.checked ? this.selection.add(id) : this.selection.delete(id);
+      renderPlayerFilter(list, {
+        names: this.names,
+        selected: this.selection,
+        onChange: (id, selected) => {
+          if (selected) this.selection.add(id);
+          else this.selection.delete(id);
+          this.selectionRevision++;
           preferences.savePlayers(this.selection);
           this.hasSavedSelection = true;
           this.sync();
           this.updateOverlays();
-        };
-        const swatch = document.createElement("i");
-        swatch.className = "history-player-color";
-        swatch.style.background = playerColor(id);
-        label.append(input, swatch, document.createTextNode(name));
-        list.append(label);
-      }
+        }
+      });
       this.sync();
     }
     async refresh(reset = false) {
@@ -2976,6 +3145,8 @@ ${payload}` : ""}`;
         }
         this.names = new Map(m2.registry.players.map((player) => [player.id, player.name]));
         this.selection = new Set([...this.selection].filter((id) => this.names.has(id)));
+        this.registryRevision++;
+        this.selectionRevision++;
         this.clock.refresh(m2.earliestTimestamp, Math.max(m2.latestTimestamp, Date.now()), reset);
         this.renderPlayers();
         if (changed) await this.reloadRange();
@@ -3041,12 +3212,7 @@ ${payload}` : ""}`;
         }
         if (controller.signal.aborted || !this.opened) return;
         const max = Math.max(0, ...bins);
-        for (let i2 = 0; i2 < bins.length; i2++) {
-          const bar = document.createElement("span");
-          bar.style.height = (bins[i2] ?? 0) > 0 ? `max(2px, ${(bins[i2] ?? 0) / max * 100}%)` : "0";
-          bar.title = formatDate(from + (to - from) * i2 / count) + " \xB7 " + Math.round(bins[i2] ?? 0).toLocaleString() + " recorded samples (approx.)";
-          chart.append(bar);
-        }
+        renderActivityHistogram(chart, { bins, from, to, formatTime: formatDate });
         const total = Math.round(bins.reduce((a2, b2) => a2 + b2, 0));
         caption.textContent = this.manifest.activityReady === false ? "Recording density \xB7 history is still being indexed" : max ? "Recording density \xB7 all players \xB7 minute-level counts" : "No recorded samples in this range";
         chart.setAttribute(
@@ -3149,6 +3315,7 @@ ${payload}` : ""}`;
         if (bucket !== Math.floor(this.clock.time / this.cache.duration)) return;
         this.engine.setPoints(data.points);
         this.events = data.events;
+        this.eventRevision++;
         this.loadedBucket = bucket;
         this.status.textContent = data.points.length ? this.isLive ? "Live \xB7 local time" : "Historical replay \xB7 local time" : "No recorded data in this window";
         this.render();
@@ -3205,10 +3372,7 @@ ${payload}` : ""}`;
         const ready = Math.floor(this.clock.time / this.cache.duration) === this.loadedBucket;
         const positions = ready && !this.isLive ? [...this.selection].map((id) => this.engine.position(id, this.clock.time)).filter((point) => point !== null && point.world === world).map((point) => ({ ...point, time: this.clock.time })) : [];
         this.adapter.setPlayers(positions, this.names);
-        const healthKey = JSON.stringify([
-          Math.floor(this.clock.time / 1e3),
-          positions.map((position) => position.player)
-        ]);
+        const healthKey = `${Math.floor(this.clock.time / 1e3)}:${positions.map((position) => position.player).join(",")}`;
         if (healthKey !== this.healthKey) {
           this.healthKey = healthKey;
           const token = {};
@@ -3240,12 +3404,12 @@ ${payload}` : ""}`;
       const { from, to, time } = this.clock, world = this.world();
       const full = this.trailMode === Infinity;
       const start = full ? from : Math.max(from, time - this.trailMode);
-      const dataKey = JSON.stringify([
+      const dataKey = [
         String(this.trailMode),
         this.isLive ? Math.floor(from / this.cache.duration) : from,
         this.isLive ? Math.floor(to / this.cache.duration) : to,
-        full ? null : Math.floor(time / this.cache.duration)
-      ]);
+        full ? "full" : Math.floor(time / this.cache.duration)
+      ].join(":");
       if (this.trailDataKey !== dataKey && !this.requests.pending("trails")) this.loadTrails(dataKey);
       const historyEngine = this.trailDataKey === dataKey ? this.fullTrails : null;
       const engine = this.isLive ? new ReplayEngine(
@@ -3254,15 +3418,15 @@ ${payload}` : ""}`;
           { points: this.livePoints, events: [] }
         ])
       ) : historyEngine;
-      const trailKey = JSON.stringify([
+      const trailKey = [
         dataKey,
         start,
         full ? to : time,
-        [...this.selection],
+        this.selectionRevision,
         world,
         !!engine,
-        [...this.names]
-      ]);
+        this.registryRevision
+      ].join(":");
       if (trailKey !== this.trailKey) {
         this.trailKey = trailKey;
         this.adapter.setTrails(
@@ -3287,7 +3451,15 @@ ${payload}` : ""}`;
         trailMode: this.trailMode,
         disabled: this.disabledEvents
       }).slice(-500);
-      const eventKey = JSON.stringify([events, world, from, to, [...this.names]]);
+      const eventKey = [
+        this.eventRevision,
+        this.filterRevision,
+        this.selectionRevision,
+        world,
+        from,
+        to,
+        this.registryRevision
+      ].join(":");
       if (this.eventKey !== eventKey) {
         this.eventKey = eventKey;
         this.adapter.setEvents(
@@ -3298,106 +3470,30 @@ ${payload}` : ""}`;
         );
       }
       const chatEvents = selectedTimelineEvents.filter((event) => ["CHAT", "JOIN", "QUIT", "DEATH"].includes(event.type)).slice(-1e3);
-      const timelineEventKey = JSON.stringify([chatEvents, from, to, [...this.names]]);
+      const timelineEventKey = `${this.eventRevision}:${this.registryRevision}:${from}:${to}`;
       if (this.timelineEventKey !== timelineEventKey) {
         this.timelineEventKey = timelineEventKey;
         const chat = this.require(".history-chat");
         const follow = this.chatPinned;
-        chat.replaceChildren();
-        for (const event of chatEvents) {
-          const row = document.createElement("div");
-          let payload = {};
-          try {
-            const parsed = typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
-            if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-              payload = parsed;
-          } catch {
-            continue;
-          }
-          const time2 = document.createElement("button");
-          time2.type = "button";
-          time2.className = "history-chat-time";
-          time2.title = "Go to this message";
-          time2.textContent = formatDate(event.point.time);
-          time2.onclick = (click) => {
-            click.stopPropagation();
-            this.goToEvent(event);
-          };
-          const head = document.createElement("img");
-          head.className = "history-chat-head";
-          head.alt = "";
-          const player = this.manifest.registry.players.find(
-            (player2) => player2.id === event.point.player
-          );
-          const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
-          if (player?.uuid && mapRoot) head.src = `${mapRoot}/assets/playerheads/${player.uuid}.png`;
-          else head.hidden = true;
-          head.onerror = () => {
-            head.hidden = true;
-          };
-          const message = document.createElement("span");
-          const name = this.names.get(event.point.player) || "Player";
-          if (event.type !== "CHAT")
-            row.classList.add("history-chat-system", `history-chat-${event.type.toLowerCase()}`);
-          message.textContent = chatMessage(event.type, name, payload);
-          row.append(time2, head, message);
-          row.tabIndex = 0;
-          row.setAttribute("role", "button");
-          row.title = "Show this message on the map";
-          row.onclick = () => this.goToEvent(event);
-          row.onkeydown = (key) => {
-            if (key.key === "Enter" || key.key === " ") {
-              key.preventDefault();
-              this.goToEvent(event);
-            }
-          };
-          chat.append(row);
-        }
-        if (!chatEvents.length) {
-          const empty = document.createElement("div");
-          empty.className = "history-chat-empty";
-          empty.textContent = "No chat or player status messages in this range";
-          chat.append(empty);
-        }
+        const ticks = this.require(".history-events");
+        const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
+        renderHistoryEvents(chat, ticks, {
+          events: chatEvents,
+          from,
+          to,
+          timelineWidth: ticks.clientWidth,
+          names: this.names,
+          players: this.manifest.registry.players,
+          ...mapRoot ? { mapRoot } : {},
+          formatTime: formatDate,
+          onSelect: (event) => this.goToEvent(event)
+        });
         if (follow)
           this.lifecycle.frame(() => {
             chat.scrollTop = chat.scrollHeight;
           });
-        const ticks = this.require(".history-events");
-        ticks.replaceChildren();
-        const indicatorEvents = chatEvents.filter((event) => ["CHAT", "DEATH"].includes(event.type));
-        const threshold = (to - from) * 18 / Math.max(1, ticks.clientWidth || 600);
-        for (const cluster of clusterTimelineEvents(indicatorEvents, threshold)) {
-          const button = document.createElement("button");
-          const hasChat = cluster.some((event) => event.type === "CHAT");
-          const hasDeath = cluster.some((event) => event.type === "DEATH");
-          button.className = `history-timeline-event ${hasChat && hasDeath ? "history-mixed-tick" : hasDeath ? "history-death-tick" : "history-chat-tick"}`;
-          const middle = cluster.reduce((sum, event) => sum + event.point.time, 0) / cluster.length;
-          button.style.left = `${(middle - from) / Math.max(1, to - from) * 100}%`;
-          button.style.color = hasChat && hasDeath ? "#eee" : eventColor(hasDeath ? "DEATH" : "CHAT");
-          const bubble = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v9H7l-4 3v-3H2z"/></svg>';
-          const skull = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 7a5 5 0 0 1 10 0v4h-2v2H9v-2H7v2H5v-2H3zM5 7h2v2H5zm4 0h2v2H9z"/></svg>';
-          button.innerHTML = (hasChat ? bubble : "") + (hasDeath ? skull : "") + (cluster.length > 1 ? `<b>${cluster.length}</b>` : "");
-          button.setAttribute(
-            "aria-label",
-            `${cluster.length} ${hasChat && hasDeath ? "chat and death" : hasDeath ? "death" : "chat"} event${cluster.length === 1 ? "" : "s"}; click repeatedly to cycle`
-          );
-          let current = 0;
-          button.onclick = () => {
-            const event = cluster[current++ % cluster.length];
-            if (!event) return;
-            this.goToEvent(event);
-            button.title = `${formatDate(event.point.time)} \xB7 ${event.type.toLowerCase()} \xB7 ${this.names.get(event.point.player) || "Player"}`;
-          };
-          ticks.append(button);
-        }
       }
-      const heatKey = JSON.stringify([
-        this.heatVersion,
-        [...this.selection],
-        world,
-        this.heatEnabled
-      ]);
+      const heatKey = [this.heatVersion, this.selectionRevision, world, this.heatEnabled].join(":");
       if (heatKey !== this.heatKey) {
         this.heatKey = heatKey;
         if (this.heatEnabled && this.heatRows) {
@@ -3422,6 +3518,7 @@ ${payload}` : ""}`;
           return;
         this.livePoints = Array.isArray(data.points) ? data.points.slice(-2e4) : [];
         this.liveEvents = Array.isArray(data.events) ? data.events.slice(-1e3) : [];
+        this.eventRevision++;
         if (!this.manifest) await this.refresh();
         if (this.manifest && data.registry) this.manifest.registry = data.registry;
         for (const player of data.registry?.players || []) {
@@ -3450,24 +3547,20 @@ ${payload}` : ""}`;
     }
     renderEventFilters() {
       const list = this.require(".history-event-filter-list");
-      list.replaceChildren();
-      for (const type of this.eventTypes) {
-        const label = document.createElement("label"), input = document.createElement("input");
-        input.type = "checkbox";
-        input.setAttribute("aria-label", type.toLowerCase().replaceAll("_", " "));
-        input.checked = !this.disabledEvents.has(type);
-        input.onchange = () => {
-          if (input.checked) this.disabledEvents.delete(type);
+      renderEventFilter(list, {
+        types: this.eventTypes,
+        disabled: this.disabledEvents,
+        onChange: (type, visible) => {
+          if (visible) this.disabledEvents.delete(type);
           else this.disabledEvents.add(type);
+          this.filterRevision++;
           try {
             preferences.saveHiddenEvents(this.disabledEvents);
           } catch {
           }
           this.updateOverlays();
-        };
-        label.append(input, document.createTextNode(type.toLowerCase().replaceAll("_", " ")));
-        list.append(label);
-      }
+        }
+      });
     }
     async loadRangeEvents() {
       if (!this.cache || !this.manifest) return;
@@ -3478,6 +3571,7 @@ ${payload}` : ""}`;
       const chunks = Math.floor((last - first) / duration) + 1;
       if (chunks > 5e3) {
         this.rangeEvents = [];
+        this.eventRevision++;
         this.status.textContent = "Event and chat history needs a range under 5,000 chunks";
         return;
       }
@@ -3490,6 +3584,7 @@ ${payload}` : ""}`;
         }
         if (controller.signal.aborted) return;
         this.rangeEvents = events.sort((a2, b2) => a2.point.time - b2.point.time);
+        this.eventRevision++;
         this.timelineEventKey = null;
         this.eventKey = null;
         this.updateOverlays();
