@@ -1,17 +1,19 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "vitest";
+import { ChunkCache } from "../src/replay-core.js";
 import {
-  ReplayClock,
-  HISTORY_WINDOW,
-  shuttleRate,
   clusterTimelineEvents,
-} from "../bluemap-addon/src/replay-state.js";
-import { ChunkCache } from "../bluemap-addon/src/replay-core.js";
+  HISTORY_WINDOW,
+  ReplayClock,
+  shuttleRate,
+} from "../src/replay-state.js";
 
 test("timeline indicators cluster nearby chat and death events", () => {
   const event = (time, type) => ({ point: { time }, type });
   assert.deepEqual(
-    clusterTimelineEvents([event(100, "CHAT"), event(108, "DEATH"), event(140, "CHAT")], 10).map((group) => group.map((item) => item.point.time)),
+    clusterTimelineEvents([event(100, "CHAT"), event(108, "DEATH"), event(140, "CHAT")], 10).map(
+      (group) => group.map((item) => item.point.time),
+    ),
     [[100, 108], [140]],
   );
 });
@@ -144,7 +146,10 @@ test("refresh invalidates cached misses and mutable latest chunks", async () => 
       ? {
           ok: true,
           text: async () =>
-            JSON.stringify({ points: [{ time: 10, player: 1 }], events: [] }),
+            JSON.stringify({
+              points: [{ time: 10, player: 1, world: 0, x: 0, y: 0, z: 0, flags: 0 }],
+              events: [],
+            }),
         }
       : { status: 404 };
   });
@@ -158,16 +163,12 @@ test("refresh invalidates cached misses and mutable latest chunks", async () => 
 });
 test("a cleared in-flight window cannot repopulate cache or publish stale data", async () => {
   const pending = [];
-  const cache = new ChunkCache(
-    "/data",
-    100,
-    () => new Promise((resolve) => pending.push(resolve)),
-  );
+  const cache = new ChunkCache("/data", 100, () => new Promise((resolve) => pending.push(resolve)));
   const request = cache.window(10);
   cache.clear();
-  pending.forEach((resolve) =>
-    resolve({ ok: true, text: async () => '{"points":[],"events":[]}' }),
-  );
+  pending.forEach((resolve) => {
+    resolve({ ok: true, text: async () => '{"points":[],"events":[]}' });
+  });
   await assert.rejects(request, { name: "AbortError" });
   assert.equal(cache.cache.size, 0);
 });
@@ -192,19 +193,14 @@ test("custom dates stay fixed even outside retained data", () => {
 });
 
 test("player colors are deterministic and distinguish player IDs", async () => {
-  const { playerColor } =
-    await import("../bluemap-addon/src/bluemap-adapter.js");
+  const { playerColor } = await import("../src/bluemap-adapter.js");
   assert.equal(playerColor(7), playerColor(7));
   assert.notEqual(playerColor(1), playerColor(2));
-  assert.equal(
-    new Set(Array.from({ length: 100 }, (_, i) => playerColor(i))).size,
-    100,
-  );
+  assert.equal(new Set(Array.from({ length: 100 }, (_, i) => playerColor(i))).size, 100);
 });
 
 test("activity histogram keeps gaps empty and represents relative density", async () => {
-  const { addActivityBins } =
-    await import("../bluemap-addon/src/replay-state.js");
+  const { addActivityBins } = await import("../src/replay-state.js");
   const bins = Array(4).fill(0);
   addActivityBins(
     bins,
@@ -242,4 +238,27 @@ test("play from the latest endpoint restarts the selected range", () => {
   assert.equal(clock.time, 10500 - HISTORY_WINDOW);
   clock.togglePlayback();
   assert.equal(clock.isPlaying, false);
+});
+
+test("crafting and smelting bursts combine by player, type and item", async () => {
+  const { combineProductionEvents } = await import("../src/replay-state.js");
+  const point = (time: number, player = 1) => ({
+    player,
+    time,
+    world: 0,
+    x: 0,
+    y: 0,
+    z: 0,
+    flags: 0,
+  });
+  const events = [
+    { point: point(0), type: "CRAFT", payload: { item: 4, count: 2 } },
+    { point: point(20_000), type: "CRAFT", payload: { item: 4, count: 3 } },
+    { point: point(30_000), type: "SMELT", payload: { item: 4, count: 1 } },
+    { point: point(40_000, 2), type: "CRAFT", payload: { item: 4, count: 1 } },
+    { point: point(90_001), type: "CRAFT", payload: { item: 4, count: 4 } },
+  ];
+  const combined = combineProductionEvents(events);
+  assert.equal(combined.length, 4);
+  assert.deepEqual(combined[0]?.payload, { item: 4, count: 5 });
 });

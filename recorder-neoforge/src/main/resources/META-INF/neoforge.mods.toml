@@ -3,7 +3,7 @@ loaderVersion="[4,)"
 license="MIT"
 [[mods]]
 modId="playerhistory"
-version="0.8.12"
+version="${version}"
 displayName="Player History Recorder"
 description="Server-side spatial history, replay and time-spent heatmaps."
 [[dependencies.playerhistory]]

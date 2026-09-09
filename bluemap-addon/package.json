@@ -1,11 +1,26 @@
 {
   "name": "player-history-web",
-  "version": "0.8.12",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
-    "test": "node --test ../tests/*.test.mjs"
-  }
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src tests build.mjs vitest.config.ts",
+    "format": "biome format --write src tests build.mjs vitest.config.ts",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@types/node": "^26.5.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  },
+  "version": "0.8.13"
 }

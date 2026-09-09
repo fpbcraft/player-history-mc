@@ -1,11 +1,7 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  BlueMapAdapter,
-  playerColor,
-  eventColor,
-  meterLevels,
-} from "../bluemap-addon/src/bluemap-adapter.js";
+import { test } from "vitest";
+import { BlueMapAdapter, eventColor, meterLevels, playerColor } from "../src/bluemap-adapter.js";
+
 class Element {
   constructor() {
     this.dataset = {};
@@ -24,7 +20,13 @@ class Element {
   querySelector(selector) {
     const className = selector.startsWith(".") ? selector.slice(1) : null;
     for (const child of this.children) {
-      if (className && String(child.className || "").split(" ").includes(className)) return child;
+      if (
+        className &&
+        String(child.className || "")
+          .split(" ")
+          .includes(className)
+      )
+        return child;
       const nested = child.querySelector?.(selector);
       if (nested) return nested;
     }
@@ -37,9 +39,7 @@ class Element {
     return { left: 0, top: 0, right: 100, width: 100, height: 100 };
   }
   closest(selector) {
-    return selector.split(",").some((s) => s.trim() === "." + this.className)
-      ? this
-      : null;
+    return selector.split(",").some((s) => s.trim() === `.${this.className}`) ? this : null;
   }
   remove() {}
   get offsetWidth() {
@@ -93,7 +93,16 @@ class SetMarker extends Marker {
 }
 test("Minecraft-style hearts use full, half, and empty icons", () => {
   assert.deepEqual(meterLevels(17, 20), [
-    "full", "full", "full", "full", "full", "full", "full", "full", "half", "empty",
+    "full",
+    "full",
+    "full",
+    "full",
+    "full",
+    "full",
+    "full",
+    "full",
+    "half",
+    "empty",
   ]);
   assert.deepEqual(meterLevels(undefined, 20), []);
 });
@@ -147,11 +156,17 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     const adapter = new BlueMapAdapter(app, api);
     app.mapViewer.controlsManager = {
       position: new Vector(),
-      updateCamera() { this.updated = true; },
+      updateCamera() {
+        this.updated = true;
+      },
     };
     assert.equal(adapter.focusPoint({ x: 320, y: 2048, z: -640 }), true);
     assert.deepEqual(
-      { x: app.mapViewer.controlsManager.position.x, y: app.mapViewer.controlsManager.position.y, z: app.mapViewer.controlsManager.position.z },
+      {
+        x: app.mapViewer.controlsManager.position.x,
+        y: app.mapViewer.controlsManager.position.y,
+        z: app.mapViewer.controlsManager.position.z,
+      },
       { x: 10, y: 64, z: -20 },
     );
     assert.equal(app.mapViewer.controlsManager.updated, true);
@@ -182,9 +197,19 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.match(adapter.tooltip.textContent, /Test player/);
     head.element.onblur();
     assert.equal(adapter.tooltip.hidden, true);
-    let sought;
+    let sought: number | undefined;
     adapter.setEvents(
-      [{ point, type: "DEATH", payload: JSON.stringify({ message: "Test player hit the ground too hard", from: point, to: point }) }],
+      [
+        {
+          point,
+          type: "DEATH",
+          payload: JSON.stringify({
+            message: "Test player hit the ground too hard",
+            from: point,
+            to: point,
+          }),
+        },
+      ],
       names,
       (time) => (sought = time),
       { players: [{ id: 1, uuid: "abc" }] },
@@ -195,7 +220,17 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(event.element.style.color, eventColor("DEATH"));
     assert.equal(event.element.style.borderColor, playerColor(1));
     adapter.setEvents(
-      [{ point, type: "DEATH", payload: JSON.stringify({ message: "Test player hit the ground too hard", from: point, to: point }) }],
+      [
+        {
+          point,
+          type: "DEATH",
+          payload: JSON.stringify({
+            message: "Test player hit the ground too hard",
+            from: point,
+            to: point,
+          }),
+        },
+      ],
       names,
       (time) => (sought = time),
       { players: [{ id: 1, uuid: "abc" }] },
@@ -214,15 +249,9 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(sought, undefined, "event clicks do not seek");
     adapter.tooltip.hidden = false;
     adapter.setTrails([[point, { ...point, x: 320, time: 11000 }]], names);
-    assert.equal(
-      adapter.tooltip.hidden,
-      false,
-      "overlay refresh preserves tooltip",
-    );
+    assert.equal(adapter.tooltip.hidden, false, "overlay refresh preserves tooltip");
     const line = adapter.trails.children[0].line;
-    adapter.raycaster.hits = [
-      { object: line, faceIndex: 0, pointOnLine: { x: 5, y: 0, z: 0 } },
-    ];
+    adapter.raycaster.hits = [{ object: line, faceIndex: 0, pointOnLine: { x: 5, y: 0, z: 0 } }];
     adapter.hover({ target: new Element(), clientX: 50, clientY: 50 });
     assert.equal(adapter.hoverDot.element.hidden, false);
     assert.equal(adapter.hoverDot.position.x, 5);
@@ -233,13 +262,17 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(adapter.hoverDot.element.hidden, true);
     assert.equal(adapter.tooltip.hidden, true);
     adapter.setEvents(
-      [{ point, type: "CHAT", payload: JSON.stringify({message: "<b>Hello</b>"}) }],
+      [{ point, type: "CHAT", payload: JSON.stringify({ message: "<b>Hello</b>" }) }],
       names,
       undefined,
       { players: [{ id: 1, uuid: "abc" }] },
     );
     const bubble = adapter.events.children[0].element;
-    assert.equal(bubble.dataset.historyTooltip, undefined, "chat bubbles have no redundant tooltip");
+    assert.equal(
+      bubble.dataset.historyTooltip,
+      undefined,
+      "chat bubbles have no redundant tooltip",
+    );
     assert.equal(bubble.children.length, 2, "chat bubble includes a player head and message");
     assert.equal(bubble.children[0].src, "maps/world/assets/playerheads/abc.png");
     assert.match(bubble.children[1].children[0].textContent, /Test player · \d{2}:\d{2}:\d{2}/);

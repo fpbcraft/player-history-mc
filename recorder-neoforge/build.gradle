@@ -8,5 +8,9 @@ dependencies {
  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 test { useJUnitPlatform() }
+tasks.named('processResources') {
+ inputs.property 'version', project.version
+ filesMatching('META-INF/neoforge.mods.toml') { expand version: project.version }
+}
 base { archivesName = 'player-history-recorder' }
 tasks.register('rebuildHeatmaps', JavaExec) { classpath = sourceSets.main.output + configurations.testRuntimeClasspath; mainClass = 'dev.playerhistory.core.RebuildHeatmaps'; dependsOn classes }

@@ -2,7 +2,7 @@
 
 `recorder-neoforge/` owns NeoForge event capture, sampling, identity/item registries, typed state deltas, the bounded writer queue, binary storage, retention, heatmap/activity derivation and public export. It has no BlueMap dependency, API reflection, map IDs, JavaScript or CSS.
 
-`bluemap-addon/` owns browser protocol consumption, replay state, activity histogram, cached state reconstruction and BlueMap rendering. Its dependency-free Node build copies independently editable JS/CSS into `dist/`. The recorder exports resource keys such as `minecraft:overworld`; it never resolves BlueMap map IDs.
+`bluemap-addon/` owns browser protocol consumption, replay state, activity histogram, cached state reconstruction and BlueMap rendering. The strict TypeScript source is split by protocol, HTTP, state, layout, presentation, preferences and BlueMap adapter concerns. Esbuild emits one self-contained `player-history.js` bundle plus `player-history.css` into `dist/`; Vitest and Biome validate the frontend. The recorder exports resource keys such as `minecraft:overworld`; it never resolves BlueMap map IDs.
 
 `bluemap-neoforge/` is the second NeoForge mod requested for deployment. It contains the viewer assets and a small BlueMap bootstrap. Only this module reflects BlueMap's Java API, installs assets, registers scripts/styles, creates the public-directory link and writes `integration.json` containing map-to-dimension mappings. It never reads the private recorder store. It can run without the recorder installed, using an existing protocol-v2 dataset.
 

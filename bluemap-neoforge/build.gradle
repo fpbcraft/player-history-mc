@@ -6,11 +6,17 @@ tasks.register('buildViewer', Exec) {
  commandLine 'node', 'build.mjs'
  inputs.dir('../bluemap-addon/src')
  inputs.file('../bluemap-addon/package.json')
+ inputs.file('../bluemap-addon/package-lock.json')
+ inputs.file('../bluemap-addon/tsconfig.json')
  inputs.file('../bluemap-addon/build.mjs')
  outputs.dir('../bluemap-addon/dist')
 }
-sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', '*-0.8.12.js', '*-0.8.12.css' }
-tasks.named('processResources') { dependsOn 'buildViewer' }
+sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', 'player-history.js', 'player-history.css' }
+tasks.named('processResources') {
+ dependsOn 'buildViewer'
+ inputs.property 'version', project.version
+ filesMatching('META-INF/neoforge.mods.toml') { expand version: project.version }
+}
 base { archivesName = 'player-history-bluemap' }
 
 neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); programArgument 'nogui' } }

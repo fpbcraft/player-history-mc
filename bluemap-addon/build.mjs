@@ -1,40 +1,54 @@
-import { mkdir, readFile, writeFile, readdir, watch } from "node:fs/promises";
+import { copyFile, mkdir, rm, stat, watch } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
-const root = fileURLToPath(new URL(".", import.meta.url));
-const { version } = JSON.parse(
-  await readFile(join(root, "package.json"), "utf8"),
-);
-const names = [
-  "player-history.js",
-  "replay-core.js",
-  "replay-state.js",
-  "bluemap-adapter.js",
-  "telemetry.js",
-  "player-history.css",
+import { context } from "esbuild";
+
+const root = dirname(fileURLToPath(import.meta.url));
+const source = join(root, "src");
+const destinations = [
+  join(root, "dist"),
+  ...(process.env.BLUEMAP_WEBROOT ? [join(process.env.BLUEMAP_WEBROOT, "player-history")] : []),
 ];
-const versioned = (name) => name.replace(/\.(js|css)$/, `-${version}.$1`);
-async function build() {
-  const destinations = [join(root, "dist")];
-  if (process.env.BLUEMAP_WEBROOT)
-    destinations.push(join(process.env.BLUEMAP_WEBROOT, "player-history"));
-  for (const dest of destinations) {
-    await mkdir(dest, { recursive: true });
-    for (const name of names) {
-      let content = await readFile(join(root, "src", name), "utf8");
-      for (const dependency of names)
-        content = content.replaceAll(
-          new RegExp(
-            dependency.replaceAll(".", "\\.") + "(?:\\?v=[0-9.]+)?",
-            "g",
-          ),
-          versioned(dependency),
-        );
-      await writeFile(join(dest, versioned(name)), content);
-    }
+
+const copyStyles = async () => {
+  await Promise.all(
+    destinations.map(async (destination) => {
+      await mkdir(destination, { recursive: true });
+      await copyFile(join(source, "player-history.css"), join(destination, "player-history.css"));
+    }),
+  );
+};
+
+const buildDestination = async (destination) => {
+  await mkdir(destination, { recursive: true });
+  const build = await context({
+    entryPoints: [join(source, "player-history.ts")],
+    outfile: join(destination, "player-history.js"),
+    bundle: true,
+    format: "iife",
+    target: "es2022",
+    legalComments: "none",
+    sourcemap: false,
+    minify: false,
+    logLevel: "warning",
+  });
+  await build.rebuild();
+  return build;
+};
+
+for (const destination of destinations) await rm(destination, { recursive: true, force: true });
+const builds = await Promise.all(destinations.map(buildDestination));
+await copyStyles();
+
+const bundle = await stat(join(destinations[0], "player-history.js"));
+if (bundle.size > 250 * 1024) throw new Error(`Frontend bundle is too large: ${bundle.size} bytes`);
+console.log(`Built player-history.js (${bundle.size} bytes) and player-history.css`);
+
+if (process.argv.includes("--watch")) {
+  await Promise.all(builds.map((build) => build.watch()));
+  for await (const event of watch(source)) {
+    if (event.filename === "player-history.css") await copyStyles();
   }
-  console.log(`Built versioned history assets ${version}`);
+} else {
+  await Promise.all(builds.map((build) => build.dispose()));
 }
-await build();
-if (process.argv.includes("--watch"))
-  for await (const event of watch(join(root, "src"))) await build();

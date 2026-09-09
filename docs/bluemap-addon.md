@@ -1,6 +1,6 @@
 # BlueMap viewer installation and development
 
-Install BlueMap 5.x and `player-history-bluemap-0.7.2.jar` in the server mods directory. For recording, also install the independent recorder JAR. The viewer mod's config is `config/playerhistory_bluemap-common.toml`:
+Install BlueMap 5.x and `player-history-bluemap-0.8.13.jar` in the server mods directory. For recording, also install the independent recorder JAR. The viewer mod's config is `config/playerhistory_bluemap-common.toml`:
 
 ```toml
 public-directory = "player-history/public"
@@ -19,15 +19,15 @@ npm run build
 BLUEMAP_WEBROOT=/absolute/path/to/bluemap/web npm run watch
 ```
 
-No npm dependencies are required. The watch task copies changed assets; refresh the browser to load them. No Minecraft restart is required for UI-only edits. BlueMap reload/startup reinstalls bundled assets, so rebuild the bridge JAR before distributing those edits.
+Run `npm install` once to install the pinned TypeScript, esbuild, Vitest and Biome development dependencies. The watch task rebuilds the JavaScript bundle and copies stylesheet changes; refresh the browser to load them. No Minecraft restart is required for UI-only edits. BlueMap reload/startup reinstalls bundled assets, so rebuild the bridge JAR before distributing those edits.
 
-Players use local skin-head markers without persistent names. Names, timestamps and available state appear on hover/focus. Events use compact SVG glyphs colored by event type, surrounded by player-colored rings, with no name pill. Click/Enter/Space seeks to an event. Trail hit testing uses BlueMap's Line2 intersections, retains timestamps alongside geometry, splits long geometry into at most 255-segment parts and coalesces pointer work with animation frames. Its dot sits at the same interpolated coordinate used by the tooltip. Escape, pointer leave, dragging and disposal clear the tooltip/dot.
+Players use local skin-head markers without persistent names. Names, timestamps and available state appear on hover/focus. Events use compact SVG glyphs colored by event type, surrounded by player-colored rings, with no name pill. Click/Enter/Space opens event details without changing playback time. Trail hit testing uses BlueMap's Line2 intersections, retains timestamps alongside geometry, splits long geometry into at most 255-segment parts and coalesces pointer work with animation frames. Its dot sits at the same interpolated coordinate used by the tooltip. Escape, pointer leave, dragging and disposal clear the tooltip/dot.
 
 Ranges include 1/3/6 hours, day, 48 hours, week, 30 days, N days, all history and custom local date/time. Playback speed is separate from the temporary ±120× shuttle. Missing data remains empty in the histogram and does not create invented paths. Event/skin imagery and glyphs require no external image service.
 
 The Events menu filters map icons and timeline event ticks by type. Preferences persist in the browser and do not change recorder settings. Icons are never shown before their timestamp; their lifetime follows trail duration (30 timeline seconds with trails off). Full-range mode retains events from the range start through the cursor. At most the latest 500 matching events are displayed.
 
-All deployed assets use versioned filenames (for example `player-history-0.7.2.js`); helper imports use the same version. The Gradle bridge build runs the frontend build and packages those generated files. Replace the previous BlueMap integration JAR, restart/reload BlueMap and refresh the page. The recorder 0.6.1 public protocol remains compatible; no history deletion is required.
+The frontend build produces a single stable-named script and stylesheet inside the JAR. At installation, the BlueMap bridge derives the mod version and writes versioned web filenames such as `player-history-0.8.13.js`, preventing mixed cached module versions. The Gradle bridge build runs the frontend build and packages only those two generated files. Replace the previous BlueMap integration JAR, restart/reload BlueMap and refresh the page. The recorder 0.6.1 public protocol remains compatible; no history deletion is required.
 
 Event tooltips resolve item/dimension IDs and nested positions into readable lines rather than JSON. Newly visible markers scale/fade in; retained markers are reused and do not restart animations on each update. Reduced-motion preferences disable animation. Historical state uses the actual cursor time; absent old telemetry is reported as not recorded. A bundled inline Steve-style head replaces unavailable local skin images.
 

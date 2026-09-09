@@ -1,8 +1,9 @@
 {
-  "name": "bluemap-player-history",
+  "name": "player-history",
   "private": true,
-  "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
+    "build": "npm --prefix bluemap-addon run build",
+    "test": "npm --prefix bluemap-addon test",
+    "check": "npm --prefix bluemap-addon run check"
   }
 }

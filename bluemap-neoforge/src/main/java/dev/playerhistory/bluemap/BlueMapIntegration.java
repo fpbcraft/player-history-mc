@@ -24,12 +24,14 @@ public final class BlueMapIntegration {
     SPEC = b.build();
   }
 
+  private final String version;
   private volatile Object api;
   private volatile Path worldRoot;
   private final Map<String, Object> levels = new HashMap<>();
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
 
   public BlueMapIntegration(ModContainer container) {
+    version = container.getModInfo().getVersion().toString();
     container.registerConfig(ModConfig.Type.COMMON, SPEC);
     NeoForge.EVENT_BUS.addListener(this::start);
     NeoForge.EVENT_BUS.addListener(this::stop);
@@ -84,17 +86,12 @@ public final class BlueMapIntegration {
       Path root =
           ((Path) call(web, "WebApp", "getWebRoot", new Class<?>[0])).resolve("player-history");
       Files.createDirectories(root);
-      for (String name :
-          List.of(
-              "player-history-0.8.12.js",
-              "replay-core-0.8.12.js",
-              "replay-state-0.8.12.js",
-              "bluemap-adapter-0.8.12.js",
-              "player-history-0.8.12.css",
-              "telemetry-0.8.12.js")) {
+      for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);
-          Files.copy(in, root.resolve(name), StandardCopyOption.REPLACE_EXISTING);
+          int extension = name.lastIndexOf('.');
+          String installed = name.substring(0, extension) + "-" + version + name.substring(extension);
+          Files.copy(in, root.resolve(installed), StandardCopyOption.REPLACE_EXISTING);
         }
       }
       Path configured = Path.of(PUBLIC_DIRECTORY.get());
@@ -134,13 +131,13 @@ public final class BlueMapIntegration {
           "WebApp",
           "registerScript",
           new Class<?>[] {String.class},
-          "player-history/player-history-0.8.12.js");
+          "player-history/player-history-" + version + ".js");
       call(
           web,
           "WebApp",
           "registerStyle",
           new Class<?>[] {String.class},
-          "player-history/player-history-0.8.12.css");
+          "player-history/player-history-" + version + ".css");
       log.accept("History viewer installed; public dataset: " + dataset);
     } catch (Exception ex) {
       log.accept(

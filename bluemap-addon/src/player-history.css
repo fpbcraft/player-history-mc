@@ -641,7 +641,7 @@ bluemap-player-replay .history-chat {
 }
 bluemap-player-replay .history-chat > div {
   display: grid;
-  grid-template-columns: 10.5rem 20px minmax(0, 1fr);
+  grid-template-columns: 8.5rem 20px minmax(0, 1fr);
   align-items: start;
   gap: 7px;
   padding: 3px 4px;
@@ -673,7 +673,7 @@ bluemap-player-replay .history-chat-time {
   padding: 0;
   border: 0;
   text-align: left;
-  width: 10.5rem;
+  width: 8.5rem;
   white-space: nowrap;
 }
 @media (min-width: 601px) {
