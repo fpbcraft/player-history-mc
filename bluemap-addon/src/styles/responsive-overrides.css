@@ -1,0 +1,12 @@
+/* Keep declarative timeline markers and buttons aligned with the existing panel grid. */
+bluemap-player-replay .history-events > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+bluemap-player-replay .history-events > button svg {
+  width: 16px;
+  height: 16px;
+}

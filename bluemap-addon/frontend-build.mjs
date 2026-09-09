@@ -1,7 +1,7 @@
-import { copyFile, mkdir, rename, rm, stat, watch } from "node:fs/promises";
+import { mkdir, rm, stat, watch } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { context } from "esbuild";
+import { build, context } from "esbuild";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const source = join(root, "src");
@@ -15,9 +15,13 @@ const maximumBundleSize = 250 * 1024;
 
 export async function copyStyles() {
   await mkdir(outputDirectory, { recursive: true });
-  const temporaryOutput = `${styleOutput}.tmp`;
-  await copyFile(join(source, "player-history.css"), temporaryOutput);
-  await rename(temporaryOutput, styleOutput);
+  await build({
+    entryPoints: [join(source, "player-history.css")],
+    outfile: styleOutput,
+    bundle: true,
+    minify: false,
+    logLevel: "warning",
+  });
 }
 
 export async function verifyBundleSize(file = scriptOutput) {
@@ -62,7 +66,8 @@ export function watchStyles({ onSuccess, onError }) {
   const task = (async () => {
     let lastCopy = 0;
     try {
-      for await (const _event of watch(join(source, "player-history.css"), {
+      for await (const _event of watch(source, {
+        recursive: true,
         signal: controller.signal,
       })) {
         if (Date.now() - lastCopy < 50) continue;
