@@ -609,7 +609,6 @@ export class ReplayPanel extends HTMLElement {
       if (this.opened) this.close();
       this.q("open").hidden = true;
     }
-    await this.refresh(true);
     await this.loadRangeEvents();
     this.updateOverlays();
     this.lifecycle.clearInterval(this.chatTimer);
@@ -863,9 +862,10 @@ export class ReplayPanel extends HTMLElement {
     const { from, to } = this.clock,
       chart = this.require<HTMLElement>(".history-histogram");
     const caption = this.require<HTMLElement>(".history-density-status");
-    chart.replaceChildren();
     if (!this.manifest?.activityBucketMs) {
+      chart.replaceChildren();
       caption.textContent = "Recording density is not available yet";
+      this.requests.finish("activity", controller);
       return;
     }
     const count = Math.max(12, Math.min(96, Math.floor((chart.clientWidth || 720) / 10)));
@@ -874,7 +874,9 @@ export class ReplayPanel extends HTMLElement {
     const first = Math.floor(from / day) * day,
       last = Math.floor(to / day) * day;
     if ((last - first) / day > 2000) {
+      chart.replaceChildren();
       caption.textContent = "Choose a range of up to 2,000 days to show recording density";
+      this.requests.finish("activity", controller);
       return;
     }
     caption.textContent = "Loading recording density…";
@@ -889,7 +891,7 @@ export class ReplayPanel extends HTMLElement {
       for (const rows of days) {
         addActivityBins(bins, rows, from, to);
       }
-      if (controller.signal.aborted || !this.opened) return;
+      if (!this.requests.current("activity", controller) || !this.opened) return;
       const max = Math.max(0, ...bins);
       renderActivityHistogram(chart, { bins, from, to, formatTime: formatDate });
       const total = Math.round(bins.reduce((a, b) => a + b, 0));
