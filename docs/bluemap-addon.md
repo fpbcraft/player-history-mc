@@ -1,6 +1,6 @@
 # BlueMap viewer installation and development
 
-Install BlueMap 5.x and `player-history-bluemap-0.8.15.jar` in the server mods directory. For recording, also install the independent recorder JAR. The viewer mod's config is `config/playerhistory_bluemap-common.toml`:
+Install BlueMap 5.x and `player-history-bluemap-0.8.16.jar` in the server mods directory. For recording, also install the independent recorder JAR. The viewer mod's config is `config/playerhistory_bluemap-common.toml`:
 
 ```toml
 public-directory = "player-history/public"
@@ -34,7 +34,7 @@ Quick ranges include the recent-hour presets, today and yesterday, alongside an 
 
 The Events menu filters map icons and timeline event ticks by type. Preferences persist in the browser and do not change recorder settings. Icons are never shown before their timestamp; their lifetime follows trail duration (30 timeline seconds with trails off). Full-range mode retains events from the range start through the cursor. At most the latest 500 matching events are displayed.
 
-The frontend build produces a single stable-named script and stylesheet inside the JAR. At installation, the BlueMap bridge derives the mod version and writes versioned web filenames such as `player-history-0.8.15.js`, preventing mixed cached module versions. The Gradle bridge build runs the frontend build and packages only those two generated files. Replace the previous BlueMap integration JAR, restart/reload BlueMap and refresh the page. Existing public protocol v2 history remains compatible; no history deletion is required.
+The frontend build produces a single stable-named script and stylesheet inside the JAR. At installation, the BlueMap bridge derives the mod version and writes versioned web filenames such as `player-history-0.8.16.js`, preventing mixed cached module versions. The Gradle bridge build runs the frontend build and packages only those two generated files. Replace the previous BlueMap integration JAR, restart/reload BlueMap and refresh the page. Existing public protocol v2 history remains compatible; no history deletion is required.
 
 Event tooltips resolve item/dimension IDs and nested positions into readable lines rather than JSON. Newly visible markers scale/fade in; retained markers are reused and do not restart animations on each update. Reduced-motion preferences disable animation. Historical state uses the actual cursor time; absent old telemetry is reported as not recorded. A bundled inline Steve-style head replaces unavailable local skin images.
 
