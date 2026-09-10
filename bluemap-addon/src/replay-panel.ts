@@ -15,6 +15,7 @@ import {
   SPEED_OPTIONS,
   TRAIL_OPTIONS,
   trailDurationLabel,
+  UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
 import { BREAK, ChunkCache, CONTEXT, heatmapPlan, ReplayEngine } from "./replay-core.js";
@@ -257,6 +258,7 @@ export class ReplayPanel extends HTMLElement {
       if (Array.isArray(saved))
         this.disabledEvents = new Set(saved.filter((type) => typeof type === "string"));
     } catch {}
+    for (const type of UNAVAILABLE_EVENT_TYPES) this.disabledEvents.add(type);
     this.eventTypes = new Set(KNOWN_EVENT_TYPES);
     this.renderEventFilters();
     const savedTrail = String(preferences.trails());
@@ -1338,7 +1340,12 @@ export class ReplayPanel extends HTMLElement {
       this.trailDataKey = dataKey;
       let added = false;
       for (const event of events)
-        if (!this.eventTypes.has(event.type)) {
+        if (
+          !UNAVAILABLE_EVENT_TYPES.includes(
+            event.type as (typeof UNAVAILABLE_EVENT_TYPES)[number],
+          ) &&
+          !this.eventTypes.has(event.type)
+        ) {
           this.eventTypes.add(event.type);
           added = true;
         }

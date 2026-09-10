@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
+import { KNOWN_EVENT_TYPES } from "../src/panel-options.js";
 import { mountReplayPanelView, unmountReplayPanelView } from "../src/ui/replay-panel-view.js";
 
 describe("replay panel view", () => {
@@ -64,5 +65,11 @@ describe("replay panel view", () => {
 
     expect(root.querySelector('[name="open"]')).not.toBe(firstOpenButton);
     expect(root.querySelectorAll('[name="open"]')).toHaveLength(1);
+  });
+
+  it("does not expose noisy block and item events", () => {
+    expect(KNOWN_EVENT_TYPES).not.toEqual(
+      expect.arrayContaining(["ITEM_PICKUP", "ITEM_DROP", "BLOCK_BREAK", "BLOCK_PLACE"]),
+    );
   });
 });

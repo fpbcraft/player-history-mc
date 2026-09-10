@@ -51,11 +51,15 @@ export const trailDurationLabel = (value: number): string => {
   return `${value / 3_600_000}h`;
 };
 
-export const DEFAULT_DISABLED_EVENTS = [
+export const UNAVAILABLE_EVENT_TYPES = [
   "ITEM_PICKUP",
   "ITEM_DROP",
   "BLOCK_PLACE",
   "BLOCK_BREAK",
+] as const;
+
+export const DEFAULT_DISABLED_EVENTS = [
+  ...UNAVAILABLE_EVENT_TYPES,
   "CONTAINER_OPEN",
   "TELEPORT",
 ] as const;
@@ -68,8 +72,6 @@ export const KNOWN_EVENT_TYPES = [
   "DEATH",
   "TELEPORT",
   "DIMENSION_CHANGE",
-  "BLOCK_BREAK",
-  "BLOCK_PLACE",
   "CONTAINER_OPEN",
   "DAMAGE_TAKEN",
   "DAMAGE_DEALT",
@@ -80,6 +82,4 @@ export const KNOWN_EVENT_TYPES = [
   "SMELT",
   "ENCHANT",
   "TRADE",
-  "ITEM_PICKUP",
-  "ITEM_DROP",
 ] as const;

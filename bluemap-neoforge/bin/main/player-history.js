@@ -2127,11 +2127,14 @@ ${payload}` : ""}`;
     if (value < 36e5) return `${value / 6e4}m`;
     return `${value / 36e5}h`;
   };
-  var DEFAULT_DISABLED_EVENTS = [
+  var UNAVAILABLE_EVENT_TYPES = [
     "ITEM_PICKUP",
     "ITEM_DROP",
     "BLOCK_PLACE",
-    "BLOCK_BREAK",
+    "BLOCK_BREAK"
+  ];
+  var DEFAULT_DISABLED_EVENTS = [
+    ...UNAVAILABLE_EVENT_TYPES,
     "CONTAINER_OPEN",
     "TELEPORT"
   ];
@@ -2143,8 +2146,6 @@ ${payload}` : ""}`;
     "DEATH",
     "TELEPORT",
     "DIMENSION_CHANGE",
-    "BLOCK_BREAK",
-    "BLOCK_PLACE",
     "CONTAINER_OPEN",
     "DAMAGE_TAKEN",
     "DAMAGE_DEALT",
@@ -2154,9 +2155,7 @@ ${payload}` : ""}`;
     "CRAFT",
     "SMELT",
     "ENCHANT",
-    "TRADE",
-    "ITEM_PICKUP",
-    "ITEM_DROP"
+    "TRADE"
   ];
 
   // src/preferences.ts
@@ -2862,6 +2861,7 @@ ${payload}` : ""}`;
           this.disabledEvents = new Set(saved.filter((type) => typeof type === "string"));
       } catch {
       }
+      for (const type of UNAVAILABLE_EVENT_TYPES) this.disabledEvents.add(type);
       this.eventTypes = new Set(KNOWN_EVENT_TYPES);
       this.renderEventFilters();
       const savedTrail = String(preferences.trails());
@@ -3863,7 +3863,9 @@ ${payload}` : ""}`;
         this.trailDataKey = dataKey;
         let added = false;
         for (const event of events)
-          if (!this.eventTypes.has(event.type)) {
+          if (!UNAVAILABLE_EVENT_TYPES.includes(
+            event.type
+          ) && !this.eventTypes.has(event.type)) {
             this.eventTypes.add(event.type);
             added = true;
           }
