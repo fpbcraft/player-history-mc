@@ -310,9 +310,12 @@ bluemap-player-replay .history-popover {
   z-index: 3;
 }
 bluemap-player-replay .history-range .history-range-popover {
-  width: min(650px, calc(100vw - 24px));
+  width: min(280px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   padding: 0;
+}
+bluemap-player-replay .history-range .history-range-popover.history-range-editor-open {
+  width: min(570px, calc(100vw - 24px));
 }
 bluemap-player-replay .history-popover-heading {
   display: flex;
