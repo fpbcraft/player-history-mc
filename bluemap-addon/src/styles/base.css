@@ -108,13 +108,18 @@ bluemap-player-replay .history-range > [name="range-button"] svg {
   stroke-linejoin: round;
 }
 bluemap-player-replay .history-range-popover {
-  width: min(650px, calc(100vw - 24px));
+  width: min(280px, calc(100vw - 24px));
   padding: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.85fr);
+  grid-template-columns: 1fr;
   overflow: hidden;
   text-align: left;
   white-space: normal;
+  font-size: 12px;
+}
+bluemap-player-replay .history-range-popover.history-range-editor-open {
+  width: min(570px, calc(100vw - 24px));
+  grid-template-columns: minmax(250px, 1fr) minmax(210px, 0.8fr);
 }
 bluemap-player-replay .history-absolute-range,
 bluemap-player-replay .history-quick-ranges {
@@ -127,7 +132,7 @@ bluemap-player-replay .history-absolute-range > strong,
 bluemap-player-replay .history-quick-ranges > strong {
   display: block;
   margin-bottom: 12px;
-  font-size: 15px;
+  font-size: 13px;
 }
 bluemap-player-replay .history-range-popover .history-custom-dates {
   display: grid;
@@ -165,10 +170,10 @@ bluemap-player-replay .history-range-options {
   overflow-y: auto;
 }
 bluemap-player-replay .history-range-options button {
-  min-height: 34px;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 4px 9px;
   text-align: left;
-  font-size: 13px;
+  font-size: 12px;
 }
 bluemap-player-replay .history-range-options button[aria-pressed="true"] {
   border-left: 3px solid var(--history-accent);

@@ -2515,8 +2515,8 @@ ${payload}` : ""}`;
     ),
     /* @__PURE__ */ u2("input", { name: "range", type: "hidden", value: "0.125" }),
     /* @__PURE__ */ u2("div", { class: "history-range-popover history-popover", hidden: true, children: [
-      /* @__PURE__ */ u2("div", { class: "history-absolute-range", children: [
-        /* @__PURE__ */ u2("strong", { children: "Absolute time range" }),
+      /* @__PURE__ */ u2("div", { class: "history-absolute-range", hidden: true, children: [
+        /* @__PURE__ */ u2("strong", { class: "history-custom-dates", children: "Absolute time range" }),
         /* @__PURE__ */ u2("form", { class: "history-custom-dates", children: [
           /* @__PURE__ */ u2("label", { children: [
             "From ",
@@ -2528,6 +2528,7 @@ ${payload}` : ""}`;
           ] }),
           /* @__PURE__ */ u2("button", { type: "submit", children: "Apply time range" })
         ] }),
+        /* @__PURE__ */ u2("strong", { class: "history-custom-days", children: "Relative time range" }),
         /* @__PURE__ */ u2("form", { class: "history-custom-days", children: [
           /* @__PURE__ */ u2("label", { children: [
             "Last",
@@ -2551,9 +2552,7 @@ ${payload}` : ""}`;
       ] }),
       /* @__PURE__ */ u2("div", { class: "history-quick-ranges", children: [
         /* @__PURE__ */ u2("strong", { children: "Quick ranges" }),
-        /* @__PURE__ */ u2("div", { class: "history-range-options", children: RANGE_OPTIONS.filter(([value]) => value !== "custom" && value !== "dates").map(
-          ([value, label]) => /* @__PURE__ */ u2("button", { type: "button", "data-range": value, "aria-pressed": value === "0.125", children: label })
-        ) })
+        /* @__PURE__ */ u2("div", { class: "history-range-options", children: RANGE_OPTIONS.map(([value, label]) => /* @__PURE__ */ u2("button", { type: "button", "data-range": value, "aria-pressed": value === "0.125", children: label })) })
       ] })
     ] })
   ] });
@@ -2963,12 +2962,21 @@ ${payload}` : ""}`;
             this.q("date-from").value = local(this.clock.from);
             this.q("date-to").value = local(this.clock.to);
           }
+          this.showRangeEditor(
+            this.q("range").value === "custom" || this.q("range").value === "dates" ? this.q("range").value : null
+          );
           this.showMenu(rangeMenu, this.q("range-button"), true);
         }
       };
       rangeMenu.querySelectorAll("[data-range]").forEach((button) => {
         button.onclick = () => {
-          this.q("range").value = button.dataset.range ?? "0.125";
+          const value = button.dataset.range ?? "0.125";
+          if (value === "custom" || value === "dates") {
+            this.showRangeEditor(value);
+            this.showMenu(rangeMenu, this.q("range-button"), true);
+            return;
+          }
+          this.q("range").value = value;
           this.closeChoices();
           void this.changeRange();
         };
@@ -3127,6 +3135,18 @@ ${payload}` : ""}`;
       rangeMenu.hidePopover?.();
       rangeMenu.hidden = true;
       this.q("range-button").setAttribute("aria-expanded", "false");
+    }
+    showRangeEditor(kind) {
+      const menu = this.require(".history-range-popover");
+      const editor = this.require(".history-absolute-range");
+      const dates = menu.querySelectorAll(".history-custom-dates");
+      const days = menu.querySelectorAll(".history-custom-days");
+      const editingDates = kind === "dates";
+      const editingDays = kind === "custom";
+      editor.hidden = !editingDates && !editingDays;
+      menu.classList.toggle("history-range-editor-open", !editor.hidden);
+      for (const element of dates) element.hidden = !editingDates;
+      for (const element of days) element.hidden = !editingDays;
     }
     async pollChat() {
       if (this.chatLoading) return;

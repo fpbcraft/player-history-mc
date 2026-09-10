@@ -88,8 +88,8 @@ const RangeControl = () => (
     </button>
     <input name="range" type="hidden" value="0.125" />
     <div class="history-range-popover history-popover" hidden>
-      <div class="history-absolute-range">
-        <strong>Absolute time range</strong>
+      <div class="history-absolute-range" hidden>
+        <strong class="history-custom-dates">Absolute time range</strong>
         <form class="history-custom-dates">
           <label>
             From <input name="date-from" type="datetime-local" step="1" required />
@@ -99,6 +99,7 @@ const RangeControl = () => (
           </label>
           <button type="submit">Apply time range</button>
         </form>
+        <strong class="history-custom-days">Relative time range</strong>
         <form class="history-custom-days">
           <label>
             Last
@@ -120,13 +121,11 @@ const RangeControl = () => (
       <div class="history-quick-ranges">
         <strong>Quick ranges</strong>
         <div class="history-range-options">
-          {RANGE_OPTIONS.filter(([value]) => value !== "custom" && value !== "dates").map(
-            ([value, label]) => (
-              <button type="button" data-range={value} aria-pressed={value === "0.125"}>
-                {label}
-              </button>
-            ),
-          )}
+          {RANGE_OPTIONS.map(([value, label]) => (
+            <button type="button" data-range={value} aria-pressed={value === "0.125"}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

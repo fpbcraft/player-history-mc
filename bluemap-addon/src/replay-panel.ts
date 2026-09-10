@@ -359,12 +359,23 @@ export class ReplayPanel extends HTMLElement {
           this.q("date-from").value = local(this.clock.from);
           this.q("date-to").value = local(this.clock.to);
         }
+        this.showRangeEditor(
+          this.q("range").value === "custom" || this.q("range").value === "dates"
+            ? this.q("range").value
+            : null,
+        );
         this.showMenu(rangeMenu, this.q("range-button"), true);
       }
     };
     rangeMenu.querySelectorAll<HTMLButtonElement>("[data-range]").forEach((button) => {
       button.onclick = () => {
-        this.q("range").value = button.dataset.range ?? "0.125";
+        const value = button.dataset.range ?? "0.125";
+        if (value === "custom" || value === "dates") {
+          this.showRangeEditor(value);
+          this.showMenu(rangeMenu, this.q("range-button"), true);
+          return;
+        }
+        this.q("range").value = value;
         this.closeChoices();
         void this.changeRange();
       };
@@ -536,6 +547,19 @@ export class ReplayPanel extends HTMLElement {
     rangeMenu.hidePopover?.();
     rangeMenu.hidden = true;
     this.q("range-button").setAttribute("aria-expanded", "false");
+  }
+
+  private showRangeEditor(kind: string | null): void {
+    const menu = this.require<HTMLElement>(".history-range-popover");
+    const editor = this.require<HTMLElement>(".history-absolute-range");
+    const dates = menu.querySelectorAll<HTMLElement>(".history-custom-dates");
+    const days = menu.querySelectorAll<HTMLElement>(".history-custom-days");
+    const editingDates = kind === "dates";
+    const editingDays = kind === "custom";
+    editor.hidden = !editingDates && !editingDays;
+    menu.classList.toggle("history-range-editor-open", !editor.hidden);
+    for (const element of dates) element.hidden = !editingDates;
+    for (const element of days) element.hidden = !editingDays;
   }
   private async pollChat(): Promise<void> {
     if (this.chatLoading) return;
