@@ -1,6 +1,6 @@
 # Web chat
 
-Install both 0.8.14 JARs. The recorder hosts the chat API; the BlueMap mod supplies the browser controls. Public Minecraft chat and web messages appear in the chat panel. Chat events with a recorded player position appear as compact event icons on the map. When the chat panel is closed, new live messages and messages crossed during playback appear as bottom-left notifications. Web messages sent while the player is offline appear in the chat feed without inventing a map position; they are not added to positional replay history. The chat feed keeps the latest 100 messages in memory and resets on server restart.
+Install both 0.8.15 JARs. The recorder hosts the chat API; the BlueMap mod supplies the browser controls. Public Minecraft chat and web messages appear in the chat panel. Chat events with a recorded player position appear as compact event icons on the map. When the chat panel is closed, new live messages and messages crossed during playback appear as bottom-left notifications. Web messages sent while the player is offline appear in the chat feed without inventing a map position; they are not added to positional replay history. The chat feed keeps the latest 100 messages in memory and resets on server restart.
 
 ## One-time proxy setup
 

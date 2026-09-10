@@ -1,11 +1,11 @@
-# Player History 0.8.14
+# Player History 0.8.15
 
 Two server-side **Minecraft 1.21.1 / NeoForge 21.1.248+ / Java 21** mods:
 
 - **Player History Recorder** records movement, configurable state and activity, and publishes a versioned dataset. It does not depend on BlueMap.
 - **Player History BlueMap** installs the replay viewer into **BlueMap 5.x**, links the public dataset, and maps BlueMap map IDs to Minecraft dimensions. It does not depend on recorder classes and can view an existing compatible dataset.
 
-Install `player-history-recorder-0.8.14.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.14.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
+Install `player-history-recorder-0.8.15.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.15.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 
@@ -56,6 +56,10 @@ Viewer fixes in 0.8.1: immutable filenames for all helper assets prevent mixed c
 
 0.8.1 adds public chat recording, near-real-time event/chat display while preserving historical batches, and a collapsible mobile panel. Clicking trails/events opens details without seeking. Live uses BlueMap's native player heads without historical duplicates. Item pickup/drop, block place/break and container-open start hidden in fresh viewer preferences; enable them in Events.
 
+
+## Version 0.8.15
+
+The time-range menu now stays compact until the user chooses a custom relative or absolute range, with smaller picker typography. Item pickup/drop and block break/place events are no longer exposed or displayed by the viewer.
 
 ## Version 0.8.14
 
