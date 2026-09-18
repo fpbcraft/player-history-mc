@@ -533,13 +533,36 @@ export class HistoryScene3D {
     const cached = this.geometries.get(key);
     if (cached) return cached;
 
-    const geometry = new this.api.Three.BoxGeometry(width, height, depth);
-    const uv = geometry.attributes?.uv;
-    if (!uv) throw new Error("BlueMap Three.js BoxGeometry has no UV attribute");
+    const T = this.api.Three;
+    const geometry = new T.BufferGeometry();
+    const hx = width / 2;
+    const hy = height / 2;
+    const hz = depth / 2;
 
-    // Minecraft's skin layout is not a simple left-to-right cube unwrap, and Three.js
-    // BoxGeometry stores faces in right/left/top/bottom/front/back order with per-face
-    // vertex winding. Keep the exact same ordering used by skinview3d.
+    // Explicitly reproduce the six BoxGeometry planes in the same
+    // +X/-X/+Y/-Y/+Z/-Z order used by skinview3d, but without depending on
+    // Three.js' internal BoxGeometry vertex layout.
+    const positions = new Float32Array([
+      // +X (right)
+       hx,  hy,  hz,   hx,  hy, -hz,   hx, -hy,  hz,   hx, -hy, -hz,
+      // -X (left)
+      -hx,  hy, -hz,  -hx,  hy,  hz,  -hx, -hy, -hz,  -hx, -hy,  hz,
+      // +Y (top)
+      -hx,  hy, -hz,   hx,  hy, -hz,  -hx,  hy,  hz,   hx,  hy,  hz,
+      // -Y (bottom)
+      -hx, -hy,  hz,   hx, -hy,  hz,  -hx, -hy, -hz,   hx, -hy, -hz,
+      // +Z (front)
+      -hx,  hy,  hz,   hx,  hy,  hz,  -hx, -hy,  hz,   hx, -hy,  hz,
+      // -Z (back)
+       hx,  hy, -hz,  -hx,  hy, -hz,   hx, -hy, -hz,  -hx, -hy, -hz,
+    ]);
+
+    const indices: number[] = [];
+    for (let face = 0; face < 6; face++) {
+      const base = face * 4;
+      indices.push(base, base + 2, base + 1, base + 2, base + 3, base + 1);
+    }
+
     const { u, v, width: pixelWidth, height: pixelHeight, depth: pixelDepth } = skin;
     const rect = (x1: number, y1: number, x2: number, y2: number) => [
       [x1 / 64, 1 - y2 / 64],
@@ -548,14 +571,24 @@ export class HistoryScene3D {
       [x1 / 64, 1 - y1 / 64],
     ] as const;
 
-    const top = rect(u + pixelDepth, v, u + pixelWidth + pixelDepth, v + pixelDepth);
+    const top = rect(
+      u + pixelDepth,
+      v,
+      u + pixelWidth + pixelDepth,
+      v + pixelDepth,
+    );
     const bottom = rect(
       u + pixelWidth + pixelDepth,
       v,
       u + pixelWidth * 2 + pixelDepth,
       v + pixelDepth,
     );
-    const left = rect(u, v + pixelDepth, u + pixelDepth, v + pixelDepth + pixelHeight);
+    const left = rect(
+      u,
+      v + pixelDepth,
+      u + pixelDepth,
+      v + pixelDepth + pixelHeight,
+    );
     const front = rect(
       u + pixelDepth,
       v + pixelDepth,
@@ -575,6 +608,8 @@ export class HistoryScene3D {
       v + pixelDepth + pixelHeight,
     );
 
+    // These are the canonical per-face UV orders from skinview3d's setUVs().
+    // Each tuple corresponds exactly to the four explicit vertices above.
     const ordered = [
       [right[3], right[2], right[0], right[1]],
       [left[3], left[2], left[0], left[1]],
@@ -584,8 +619,16 @@ export class HistoryScene3D {
       [back[3], back[2], back[0], back[1]],
     ];
 
-    uv.set(new Float32Array(ordered.flat(2)));
-    uv.needsUpdate = true;
+    geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute(
+      "uv",
+      new T.Float32BufferAttribute(
+        new Float32Array(ordered.flat(2)),
+        2,
+      ),
+    );
+    geometry.setIndex?.(indices);
+
     this.geometries.set(key, geometry);
     return geometry;
   }
