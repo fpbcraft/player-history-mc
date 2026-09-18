@@ -124,7 +124,7 @@ export class HistoryScene3D {
   }
 
   raycastObjects(): Object3D[] {
-    return this.root.visible ? [this.root] : [];
+    return this.playersRoot.visible ? [this.playersRoot] : [];
   }
 
   setPlayersVisible(visible: boolean): void {
