@@ -15,7 +15,7 @@ import {
   formatTimestamp,
   playerColor,
 } from "./event-presentation.js";
-import { meterLevels } from "./player-vitals.js";
+import { createVitals, meterLevels, renderVitals } from "./player-vitals.js";
 import { HistoryScene3D } from "./history-scene3d.js";
 import { eventDetails, trailPoint } from "./telemetry.js";
 import type {
@@ -66,6 +66,9 @@ export class BlueMapAdapter {
   expandedGroup: HtmlMarker | null = null;
   heat: Mesh | null = null;
   stateDetails?: (player: number, time: number) => Promise<string>;
+  private playerIconMode = false;
+  private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
+  private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
 
   constructor(app: BlueMapApp, api: BlueMapRuntime) {
     this.app = app;
@@ -301,12 +304,77 @@ export class BlueMapAdapter {
     players: HistoryRegistry["players"] = [],
   ): void {
     this.scene3d.setPlayers(positions, names, players);
-    // Legacy HTML heads are intentionally cleared: the player itself now exists in the
-    // world-space Three.js scene. Tooltips/vitals still work through 3D raycasting.
-    this.clear(this.players);
+
+    const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
+    if (
+      !this.playerIconMode &&
+      distance >= BlueMapAdapter.PLAYER_ICON_ENTER_DISTANCE
+    ) {
+      this.playerIconMode = true;
+    } else if (
+      this.playerIconMode &&
+      distance <= BlueMapAdapter.PLAYER_ICON_EXIT_DISTANCE
+    ) {
+      this.playerIconMode = false;
+    }
+
+    this.scene3d.setPlayersVisible(!this.playerIconMode);
+
+    if (!this.playerIconMode) {
+      this.clear(this.players);
+      return;
+    }
+
+    const keep = new Set<string>();
+    for (const p of positions) {
+      const id = `p${p.player}`;
+      keep.add(id);
+      let marker = this.players.markers.get(id);
+      if (!marker) {
+        marker = new this.api.HtmlMarker(id);
+        marker.anchor.set(14, 14);
+        marker.element.className = "history-player";
+
+        const head = document.createElement("img");
+        head.alt = "Player skin head";
+        head.draggable = false;
+        const uuid = players.find((player) => player.id === p.player)?.uuid;
+        const root = this.app.mapViewer.map?.data?.mapDataRoot;
+        head.src = uuid && root
+          ? `${root}/assets/playerheads/${uuid}.png`
+          : FALLBACK_HEAD;
+        head.onerror = () => {
+          head.onerror = null;
+          head.src = FALLBACK_HEAD;
+        };
+
+        marker.element.append(createVitals(), head);
+        marker.element.dataset.historyHead = head.src;
+        marker.element.tabIndex = 0;
+        this.focusTooltip(marker.element);
+        this.players.add(marker);
+      }
+
+      marker.element.dataset.historyTooltip =
+        `♟ ${names.get(p.player) || p.player}\n◷ ${formatTimestamp(p.time)}\n⌖ ${formatCoordinates(p)}`;
+      marker.element.dataset.player = String(p.player);
+      marker.element.dataset.time = String(p.time);
+      marker.element.setAttribute(
+        "aria-label",
+        marker.element.dataset.historyTooltip,
+      );
+      marker.element.style.borderColor = playerColor(p.player);
+      marker.position.set(p.x / 32, p.y / 32, p.z / 32);
+    }
+
+    for (const [id, marker] of this.players.markers) {
+      if (!keep.has(id)) this.players.remove(marker);
+    }
   }
   setPlayerVitals(player: number, state: PlayerState = {}): void {
     this.scene3d.setPlayerVitals(player, state);
+    const element = this.players.markers.get(`p${player}`)?.element;
+    renderVitals(element?.querySelector(".history-player-vitals"), state);
   }
   setPlayerHealth(player: number, health: number, maxHealth: number): void {
     this.setPlayerVitals(player, { health, maxHealth });
