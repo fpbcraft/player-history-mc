@@ -4,8 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.playerhistory.core.JsonFiles;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -43,17 +46,12 @@ final class PlayerSkinPublisher implements AutoCloseable {
   void configure(Object blueMapApi, Path webRoot) {
     api = blueMapApi;
     skinsRoot = webRoot.resolve("player-history/skins").normalize();
+    published.clear();
+    queued.clear();
     try {
       Files.createDirectories(skinsRoot);
-      try (var files = Files.list(skinsRoot)) {
-        for (Path file : files.filter(path -> path.toString().endsWith(".png")).toList()) {
-          String name = file.getFileName().toString();
-          try {
-            published.add(UUID.fromString(name.substring(0, name.length() - 4)));
-          } catch (RuntimeException ignored) {
-          }
-        }
-      }
+      // Do not trust a PNG left by an older Player History build. Fetch each player's
+      // complete skin once per server process so stale skin assets cannot survive upgrades.
     } catch (IOException error) {
       log.accept("Cannot prepare historical player skins: " + error);
     }
@@ -123,8 +121,14 @@ final class PlayerSkinPublisher implements AutoCloseable {
       Path target = currentRoot.resolve(uuid + ".png");
       Files.createDirectories(target.getParent());
       Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-      if (!ImageIO.write(skin, "PNG", temp.toFile()))
-        throw new IOException("No PNG writer available");
+
+      byte[] png;
+      try (var encoded = new ByteArrayOutputStream()) {
+        if (!ImageIO.write(skin, "PNG", encoded))
+          throw new IOException("No PNG writer available");
+        png = encoded.toByteArray();
+      }
+      Files.write(temp, png);
       try {
         Files.move(
             temp,
@@ -134,6 +138,23 @@ final class PlayerSkinPublisher implements AutoCloseable {
       } catch (AtomicMoveNotSupportedException ignored) {
         Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
       }
+
+      String sha = "unavailable";
+      try {
+        sha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(png));
+      } catch (NoSuchAlgorithmException ignored) {
+      }
+      log.accept(
+          "PLAYER-HISTORY-SKIN-V12 uuid="
+              + uuid
+              + " size="
+              + skin.getWidth()
+              + "x"
+              + skin.getHeight()
+              + " alpha="
+              + skin.getColorModel().hasAlpha()
+              + " sha256="
+              + sha);
       published.add(uuid);
     } catch (InvocationTargetException error) {
       Throwable cause = error.getCause();
