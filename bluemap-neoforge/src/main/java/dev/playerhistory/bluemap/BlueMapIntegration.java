@@ -103,8 +103,12 @@ public final class BlueMapIntegration {
     if (api == null || worldRoot == null) return;
     try {
       Object web = call(api, "BlueMapAPI", "getWebApp", new Class<?>[0]);
-      Path root =
-          ((Path) call(web, "WebApp", "getWebRoot", new Class<?>[0])).resolve("player-history");
+      Path webRoot =
+          ((Path) call(web, "WebApp", "getWebRoot", new Class<?>[0]))
+              .toAbsolutePath()
+              .normalize();
+      objectHistory.webRoot(webRoot);
+      Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
