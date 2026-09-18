@@ -48,6 +48,7 @@ test("object replay interpolates position and quaternion with slerp", () => {
   assert.ok(Math.abs(pose.qy - Math.SQRT1_2) < 0.002);
   assert.ok(Math.abs(pose.qw - Math.SQRT1_2) < 0.002);
   assert.equal(pose.geometry, 7);
+  assert.equal(pose.travel, 0.5);
 });
 
 test("object replay respects breaks, worlds, and explicit disappearance", () => {
@@ -104,4 +105,17 @@ test("poses can be filtered to the active dimension", () => {
     engine.poses(100, 1).map((pose) => pose.object),
     [2],
   );
+});
+
+
+test("historical object travel reverses with object-local movement", () => {
+  const engine = new ObjectReplayEngine(32, 32767, [
+    p(100, 0, 0, 32767, OBJECT_BREAK),
+    p(200, 32),
+    p(300, 0),
+  ]);
+
+  assert.equal(engine.pose(1, 200)?.travel, 1);
+  assert.equal(engine.pose(1, 250)?.travel, 0.5);
+  assert.equal(engine.pose(1, 300)?.travel, 0);
 });
