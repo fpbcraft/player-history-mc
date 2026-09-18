@@ -53,6 +53,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
   private final Path root;
   private final ObjectRegistry registry;
+  private final ObjectGeometryArchive geometryArchive;
   private final Options options;
   private final Consumer<String> log;
   private final ArrayBlockingQueue<Envelope> queue;
@@ -102,6 +103,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     JsonFiles.write(settings, options.duration());
 
     registry = new ObjectRegistry(root.resolve("registry.json"));
+    geometryArchive = new ObjectGeometryArchive(root, log);
     recover();
     indexExisting();
 
@@ -129,6 +131,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
     for (ObjectSnapshot snapshot : snapshots) {
       if (!present.add(snapshot.sourceId())) continue;
+      geometryArchive.reference(provider, snapshot.sourceId(), snapshot.geometryVersion(), now);
       Tracked state = known.computeIfAbsent(snapshot.sourceId(), ignored -> new Tracked(snapshot));
       state.observed = snapshot;
 
@@ -194,7 +197,19 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   }
 
   public void publishTo(Path publicDatasetRoot) {
-    publicRoot = publicDatasetRoot.resolve("objects");
+    Path target = publicDatasetRoot.resolve("objects");
+    publicRoot = target;
+    try {
+      geometryArchive.publishTo(target);
+    } catch (IOException error) {
+      log.accept("Could not publish object geometry archive: " + error);
+    }
+  }
+
+  public void archiveGeometry(
+      String provider, String sourceId, long version, Path sourceMesh, Path sourceAtlas)
+      throws IOException {
+    geometryArchive.archive(provider, sourceId, version, sourceMesh, sourceAtlas);
   }
 
   public void retentionDays(int days) {
@@ -213,6 +228,8 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         + queue.size()
         + " objectBytes="
         + bytes
+        + " objectGeometries="
+        + geometryArchive.size()
         + " objectFailure="
         + failure;
   }
@@ -333,6 +350,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     if (channel == null) return;
 
     JsonFiles.write(root.resolve("registry.json"), registry.snapshot());
+    geometryArchive.flush();
     if (!pending.isEmpty()) {
       write(ObjectBinaryCodec.frame(pending, start));
       channel.force(false);
@@ -392,7 +410,8 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     result.put("positionScale", ObjectPoint.POSITION_SCALE);
     result.put("quaternionScale", ObjectPoint.QUATERNION_SCALE);
     result.put("registry", registry.snapshot());
-    result.put("geometryArchive", false);
+    result.put("geometryArchive", true);
+    result.put("geometries", geometryArchive.entries());
     return result;
   }
 
@@ -519,6 +538,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     prune(root.resolve("tracks"), cutoff);
     Path pub = publicRoot;
     if (pub != null) prune(pub.resolve("chunks"), cutoff);
+    geometryArchive.prune(cutoff);
     publishedChunks.removeIf(chunk -> chunk < cutoff);
     earliest = Math.max(earliest, cutoff);
   }
