@@ -4,11 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.playerhistory.core.JsonFiles;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
@@ -126,13 +123,10 @@ final class PlayerSkinPublisher implements AutoCloseable {
       Files.createDirectories(target.getParent());
       Path temp = target.resolveSibling(target.getFileName() + ".tmp");
 
-      byte[] png;
-      try (var encoded = new ByteArrayOutputStream()) {
-        if (!ImageIO.write(skin, "PNG", encoded))
+      try (var out = Files.newOutputStream(temp)) {
+        if (!ImageIO.write(skin, "PNG", out))
           throw new IOException("No PNG writer available");
-        png = encoded.toByteArray();
       }
-      Files.write(temp, png);
       try {
         Files.move(
             temp,
@@ -142,27 +136,6 @@ final class PlayerSkinPublisher implements AutoCloseable {
       } catch (AtomicMoveNotSupportedException ignored) {
         Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
       }
-
-      String sha = "unavailable";
-      try {
-        sha = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(png));
-      } catch (NoSuchAlgorithmException ignored) {
-      }
-      log.accept(
-          "PLAYER-HISTORY-SKIN-V13 uuid="
-              + uuid
-              + " source="
-              + sourceWidth
-              + "x"
-              + sourceHeight
-              + " published="
-              + skin.getWidth()
-              + "x"
-              + skin.getHeight()
-              + " alpha="
-              + skin.getColorModel().hasAlpha()
-              + " sha256="
-              + sha);
       published.add(uuid);
     } catch (InvocationTargetException error) {
       Throwable cause = error.getCause();
