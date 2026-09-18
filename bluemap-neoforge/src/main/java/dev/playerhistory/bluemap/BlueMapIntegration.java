@@ -103,6 +103,52 @@ public final class BlueMapIntegration {
         .invoke(target, args);
   }
 
+  @SuppressWarnings("unchecked")
+  private void removeLegacyRegistrations(Object web, Path assetRoot) {
+    String currentScript = "player-history/player-history-" + version + ".js";
+    String currentStyle = "player-history/player-history-" + version + ".css";
+    try {
+      var serviceField = web.getClass().getDeclaredField("blueMapService");
+      serviceField.setAccessible(true);
+      Object service = serviceField.get(web);
+      Object manager = service.getClass().getMethod("getWebFilesManager").invoke(service);
+
+      Set<String> scripts =
+          (Set<String>) manager.getClass().getMethod("getScripts").invoke(manager);
+      Set<String> styles =
+          (Set<String>) manager.getClass().getMethod("getStyles").invoke(manager);
+
+      scripts.removeIf(
+          url ->
+              url.startsWith("player-history/player-history-")
+                  && url.endsWith(".js")
+                  && !url.equals(currentScript));
+      styles.removeIf(
+          url ->
+              url.startsWith("player-history/player-history-")
+                  && url.endsWith(".css")
+                  && !url.equals(currentStyle));
+
+      manager.getClass().getMethod("saveSettings").invoke(manager);
+
+      try (var files = Files.list(assetRoot)) {
+        for (Path file : files.toList()) {
+          String name = file.getFileName().toString();
+          if ((name.startsWith("player-history-") && name.endsWith(".js")
+                  && !name.equals("player-history-" + version + ".js"))
+              || (name.startsWith("player-history-") && name.endsWith(".css")
+                  && !name.equals("player-history-" + version + ".css"))) {
+            Files.deleteIfExists(file);
+          }
+        }
+      }
+    } catch (ReflectiveOperationException | java.io.IOException error) {
+      // BlueMap has no public unregister API. Failure here is non-fatal, but keeping
+      // stale versioned URLs can cause an older cached custom element to win at startup.
+      log.accept("Could not remove stale Player History web registrations: " + error);
+    }
+  }
+
   private synchronized void install() {
     if (api == null || worldRoot == null) return;
     try {
@@ -155,6 +201,7 @@ public final class BlueMapIntegration {
       }
       Files.writeString(
           root.resolve("integration.json"), new Gson().toJson(Map.of("mapWorlds", mapping)));
+      removeLegacyRegistrations(web, root);
       call(
           web,
           "WebApp",
