@@ -17,10 +17,22 @@ import org.slf4j.LoggerFactory;
 public final class BlueMapIntegration {
   private static final ModConfigSpec SPEC;
   private static final ModConfigSpec.ConfigValue<String> PUBLIC_DIRECTORY;
+  private static final ModConfigSpec.BooleanValue OBJECT_HISTORY;
+  private static final ModConfigSpec.IntValue OBJECT_SAMPLE_INTERVAL;
+  private static final ModConfigSpec.ConfigValue<List<? extends String>> OBJECT_PROVIDERS;
 
   static {
     var b = new ModConfigSpec.Builder();
     PUBLIC_DIRECTORY = b.define("public-directory", "player-history/public");
+    OBJECT_HISTORY = b.define("object-history.enabled", true);
+    OBJECT_SAMPLE_INTERVAL =
+        b.defineInRange("object-history.sample-interval-ms", 500, 50, 60_000);
+    OBJECT_PROVIDERS =
+        b.defineListAllowEmpty(
+            "object-history.providers",
+            List.of("create_contraptions", "sable_ships"),
+            () -> "",
+            value -> value instanceof String);
     SPEC = b.build();
   }
 
@@ -29,12 +41,14 @@ public final class BlueMapIntegration {
   private volatile Path worldRoot;
   private final Map<String, Object> levels = new HashMap<>();
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
+  private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
     container.registerConfig(ModConfig.Type.COMMON, SPEC);
     NeoForge.EVENT_BUS.addListener(this::start);
     NeoForge.EVENT_BUS.addListener(this::stop);
+    NeoForge.EVENT_BUS.addListener(this::tick);
     try {
       var type = Class.forName("de.bluecolored.bluemap.api.BlueMapAPI");
       type.getMethod("onEnable", Consumer.class)
@@ -67,8 +81,14 @@ public final class BlueMapIntegration {
   }
 
   private void stop(ServerStoppingEvent event) {
+    objectHistory.reset();
     worldRoot = null;
     levels.clear();
+  }
+
+  private void tick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+    objectHistory.tick(
+        event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
   }
 
   private static Object call(
