@@ -21,9 +21,13 @@ import type {
   PointSegment,
 } from "./types.js";
 
-type Rect = readonly [number, number, number, number];
-type Face = "top" | "bottom" | "right" | "front" | "left" | "back";
-type Faces = Record<Face, Rect>;
+interface SkinBox {
+  u: number;
+  v: number;
+  width: number;
+  height: number;
+  depth: number;
+}
 
 interface Limb {
   group: Object3D;
@@ -58,28 +62,27 @@ interface EventMesh extends Object3D {
   material: Material;
 }
 
-const skinFaces = (u: number, v: number, w: number, h: number, d: number): Faces => ({
-  top: [u + d, v, w, d],
-  bottom: [u + d + w, v, w, d],
-  right: [u, v + d, d, h],
-  front: [u + d, v + d, w, h],
-  left: [u + d + w, v + d, d, h],
-  back: [u + d + w + d, v + d, w, h],
-});
+const skinBox = (
+  u: number,
+  v: number,
+  width: number,
+  height: number,
+  depth: number,
+): SkinBox => ({ u, v, width, height, depth });
 
 const SKIN = {
-  head: skinFaces(0, 0, 8, 8, 8),
-  hat: skinFaces(32, 0, 8, 8, 8),
-  body: skinFaces(16, 16, 8, 12, 4),
-  jacket: skinFaces(16, 32, 8, 12, 4),
-  rightArm: skinFaces(40, 16, 4, 12, 4),
-  rightSleeve: skinFaces(40, 32, 4, 12, 4),
-  leftArm: skinFaces(32, 48, 4, 12, 4),
-  leftSleeve: skinFaces(48, 48, 4, 12, 4),
-  rightLeg: skinFaces(0, 16, 4, 12, 4),
-  rightPants: skinFaces(0, 32, 4, 12, 4),
-  leftLeg: skinFaces(16, 48, 4, 12, 4),
-  leftPants: skinFaces(0, 48, 4, 12, 4),
+  head: skinBox(0, 0, 8, 8, 8),
+  hat: skinBox(32, 0, 8, 8, 8),
+  body: skinBox(16, 16, 8, 12, 4),
+  jacket: skinBox(16, 32, 8, 12, 4),
+  rightArm: skinBox(40, 16, 4, 12, 4),
+  rightSleeve: skinBox(40, 32, 4, 12, 4),
+  leftArm: skinBox(32, 48, 4, 12, 4),
+  leftSleeve: skinBox(48, 48, 4, 12, 4),
+  rightLeg: skinBox(0, 16, 4, 12, 4),
+  rightPants: skinBox(0, 32, 4, 12, 4),
+  leftLeg: skinBox(16, 48, 4, 12, 4),
+  leftPants: skinBox(0, 48, 4, 12, 4),
 } as const;
 
 /**
@@ -393,16 +396,16 @@ export class HistoryScene3D {
     const limb = (
       key: string,
       overlayKey: string,
-      faces: Faces,
-      overlayFaces: Faces,
+      skin: SkinBox,
+      overlaySkin: SkinBox,
       x: number,
       pivotY: number,
     ): Limb => {
       const group = new T.Group();
       group.position.set(x, pivotY, 0);
-      const mesh = new T.Mesh(this.geometry(key, 0.25, 0.75, 0.25, faces), material);
+      const mesh = new T.Mesh(this.geometry(key, 0.25, 0.75, 0.25, skin), material);
       const overlay = new T.Mesh(
-        this.geometry(overlayKey, 0.28, 0.78, 0.28, overlayFaces),
+        this.geometry(overlayKey, 0.28, 0.78, 0.28, overlaySkin),
         material,
       );
       mesh.position.set(0, -0.375, 0);
@@ -525,48 +528,66 @@ export class HistoryScene3D {
     width: number,
     height: number,
     depth: number,
-    faces: Faces,
+    skin: SkinBox,
   ): Geometry {
     const cached = this.geometries.get(key);
     if (cached) return cached;
 
-    const T = this.api.Three;
-    const geometry = new T.BufferGeometry();
-    const hx = width / 2;
-    const hy = height / 2;
-    const hz = depth / 2;
+    const geometry = new this.api.Three.BoxGeometry(width, height, depth);
+    const uv = geometry.attributes?.uv;
+    if (!uv) throw new Error("BlueMap Three.js BoxGeometry has no UV attribute");
 
-    const facePositions: Record<Face, readonly number[]> = {
-      front: [-hx, -hy, hz, hx, -hy, hz, hx, hy, hz, -hx, hy, hz],
-      back: [hx, -hy, -hz, -hx, -hy, -hz, -hx, hy, -hz, hx, hy, -hz],
-      right: [hx, -hy, hz, hx, -hy, -hz, hx, hy, -hz, hx, hy, hz],
-      left: [-hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz],
-      top: [-hx, hy, hz, hx, hy, hz, hx, hy, -hz, -hx, hy, -hz],
-      bottom: [-hx, -hy, -hz, hx, -hy, -hz, hx, -hy, hz, -hx, -hy, hz],
-    };
+    // Minecraft's skin layout is not a simple left-to-right cube unwrap, and Three.js
+    // BoxGeometry stores faces in right/left/top/bottom/front/back order with per-face
+    // vertex winding. Keep the exact same ordering used by skinview3d.
+    const { u, v, width: pixelWidth, height: pixelHeight, depth: pixelDepth } = skin;
+    const rect = (x1: number, y1: number, x2: number, y2: number) => [
+      [x1 / 64, 1 - y2 / 64],
+      [x2 / 64, 1 - y2 / 64],
+      [x2 / 64, 1 - y1 / 64],
+      [x1 / 64, 1 - y1 / 64],
+    ] as const;
 
-    const positions: number[] = [];
-    const uvs: number[] = [];
-    const indices: number[] = [];
-    const order: Face[] = ["front", "back", "right", "left", "top", "bottom"];
+    const top = rect(u + pixelDepth, v, u + pixelWidth + pixelDepth, v + pixelDepth);
+    const bottom = rect(
+      u + pixelWidth + pixelDepth,
+      v,
+      u + pixelWidth * 2 + pixelDepth,
+      v + pixelDepth,
+    );
+    const left = rect(u, v + pixelDepth, u + pixelDepth, v + pixelDepth + pixelHeight);
+    const front = rect(
+      u + pixelDepth,
+      v + pixelDepth,
+      u + pixelWidth + pixelDepth,
+      v + pixelDepth + pixelHeight,
+    );
+    const right = rect(
+      u + pixelWidth + pixelDepth,
+      v + pixelDepth,
+      u + pixelWidth + pixelDepth * 2,
+      v + pixelDepth + pixelHeight,
+    );
+    const back = rect(
+      u + pixelWidth + pixelDepth * 2,
+      v + pixelDepth,
+      u + pixelWidth * 2 + pixelDepth * 2,
+      v + pixelDepth + pixelHeight,
+    );
 
-    for (let faceIndex = 0; faceIndex < order.length; faceIndex++) {
-      const face = order[faceIndex];
-      positions.push(...facePositions[face]);
-      const [u, v, w, h] = faces[face];
-      const u0 = u / 64;
-      const u1 = (u + w) / 64;
-      const v0 = 1 - (v + h) / 64;
-      const v1 = 1 - v / 64;
-      uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
-      const base = faceIndex * 4;
-      indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
-    }
+    const ordered = [
+      [right[3], right[2], right[0], right[1]],
+      [left[3], left[2], left[0], left[1]],
+      [top[3], top[2], top[0], top[1]],
+      [bottom[0], bottom[1], bottom[3], bottom[2]],
+      [front[3], front[2], front[0], front[1]],
+      [back[3], back[2], back[0], back[1]],
+    ];
 
-    geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute("uv", new T.Float32BufferAttribute(uvs, 2));
-    geometry.setIndex?.(indices);
+    uv.set(new Float32Array(ordered.flat(2)));
+    uv.needsUpdate = true;
     this.geometries.set(key, geometry);
     return geometry;
   }
+
 }
