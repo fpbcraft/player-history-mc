@@ -238,6 +238,21 @@ export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
     geometryArchive: value.geometryArchive === true,
     registry: parseObjectRegistry(value.registry),
   };
+  if (value.geometries !== undefined) {
+    if (!Array.isArray(value.geometries) || value.geometries.length > 100_000)
+      throw new Error("Invalid object-history geometry catalog");
+    result.geometries = value.geometries.map((entry) => {
+      if (!isObject(entry)) throw new Error("Invalid object-history geometry");
+      return {
+        provider: stringField(entry, "provider"),
+        sourceId: stringField(entry, "sourceId"),
+        version: numberField(entry, "version"),
+        mesh: stringField(entry, "mesh"),
+        atlas: stringField(entry, "atlas"),
+        lastReferencedAt: numberField(entry, "lastReferencedAt"),
+      };
+    });
+  }
   if (value.chunkRanges !== undefined) {
     if (!Array.isArray(value.chunkRanges) || value.chunkRanges.length > 100_000)
       throw new Error("Invalid object-history chunk index");
