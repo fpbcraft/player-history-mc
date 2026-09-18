@@ -36,6 +36,7 @@ interface PlayerAvatar {
   material: Material;
   texture?: Texture;
   parts: Object3D[];
+  head: Object3D;
   rightArm: Limb;
   leftArm: Limb;
   rightLeg: Limb;
@@ -43,6 +44,8 @@ interface PlayerAvatar {
   last?: HistoryPoint;
   yaw: number;
   phase: number;
+  recordedYaw?: number;
+  recordedPitch?: number;
 }
 
 interface DisposableLine extends Object3D {
@@ -160,7 +163,18 @@ export class HistoryScene3D {
 
   setPlayerVitals(player: number, state: PlayerState = {}): void {
     const avatar = this.players.get(player);
-    if (avatar) avatar.root.userData.historyVitals = state;
+    if (!avatar) return;
+    avatar.root.userData.historyVitals = state;
+    avatar.recordedYaw =
+      typeof state.yaw === "number" && Number.isFinite(state.yaw)
+        ? (-state.yaw * Math.PI) / 180
+        : undefined;
+    avatar.recordedPitch =
+      typeof state.pitch === "number" && Number.isFinite(state.pitch)
+        ? (state.pitch * Math.PI) / 180
+        : undefined;
+    const pitch = avatar.recordedPitch ?? 0;
+    avatar.head.quaternion.set(Math.sin(pitch / 2), 0, 0, Math.cos(pitch / 2));
   }
 
   setTrails(segments: readonly PointSegment[], names: ReadonlyMap<number, string>): void {
@@ -346,8 +360,19 @@ export class HistoryScene3D {
       return mesh;
     };
 
-    addStatic(this.geometry("head", 0.5, 0.5, 0.5, SKIN.head), 0, 1.75, 0, "head");
-    addStatic(this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat), 0, 1.75, 0, "hat");
+    const head = new T.Group();
+    head.position.set(0, 1.75, 0);
+    root.add(head);
+    for (const [name, geometry] of [
+      ["head", this.geometry("head", 0.5, 0.5, 0.5, SKIN.head)],
+      ["hat", this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat)],
+    ] as const) {
+      const mesh = new T.Mesh(geometry, material);
+      mesh.name = name;
+      this.decoratePlayerPart(mesh, id);
+      head.add(mesh);
+      parts.push(mesh);
+    }
     addStatic(this.geometry("body", 0.5, 0.75, 0.25, SKIN.body), 0, 1.125, 0, "body");
     addStatic(
       this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket),
@@ -420,6 +445,7 @@ export class HistoryScene3D {
       material,
       ...(texture ? { texture } : {}),
       parts,
+      head,
       rightArm,
       leftArm,
       rightLeg,
@@ -450,8 +476,11 @@ export class HistoryScene3D {
     }
 
     avatar.root.position.set(x, y, z);
-    const halfYaw = avatar.yaw / 2;
+    const effectiveYaw = avatar.recordedYaw ?? avatar.yaw;
+    const halfYaw = effectiveYaw / 2;
     avatar.root.quaternion.set(0, Math.sin(halfYaw), 0, Math.cos(halfYaw));
+    const pitch = avatar.recordedPitch ?? 0;
+    avatar.head.quaternion.set(Math.sin(pitch / 2), 0, 0, Math.cos(pitch / 2));
 
     const swing = Math.sin(avatar.phase) * walking;
     this.rotateX(avatar.rightArm.group, swing);
