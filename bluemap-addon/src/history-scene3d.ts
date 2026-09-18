@@ -71,7 +71,7 @@ const skinBox = (
   depth: number,
 ): SkinBox => ({ u, v, width, height, depth });
 
-const PLAYER_HISTORY_SKIN_BUILD = "0.8.21-v12";
+const PLAYER_HISTORY_SKIN_BUILD = "0.8.22-v13";
 
 const SKIN = {
   head: skinBox(0, 0, 8, 8, 8),
@@ -369,7 +369,7 @@ export class HistoryScene3D {
               height?: number;
             };
           }).image;
-          console.info("[PlayerHistory3D skin V12]", {
+          console.info("[PlayerHistory3D skin V13]", {
             build: PLAYER_HISTORY_SKIN_BUILD,
             uuid,
             url,
@@ -384,7 +384,7 @@ export class HistoryScene3D {
         },
         undefined,
         (error) => {
-          console.warn("[PlayerHistory3D skin V12] failed", {
+          console.warn("[PlayerHistory3D skin V13] failed", {
             build: PLAYER_HISTORY_SKIN_BUILD,
             uuid,
             url,
