@@ -1164,13 +1164,21 @@ export class ReplayPanel extends HTMLElement {
       }
       const world = this.world();
       const ready = Math.floor(this.clock.time / this.cache.duration) === this.loadedBucket;
-      const positions =
-        ready && !this.isLive
-          ? [...this.selection]
-              .map((id) => this.engine.position(id, this.clock.time))
-              .filter((point): point is HistoryPoint => point !== null && point.world === world)
-              .map((point) => ({ ...point, time: this.clock.time }))
-          : [];
+      let positions: HistoryPoint[] = [];
+      if (this.isLive) {
+        const latest = new Map<number, HistoryPoint>();
+        for (const point of this.livePoints) {
+          if (point.world !== world || !this.selection.has(point.player)) continue;
+          const previous = latest.get(point.player);
+          if (!previous || point.time >= previous.time) latest.set(point.player, point);
+        }
+        positions = [...latest.values()];
+      } else if (ready) {
+        positions = [...this.selection]
+          .map((id) => this.engine.position(id, this.clock.time))
+          .filter((point): point is HistoryPoint => point !== null && point.world === world)
+          .map((point) => ({ ...point, time: this.clock.time }));
+      }
       this.adapter.setPlayers(positions, this.names, this.manifest.registry.players);
 
       if (this.objectAdapter && this.objectManifest && this.objectCache && !this.isLive) {
