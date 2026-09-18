@@ -3,6 +3,8 @@ package dev.playerhistory.bluemap;
 import dev.playerhistory.object.ObjectHistoryApi;
 import dev.playerhistory.object.ObjectSnapshot;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Consumer;
 import net.minecraft.resources.ResourceKey;
@@ -24,6 +26,8 @@ final class BlueMap3DHistoryBridge {
   private boolean resolutionAttempted;
   private boolean connectedLogged;
   private long nextSample;
+  private volatile Path webRoot;
+  private Object meshListener;
 
   private Method providersMethod;
   private Method providerIdMethod;
@@ -89,8 +93,13 @@ final class BlueMap3DHistoryBridge {
     }
   }
 
+  void webRoot(Path root) {
+    webRoot = root == null ? null : root.toAbsolutePath().normalize();
+  }
+
   void reset() {
     nextSample = 0;
+    webRoot = null;
   }
 
   private ObjectSnapshot snapshot(Object object) throws ReflectiveOperationException {
@@ -134,10 +143,72 @@ final class BlueMap3DHistoryBridge {
       objectGeometryVersionMethod = object.getMethod("geometryVersion");
       objectPositionMethod = object.getMethod("position");
       objectRotationMethod = object.getMethod("rotation");
+      installMeshListener(api);
       return true;
     } catch (ReflectiveOperationException error) {
       log.accept("BlueMap3D is not available; vehicle/object history is inactive.");
       return false;
+    }
+  }
+
+  private void installMeshListener(Class<?> api) {
+    if (meshListener != null) return;
+    try {
+      Class<?> listenerType =
+          Class.forName("dev.duzo.bluemap3d.api.BlueMap3D$MeshPublicationListener");
+      Object listener =
+          Proxy.newProxyInstance(
+              listenerType.getClassLoader(),
+              new Class<?>[] {listenerType},
+              (proxy, method, args) -> {
+                if ("published".equals(method.getName())
+                    && args != null
+                    && args.length == 1
+                    && args[0] != null) {
+                  archivePublication(args[0]);
+                  return null;
+                }
+                if ("toString".equals(method.getName()))
+                  return "PlayerHistoryBlueMap3DMeshListener";
+                if ("hashCode".equals(method.getName())) return System.identityHashCode(proxy);
+                if ("equals".equals(method.getName()))
+                  return args != null && args.length == 1 && proxy == args[0];
+                return null;
+              });
+      api.getMethod("addMeshPublicationListener", listenerType).invoke(null, listener);
+      meshListener = listener;
+      log.accept("BlueMap3D geometry archive listener active.");
+    } catch (ReflectiveOperationException error) {
+      log.accept(
+          "BlueMap3D does not expose mesh publication events; object transforms will record, "
+              + "but durable historical geometry needs the Player History BlueMap3D build.");
+    }
+  }
+
+  private void archivePublication(Object publication) {
+    Path root = webRoot;
+    if (root == null || !ObjectHistoryApi.available()) return;
+    try {
+      Class<?> type = publication.getClass();
+      String provider = (String) type.getMethod("provider").invoke(publication);
+      String sourceId = (String) type.getMethod("objectId").invoke(publication);
+      long version = ((Number) type.getMethod("version").invoke(publication)).longValue();
+      String meshUrl = (String) type.getMethod("meshUrl").invoke(publication);
+
+      Path mesh = root.resolve(meshUrl).normalize();
+      if (!mesh.startsWith(root))
+        throw new IllegalArgumentException("BlueMap3D mesh escaped web root: " + meshUrl);
+      String atlasUrl =
+          meshUrl.endsWith(".bm3d")
+              ? meshUrl.substring(0, meshUrl.length() - ".bm3d".length()) + ".png"
+              : meshUrl + ".png";
+      Path atlas = root.resolve(atlasUrl).normalize();
+      if (!atlas.startsWith(root))
+        throw new IllegalArgumentException("BlueMap3D atlas escaped web root: " + atlasUrl);
+
+      ObjectHistoryApi.archiveGeometry(provider, sourceId, version, mesh, atlas);
+    } catch (Exception error) {
+      log.accept("Could not archive BlueMap3D geometry: " + rootCause(error));
     }
   }
 
