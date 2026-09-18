@@ -119,6 +119,14 @@ export interface BlueMapRuntime {
     Vector3: new (x?: number, y?: number, z?: number) => unknown;
     Matrix4: new () => Matrix4;
     BufferGeometry: new () => Geometry;
+    BoxGeometry: new (width: number, height: number, depth: number) => Geometry & {
+      attributes?: {
+        uv?: {
+          set(values: Float32Array): void;
+          needsUpdate: boolean;
+        };
+      };
+    };
     Float32BufferAttribute: new (values: number[] | Float32Array, size: number) => unknown;
     Uint32BufferAttribute?: new (values: number[] | Uint32Array, size: number) => unknown;
     MeshBasicMaterial: new (options: Record<string, unknown>) => Material;
