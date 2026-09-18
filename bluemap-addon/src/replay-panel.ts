@@ -20,7 +20,7 @@ import {
   UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import { BREAK, ChunkCache, CONTEXT, heatmapPlan, ReplayEngine } from "./replay-core.js";
+import { BREAK, ChunkCache, CONTEXT, heatmapPlan, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { addActivityBins, clamp, ReplayClock } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
@@ -1172,7 +1172,7 @@ export class ReplayPanel extends HTMLElement {
           const previous = latest.get(point.player);
           if (!previous || point.time >= previous.time) latest.set(point.player, point);
         }
-        positions = [...latest.values()];
+        positions = [...latest.values()].filter((point) => !(point.flags & OFFLINE));
       } else if (ready) {
         positions = [...this.selection]
           .map((id) => this.engine.position(id, this.clock.time))
