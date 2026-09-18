@@ -566,33 +566,10 @@ export class HistoryScene3D {
     if (cached) return cached;
 
     const T = this.api.Three;
-    const geometry = new T.BufferGeometry();
-    const hx = width / 2;
-    const hy = height / 2;
-    const hz = depth / 2;
-
-    // Explicitly reproduce the six BoxGeometry planes in the same
-    // +X/-X/+Y/-Y/+Z/-Z order used by skinview3d, but without depending on
-    // Three.js' internal BoxGeometry vertex layout.
-    const positions = new Float32Array([
-      // +X (right)
-       hx,  hy,  hz,   hx,  hy, -hz,   hx, -hy,  hz,   hx, -hy, -hz,
-      // -X (left)
-      -hx,  hy, -hz,  -hx,  hy,  hz,  -hx, -hy, -hz,  -hx, -hy,  hz,
-      // +Y (top)
-      -hx,  hy, -hz,   hx,  hy, -hz,  -hx,  hy,  hz,   hx,  hy,  hz,
-      // -Y (bottom)
-      -hx, -hy,  hz,   hx, -hy,  hz,  -hx, -hy, -hz,   hx, -hy, -hz,
-      // +Z (front)
-      -hx,  hy,  hz,   hx,  hy,  hz,  -hx, -hy,  hz,   hx, -hy,  hz,
-      // -Z (back)
-       hx,  hy, -hz,  -hx,  hy, -hz,   hx, -hy, -hz,  -hx, -hy, -hz,
-    ]);
-
-    const indices: number[] = [];
-    for (let face = 0; face < 6; face++) {
-      const base = face * 4;
-      indices.push(base, base + 2, base + 1, base + 2, base + 3, base + 1);
+    const geometry = new T.BoxGeometry(width, height, depth);
+    const uv = geometry.attributes?.uv;
+    if (!uv) {
+      throw new Error("BlueMap Three.js BoxGeometry has no UV attribute");
     }
 
     const { u, v, width: pixelWidth, height: pixelHeight, depth: pixelDepth } = skin;
@@ -640,8 +617,10 @@ export class HistoryScene3D {
       v + pixelDepth + pixelHeight,
     );
 
-    // These are the canonical per-face UV orders from skinview3d's setUVs().
-    // Each tuple corresponds exactly to the four explicit vertices above.
+    // This is copied from skinview3d's setUVs(): BoxGeometry exposes its six
+    // faces in +X, -X, +Y, -Y, +Z, -Z order with four UV vertices per face.
+    // Using BoxGeometry directly avoids the remaining face-order mismatch in
+    // our previous hand-built cube.
     const ordered = [
       [right[3], right[2], right[0], right[1]],
       [left[3], left[2], left[0], left[1]],
@@ -650,16 +629,8 @@ export class HistoryScene3D {
       [front[3], front[2], front[0], front[1]],
       [back[3], back[2], back[0], back[1]],
     ];
-
-    geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute(
-      "uv",
-      new T.Float32BufferAttribute(
-        new Float32Array(ordered.flat(2)),
-        2,
-      ),
-    );
-    geometry.setIndex?.(indices);
+    uv.set(new Float32Array(ordered.flat(2)));
+    uv.needsUpdate = true;
 
     this.geometries.set(key, geometry);
     return geometry;
