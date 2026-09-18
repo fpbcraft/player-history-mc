@@ -30,3 +30,12 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew test build --no-daemon
+
+      - name: Upload test jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-history-object-history
+          path: |
+            recorder-neoforge/build/libs/*.jar
+            bluemap-neoforge/build/libs/*.jar
+          if-no-files-found: error
