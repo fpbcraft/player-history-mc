@@ -42,6 +42,7 @@ public final class BlueMapIntegration {
   private final Map<String, Object> levels = new HashMap<>();
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
   private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
+  private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
@@ -89,6 +90,7 @@ public final class BlueMapIntegration {
   private void tick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
     objectHistory.tick(
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
+    skins.tick(event.getServer(), worldRoot);
   }
 
   private static Object call(
@@ -108,6 +110,7 @@ public final class BlueMapIntegration {
               .toAbsolutePath()
               .normalize();
       objectHistory.webRoot(webRoot);
+      skins.configure(api, webRoot);
       Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
       for (String name : List.of("player-history.js", "player-history.css")) {
