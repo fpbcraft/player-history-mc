@@ -134,6 +134,8 @@ export interface ObjectPose {
   qz: number;
   qw: number;
   geometry: number;
+  /** Signed object-local travel in blocks, relative to this loaded replay window. */
+  travel: number;
 }
 
 export interface IntegrationMapping {
