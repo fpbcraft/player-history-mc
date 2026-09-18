@@ -333,7 +333,9 @@ export class HistoryScene3D {
       texture = this.textureLoader.load(
         url,
         (loaded) => {
-          loaded.flipY = false;
+          // Keep Three.js' normal image-texture orientation. The canonical
+          // Minecraft UV mapping below (same as skinview3d) is defined for flipY=true.
+          loaded.flipY = true;
           if (T.NearestFilter !== undefined) {
             loaded.magFilter = T.NearestFilter;
             loaded.minFilter = T.NearestFilter;
