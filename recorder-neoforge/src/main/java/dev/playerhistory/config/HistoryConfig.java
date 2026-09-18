@@ -14,10 +14,12 @@ public final class HistoryConfig {
       DEATHS,
       TELEPORTS,
       DIMENSIONS,
+      OBJECTS,
       PUBLISH;
   public static final ModConfigSpec.ConfigValue<String> PUBLIC_DIRECTORY;
-  public static final ModConfigSpec.IntValue SAMPLE, KEYFRAME, CHUNK, RETENTION, QUEUE, CELL;
-  public static final ModConfigSpec.DoubleValue MOVEMENT;
+  public static final ModConfigSpec.IntValue SAMPLE, KEYFRAME, CHUNK, RETENTION, QUEUE, CELL,
+      OBJECT_KEYFRAME;
+  public static final ModConfigSpec.DoubleValue MOVEMENT, OBJECT_MOVEMENT, OBJECT_ROTATION;
   public static final ModConfigSpec.ConfigValue<List<? extends String>> EXCLUDED_PLAYERS,
       EXCLUDED_WORLDS;
 
@@ -37,6 +39,7 @@ public final class HistoryConfig {
     result.put("deaths", DEATHS.get());
     result.put("teleports", TELEPORTS.get());
     result.put("dimension-changes", DIMENSIONS.get());
+    result.put("objects", OBJECTS.get());
     return result;
   }
 
@@ -59,6 +62,10 @@ public final class HistoryConfig {
     DEATHS = b.define("track-deaths", true);
     TELEPORTS = b.define("track-teleports", true);
     DIMENSIONS = b.define("track-dimension-changes", true);
+    OBJECTS = b.define("objects.enabled", true);
+    OBJECT_MOVEMENT = b.defineInRange("objects.minimum-movement-distance", 0.25, 0.0, 32.0);
+    OBJECT_ROTATION = b.defineInRange("objects.minimum-rotation-degrees", 1.0, 0.0, 180.0);
+    OBJECT_KEYFRAME = b.defineInRange("objects.forced-keyframe-interval-seconds", 30, 1, 300);
     EXCLUDED_PLAYERS =
         b.defineListAllowEmpty("excluded-players", List.of(), () -> "", v -> v instanceof String);
     EXCLUDED_WORLDS =
