@@ -15,6 +15,7 @@ interface BlueMap3DDiagnostics {
   objects: Record<string, BlueMap3DLiveEntry>;
   root: Object3D;
   createReplayMesh?: (url: string, label?: string) => Promise<Object3D>;
+  setReplayAnimation?: (mesh: Object3D, travel: number, timeSeconds: number) => void;
 }
 
 declare global {
@@ -123,6 +124,7 @@ export class BlueMap3DReplayAdapter {
           this.meshes.set(pose.object, historical);
         }
         applyPose(historical.clone, pose);
+        diagnostics.setReplayAnimation?.(historical.clone, pose.travel, pose.time / 1000);
         rendered++;
         continue;
       }
@@ -143,6 +145,7 @@ export class BlueMap3DReplayAdapter {
         const historical = this.meshes.get(pose.object);
         if (historical?.key === key) {
           applyPose(historical.clone, pose);
+          diagnostics.setReplayAnimation?.(historical.clone, pose.travel, pose.time / 1000);
           rendered++;
         } else {
           if (historical) {
