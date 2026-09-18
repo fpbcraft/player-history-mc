@@ -143,6 +143,10 @@ public final class TelemetryRecorder {
       values.put("xpProgress", p.experienceProgress);
     }
     if (on("game-mode")) values.put("gameMode", p.gameMode.getGameModeForPlayer().getName());
+    if (on("orientation")) {
+      values.put("yaw", p.getYRot());
+      values.put("pitch", p.getXRot());
+    }
     if (on("posture")) {
       values.put("sprinting", p.isSprinting());
       values.put("sneaking", p.isShiftKeyDown());
