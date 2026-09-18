@@ -160,6 +160,7 @@ export interface BlueMapRuntime {
     };
     Group: new () => Object3D;
     DoubleSide: unknown;
+    FrontSide?: unknown;
     NearestFilter?: unknown;
   };
 }
