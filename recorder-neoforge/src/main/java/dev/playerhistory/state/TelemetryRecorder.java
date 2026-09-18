@@ -144,8 +144,8 @@ public final class TelemetryRecorder {
     }
     if (on("game-mode")) values.put("gameMode", p.gameMode.getGameModeForPlayer().getName());
     if (on("orientation")) {
-      values.put("yaw", p.getYRot());
-      values.put("pitch", p.getXRot());
+      values.put("yaw", Math.round(p.getYRot() * 2.0f) / 2.0f);
+      values.put("pitch", Math.round(p.getXRot() * 2.0f) / 2.0f);
     }
     if (on("posture")) {
       values.put("sprinting", p.isSprinting());
