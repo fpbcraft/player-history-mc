@@ -66,6 +66,8 @@ public final class BlueMapIntegration {
               (Consumer<Object>)
                   a -> {
                     api = null;
+                    objectHistory.webRoot(null);
+                    skins.disable();
                   });
     } catch (Exception ex) {
       log.accept("Cannot connect to BlueMap API: " + ex);
