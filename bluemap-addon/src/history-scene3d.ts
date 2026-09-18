@@ -71,6 +71,8 @@ const skinBox = (
   depth: number,
 ): SkinBox => ({ u, v, width, height, depth });
 
+const PLAYER_HISTORY_SKIN_BUILD = "0.8.21-v12";
+
 const SKIN = {
   head: skinBox(0, 0, 8, 8, 8),
   hat: skinBox(32, 0, 8, 8, 8),
@@ -342,7 +344,9 @@ export class HistoryScene3D {
     });
     let texture: Texture | undefined;
     if (uuid) {
-      const url = new URL(`${uuid}.png`, this.skinBase).href;
+      const skinUrl = new URL(`${uuid}.png`, this.skinBase);
+      skinUrl.searchParams.set("v", PLAYER_HISTORY_SKIN_BUILD);
+      const url = skinUrl.href;
       texture = this.textureLoader.load(
         url,
         (loaded) => {
@@ -357,13 +361,35 @@ export class HistoryScene3D {
           loaded.needsUpdate = true;
           innerMaterial.map = loaded;
           outerMaterial.map = loaded;
+          const image = (loaded as unknown as {
+            image?: {
+              naturalWidth?: number;
+              naturalHeight?: number;
+              width?: number;
+              height?: number;
+            };
+          }).image;
+          console.info("[PlayerHistory3D skin V12]", {
+            build: PLAYER_HISTORY_SKIN_BUILD,
+            uuid,
+            url,
+            width: image?.naturalWidth ?? image?.width,
+            height: image?.naturalHeight ?? image?.height,
+            flipY: loaded.flipY,
+          });
           innerMaterial.color?.setStyle?.("#ffffff");
           outerMaterial.color?.setStyle?.("#ffffff");
           innerMaterial.needsUpdate = true;
           outerMaterial.needsUpdate = true;
         },
         undefined,
-        () => {
+        (error) => {
+          console.warn("[PlayerHistory3D skin V12] failed", {
+            build: PLAYER_HISTORY_SKIN_BUILD,
+            uuid,
+            url,
+            error,
+          });
           // Skin unavailable: fall back to the same deterministic colour used elsewhere.
           innerMaterial.color?.setStyle?.(playerColor(id));
           outerMaterial.color?.setStyle?.(playerColor(id));
