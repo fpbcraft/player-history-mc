@@ -1,5 +1,7 @@
 package dev.playerhistory.object;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Collection;
 
 /**
@@ -25,6 +27,18 @@ public final class ObjectHistoryApi {
       String provider, Collection<ObjectSnapshot> snapshots, long now) {
     ObjectHistoryRecorder recorder = active;
     if (recorder != null) recorder.providerSnapshot(provider, snapshots, now);
+  }
+
+  public static void archiveGeometry(
+      String provider,
+      String sourceId,
+      long version,
+      Path sourceMesh,
+      Path sourceAtlas)
+      throws IOException {
+    ObjectHistoryRecorder recorder = active;
+    if (recorder != null)
+      recorder.archiveGeometry(provider, sourceId, version, sourceMesh, sourceAtlas);
   }
 
   public static boolean available() {
