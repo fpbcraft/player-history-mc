@@ -313,7 +313,9 @@ export class HistoryScene3D {
   private createPlayer(id: number, uuid: string | undefined, label: string): PlayerAvatar {
     const T = this.api.Three;
     const material = new T.MeshBasicMaterial({
-      color: playerColor(id),
+      // MeshBasicMaterial multiplies the sampled texture by its colour. Real skins must
+      // therefore be white; playerColor is only a fallback when no skin is available.
+      color: uuid ? 0xffffff : playerColor(id),
       transparent: true,
       alphaTest: 0.08,
       side: T.DoubleSide,
@@ -330,12 +332,16 @@ export class HistoryScene3D {
             loaded.minFilter = T.NearestFilter;
           }
           loaded.generateMipmaps = false;
+          loaded.needsUpdate = true;
           material.map = loaded;
+          material.color?.setStyle?.("#ffffff");
           material.needsUpdate = true;
         },
         undefined,
         () => {
-          // Keep the player's deterministic fallback colour.
+          // Skin unavailable: fall back to the same deterministic colour used elsewhere.
+          material.color?.setStyle?.(playerColor(id));
+          material.needsUpdate = true;
         },
       );
     }
@@ -533,8 +539,8 @@ export class HistoryScene3D {
     const facePositions: Record<Face, readonly number[]> = {
       front: [-hx, -hy, hz, hx, -hy, hz, hx, hy, hz, -hx, hy, hz],
       back: [hx, -hy, -hz, -hx, -hy, -hz, -hx, hy, -hz, hx, hy, -hz],
-      right: [-hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz],
-      left: [hx, -hy, hz, hx, -hy, -hz, hx, hy, -hz, hx, hy, hz],
+      right: [hx, -hy, hz, hx, -hy, -hz, hx, hy, -hz, hx, hy, hz],
+      left: [-hx, -hy, -hz, -hx, -hy, hz, -hx, hy, hz, -hx, hy, -hz],
       top: [-hx, hy, hz, hx, hy, hz, hx, hy, -hz, -hx, hy, -hz],
       bottom: [-hx, -hy, -hz, hx, -hy, -hz, hx, -hy, hz, -hx, -hy, hz],
     };
