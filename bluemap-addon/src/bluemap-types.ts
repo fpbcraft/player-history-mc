@@ -173,6 +173,7 @@ export interface BlueMapApp {
     map?: { id?: string; data?: { id?: string; mapDataRoot?: string } };
     controlsManager?: {
       position?: Position3;
+      distance?: number;
       updateCamera?(): void;
     };
   };
