@@ -64,6 +64,31 @@ class G implements Geometry {
     this.disposed = true;
   }
 }
+class Box extends G {
+  constructor(
+    readonly width: number,
+    readonly height: number,
+    readonly depth: number,
+  ) {
+    super();
+    const uv = {
+      values: new Float32Array(48),
+      size: 2,
+      needsUpdate: false,
+      set(values: Float32Array) {
+        this.values = values;
+      },
+    };
+    const position = {
+      values: new Float32Array(72),
+      size: 3,
+    };
+    this.attributes.set("uv", uv);
+    this.attributes.set("position", position);
+    Object.assign(this.attributes, { uv, position });
+  }
+}
+
 class M implements Material {
   map?: Texture | null;
   needsUpdate?: boolean;
@@ -133,6 +158,7 @@ const runtime = (): BlueMapRuntime =>
     Three: {
       Group: O,
       BufferGeometry: G,
+      BoxGeometry: Box,
       Float32BufferAttribute: class {
         constructor(
           readonly values: number[] | Float32Array,
@@ -148,6 +174,7 @@ const runtime = (): BlueMapRuntime =>
       InstancedMesh: Instanced,
       Matrix4: MX,
       DoubleSide: 2,
+      FrontSide: 1,
       NearestFilter: 1,
     },
   }) as unknown as BlueMapRuntime;
@@ -189,6 +216,9 @@ test("3D history scene creates skinned articulated players", () => {
     Array.from(uv.values.slice(0, 8)),
     [0.25, 0.875, 0.375, 0.875, 0.25, 0.75, 0.375, 0.75],
   );
+  assert.equal((headMesh.material as M).options.transparent, false);
+  const hatMesh = headGroup.children[1] as Mesh;
+  assert.equal((hatMesh.material as M).options.transparent, true);
 
   scene.setPlayerVitals(1, { yaw: 90, pitch: 20 });
   assert.ok(Math.abs(avatar.quaternion.values[1] + Math.SQRT1_2) < 0.001);
