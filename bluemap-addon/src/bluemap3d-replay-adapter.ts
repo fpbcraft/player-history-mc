@@ -1,5 +1,9 @@
 import type { BlueMapRuntime, Object3D } from "./bluemap-types.js";
-import type { ObjectPose, ObjectRegistryEntry } from "./types.js";
+import type {
+  ObjectGeometryEntry,
+  ObjectPose,
+  ObjectRegistryEntry,
+} from "./types.js";
 
 interface BlueMap3DLiveEntry {
   mesh: Object3D | null;
@@ -10,6 +14,7 @@ interface BlueMap3DLiveEntry {
 interface BlueMap3DDiagnostics {
   objects: Record<string, BlueMap3DLiveEntry>;
   root: Object3D;
+  createReplayMesh?: (url: string, label?: string) => Promise<Object3D>;
 }
 
 declare global {
@@ -19,7 +24,8 @@ declare global {
 }
 
 interface HistoricalMesh {
-  source: Object3D;
+  key: string;
+  source?: Object3D;
   clone: Object3D;
 }
 
@@ -27,91 +33,144 @@ export interface ObjectReplayRenderStats {
   rendered: number;
   unavailable: number;
   geometryMismatch: number;
+  archived: number;
 }
 
 /**
- * Best-effort historical renderer backed by BlueMap3D's currently loaded live meshes.
+ * Historical BlueMap3D renderer.
  *
- * <p>Three.js clone() duplicates the transform hierarchy but keeps geometry/material
- * resources shared, so a historical carriage costs only scene nodes, not another copy of
- * its potentially large vertex buffers or texture atlas.
- *
- * <p>This slice intentionally cannot resurrect a geometry version that BlueMap3D has
- * already discarded. geometryMismatch reports that case; durable mesh archiving is the
- * next layer.
+ * <p>When the requested geometry version is still live, clone() shares the live mesh's
+ * geometry/material. When it is not, Player History asks BlueMap3D to instantiate the
+ * durable .bm3d copy from the object geometry archive.
  */
 export class BlueMap3DReplayAdapter {
   private root?: Object3D;
   private parentRoot?: Object3D;
   private readonly meshes = new Map<number, HistoricalMesh>();
+  private readonly pending = new Map<number, string>();
+  private readonly desired = new Map<number, string>();
   private hiddenSources = new Set<Object3D>();
+  private generation = 0;
 
   constructor(private readonly api: BlueMapRuntime) {}
 
   setObjects(
     poses: readonly ObjectPose[],
     registry: readonly ObjectRegistryEntry[],
+    geometries: readonly ObjectGeometryEntry[] = [],
+    archiveBase?: string,
   ): ObjectReplayRenderStats {
     const diagnostics = window.__bluemap3d;
     if (!diagnostics?.root || !diagnostics.objects) {
       this.clear();
-      return { rendered: 0, unavailable: poses.length, geometryMismatch: 0 };
+      return {
+        rendered: 0,
+        unavailable: poses.length,
+        geometryMismatch: 0,
+        archived: 0,
+      };
     }
 
     this.ensureRoot(diagnostics.root);
-    const entries = new Map(registry.map((entry) => [entry.id, entry]));
+    const identities = new Map(registry.map((entry) => [entry.id, entry]));
+    const archivedByKey = new Map(
+      geometries.map((entry) => [
+        geometryKey(entry.provider, entry.sourceId, entry.version),
+        entry,
+      ]),
+    );
     const keep = new Set<number>();
     const hiddenNow = new Set<Object3D>();
     let rendered = 0;
     let unavailable = 0;
     let geometryMismatch = 0;
+    let archived = 0;
 
     for (const pose of poses) {
-      const identity = entries.get(pose.object);
+      const identity = identities.get(pose.object);
       if (!identity) {
         unavailable++;
         continue;
       }
 
+      keep.add(pose.object);
       const live = diagnostics.objects[`${identity.provider}/${identity.sourceId}`];
       const source = live?.mesh;
-      if (!source) {
-        unavailable++;
+      const liveVersion = geometryVersion(live?.meshUrl);
+      const liveMatches =
+        !!source && (liveVersion === null || liveVersion === pose.geometry);
+
+      if (source) {
+        hiddenNow.add(source);
+        // BlueMap3D reapplies live visibility after each poll; suppress it every replay
+        // update while a historical representation is selected.
+        source.visible = false;
+      }
+
+      if (source && liveVersion !== null && liveVersion !== pose.geometry)
+        geometryMismatch++;
+
+      if (liveMatches && source) {
+        const key = `live:${live?.meshUrl ?? identity.provider + "/" + identity.sourceId}`;
+        this.desired.set(pose.object, key);
+        let historical = this.meshes.get(pose.object);
+        if (!historical || historical.key !== key || historical.source !== source) {
+          if (historical) this.root?.remove(historical.clone);
+          const clone = source.clone(true);
+          prepareClone(clone, identity.label, pose.object);
+          this.root?.add(clone);
+          historical = { key, source, clone };
+          this.meshes.set(pose.object, historical);
+        }
+        applyPose(historical.clone, pose);
+        rendered++;
         continue;
       }
 
-      keep.add(pose.object);
-      hiddenNow.add(source);
-      // Suppress the present-day object while the historical instance is on screen.
-      // BlueMap3D may restore it on its next feed poll, so this is intentionally repeated
-      // every replay frame.
-      source.visible = false;
+      const archivedGeometry = archivedByKey.get(
+        geometryKey(identity.provider, identity.sourceId, pose.geometry),
+      );
+      if (
+        archivedGeometry &&
+        archiveBase &&
+        diagnostics.createReplayMesh
+      ) {
+        archived++;
+        const url = new URL(archivedGeometry.mesh, archiveBase).href;
+        const key = `archive:${url}`;
+        this.desired.set(pose.object, key);
 
-      let historical = this.meshes.get(pose.object);
-      if (!historical || historical.source !== source) {
-        if (historical) this.root?.remove(historical.clone);
-        const clone = source.clone(true);
-        clone.name = `history:${identity.label}`;
-        clone.userData.playerHistoryObject = pose.object;
-        this.root?.add(clone);
-        historical = { source, clone };
-        this.meshes.set(pose.object, historical);
+        const historical = this.meshes.get(pose.object);
+        if (historical?.key === key) {
+          applyPose(historical.clone, pose);
+          rendered++;
+        } else {
+          if (historical) {
+            this.root?.remove(historical.clone);
+            this.meshes.delete(pose.object);
+          }
+          this.loadArchived(
+            diagnostics,
+            pose.object,
+            key,
+            url,
+            identity.label,
+          );
+          unavailable++;
+        }
+        continue;
       }
 
-      const clone = historical.clone;
-      clone.visible = true;
-      clone.position.set(pose.x, pose.y, pose.z);
-      clone.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
-      rendered++;
-
-      const liveVersion = geometryVersion(live?.meshUrl);
-      if (liveVersion !== null && liveVersion !== pose.geometry) geometryMismatch++;
+      this.desired.delete(pose.object);
+      unavailable++;
     }
 
     for (const [object, historical] of this.meshes) {
       if (keep.has(object)) continue;
       this.root?.remove(historical.clone);
       this.meshes.delete(object);
+      this.desired.delete(object);
+      this.pending.delete(object);
     }
 
     for (const source of this.hiddenSources) {
@@ -119,12 +178,15 @@ export class BlueMap3DReplayAdapter {
     }
     this.hiddenSources = hiddenNow;
 
-    return { rendered, unavailable, geometryMismatch };
+    return { rendered, unavailable, geometryMismatch, archived };
   }
 
   clear(): void {
+    this.generation++;
     for (const historical of this.meshes.values()) this.root?.remove(historical.clone);
     this.meshes.clear();
+    this.pending.clear();
+    this.desired.clear();
     for (const source of this.hiddenSources) source.visible = true;
     this.hiddenSources.clear();
   }
@@ -134,6 +196,39 @@ export class BlueMap3DReplayAdapter {
     if (this.root && this.parentRoot) this.parentRoot.remove(this.root);
     this.root = undefined;
     this.parentRoot = undefined;
+  }
+
+  private loadArchived(
+    diagnostics: BlueMap3DDiagnostics,
+    object: number,
+    key: string,
+    url: string,
+    label: string,
+  ): void {
+    if (this.pending.get(object) === key || !diagnostics.createReplayMesh) return;
+    this.pending.set(object, key);
+    const generation = this.generation;
+
+    diagnostics
+      .createReplayMesh(url, label)
+      .then((clone) => {
+        if (
+          generation !== this.generation ||
+          this.pending.get(object) !== key ||
+          this.desired.get(object) !== key ||
+          !this.root
+        )
+          return;
+
+        this.pending.delete(object);
+        prepareClone(clone, label, object);
+        this.root.add(clone);
+        this.meshes.set(object, { key, clone });
+      })
+      .catch((error: unknown) => {
+        if (this.pending.get(object) === key) this.pending.delete(object);
+        console.warn("[Player History] Could not load archived BlueMap3D geometry", url, error);
+      });
   }
 
   private ensureRoot(parent: Object3D): void {
@@ -147,9 +242,26 @@ export class BlueMap3DReplayAdapter {
     this.root = root;
     this.parentRoot = parent;
     this.meshes.clear();
+    this.pending.clear();
+    this.desired.clear();
     this.hiddenSources.clear();
+    this.generation++;
   }
 }
+
+const applyPose = (mesh: Object3D, pose: ObjectPose): void => {
+  mesh.visible = true;
+  mesh.position.set(pose.x, pose.y, pose.z);
+  mesh.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
+};
+
+const prepareClone = (clone: Object3D, label: string, object: number): void => {
+  clone.name = `history:${label}`;
+  clone.userData.playerHistoryObject = object;
+};
+
+const geometryKey = (provider: string, sourceId: string, version: number): string =>
+  `${provider}\u0000${sourceId}\u0000${version}`;
 
 const geometryVersion = (meshUrl?: string | null): number | null => {
   if (!meshUrl) return null;
