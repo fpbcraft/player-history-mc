@@ -1182,6 +1182,8 @@ export class ReplayPanel extends HTMLElement {
             ? this.objectEngine.poses(this.clock.time, objectWorld)
             : [],
           this.objectManifest.registry.objects,
+          this.objectManifest.geometries ?? [],
+          new URL("data/objects/", BASE_URL).href,
         );
       } else {
         this.objectAdapter?.clear();
