@@ -54,6 +54,7 @@ export interface Texture {
 
 export interface Material {
   map?: Texture | null;
+  color?: { setStyle?(value: string): unknown };
   needsUpdate?: boolean;
   dispose(): void;
 }
