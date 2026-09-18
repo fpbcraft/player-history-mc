@@ -69,8 +69,10 @@ afterEach(() => {
 test("historical object replay clones the live mesh and suppresses the present-day copy", () => {
   const root = new FakeObject();
   const source = new FakeObject();
+  const animations: [number, number][] = [];
   window.__bluemap3d = {
     root,
+    setReplayAnimation: (_mesh, travel, time) => animations.push([travel, time]),
     objects: {
       "create_contraptions/train/0": {
         mesh: source,
@@ -94,6 +96,7 @@ test("historical object replay clones the live mesh and suppresses the present-d
         qz: 0,
         qw: Math.SQRT1_2,
         geometry: 7,
+        travel: 3.5,
       },
     ],
     [
@@ -116,6 +119,7 @@ test("historical object replay clones the live mesh and suppresses the present-d
   assert.equal(clone.position.y, 70);
   assert.equal(clone.position.z, -4);
   assert.deepEqual(clone.quaternion.values, [0, Math.SQRT1_2, 0, Math.SQRT1_2]);
+  assert.deepEqual(animations, [[3.5, 1]]);
 
   adapter.clear();
   assert.equal(source.visible, true);
@@ -150,6 +154,7 @@ test("historical renderer refuses mismatched live geometry when no archive exist
         qz: 0,
         qw: 1,
         geometry: 42,
+        travel: 0,
       },
       {
         object: 2,
@@ -163,6 +168,7 @@ test("historical renderer refuses mismatched live geometry when no archive exist
         qz: 0,
         qw: 1,
         geometry: 1,
+        travel: 0,
       },
     ],
     [
@@ -200,6 +206,7 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
     qz: 0,
     qw: 1,
     geometry: 42,
+        travel: 0,
   };
   const registry = [
     { id: 8, provider: "sable_ships", sourceId: "old-ship", label: "Old ship" },
