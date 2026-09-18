@@ -73,6 +73,59 @@ export interface LiveSnapshot {
   events: HistoryEvent[];
 }
 
+export interface ObjectHistoryPoint {
+  object: number;
+  time: number;
+  world: number;
+  x: number;
+  y: number;
+  z: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
+  geometry: number;
+  flags: number;
+}
+
+export interface ObjectRegistryEntry {
+  id: number;
+  provider: string;
+  sourceId: string;
+  label: string;
+}
+
+export interface ObjectHistoryRegistry {
+  objects: ObjectRegistryEntry[];
+  worlds: string[];
+}
+
+export interface ObjectHistoryManifest {
+  protocolVersion: 1;
+  earliestTimestamp: number;
+  latestTimestamp: number;
+  chunkDurationMs: number;
+  chunkRanges?: [number, number][];
+  positionScale: number;
+  quaternionScale: number;
+  geometryArchive: boolean;
+  registry: ObjectHistoryRegistry;
+}
+
+export interface ObjectPose {
+  object: number;
+  time: number;
+  world: number;
+  x: number;
+  y: number;
+  z: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
+  geometry: number;
+}
+
 export interface IntegrationMapping {
   mapWorlds: Record<string, string>;
 }
