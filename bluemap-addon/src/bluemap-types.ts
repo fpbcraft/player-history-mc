@@ -46,7 +46,23 @@ export interface Material {
   dispose(): void;
 }
 
-export interface Mesh {
+export interface Quaternion3 {
+  set(x: number, y: number, z: number, w: number): Quaternion3;
+}
+
+export interface Object3D {
+  position: Position3;
+  quaternion: Quaternion3;
+  visible: boolean;
+  name: string;
+  userData: Record<string, unknown>;
+  parent?: { remove(child: Object3D): void };
+  add(...children: Object3D[]): void;
+  remove(child: Object3D): void;
+  clone(recursive?: boolean): Object3D;
+}
+
+export interface Mesh extends Object3D {
   geometry: Geometry;
   material: Material;
   renderOrder: number;
@@ -82,6 +98,7 @@ export interface BlueMapRuntime {
     Float32BufferAttribute: new (values: number[], size: number) => unknown;
     MeshBasicMaterial: new (options: Record<string, unknown>) => Material;
     Mesh: new (geometry: Geometry, material: Material) => Mesh;
+    Group: new () => Object3D;
     DoubleSide: unknown;
   };
 }
