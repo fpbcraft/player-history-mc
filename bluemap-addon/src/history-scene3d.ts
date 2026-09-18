@@ -173,6 +173,8 @@ export class HistoryScene3D {
       typeof state.pitch === "number" && Number.isFinite(state.pitch)
         ? (state.pitch * Math.PI) / 180
         : undefined;
+    const yaw = avatar.recordedYaw ?? avatar.yaw;
+    avatar.root.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2));
     const pitch = avatar.recordedPitch ?? 0;
     avatar.head.quaternion.set(Math.sin(pitch / 2), 0, 0, Math.cos(pitch / 2));
   }
