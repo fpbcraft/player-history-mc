@@ -37,7 +37,8 @@ interface Limb {
 
 interface PlayerAvatar {
   root: Object3D;
-  material: Material;
+  innerMaterial: Material;
+  outerMaterial: Material;
   texture?: Texture;
   parts: Object3D[];
   head: Object3D;
@@ -163,7 +164,8 @@ export class HistoryScene3D {
       if (keep.has(id)) continue;
       this.playersRoot.remove(avatar.root);
       avatar.texture?.dispose();
-      avatar.material.dispose();
+      avatar.innerMaterial.dispose();
+      avatar.outerMaterial.dispose();
       this.players.delete(id);
     }
   }
@@ -309,7 +311,8 @@ export class HistoryScene3D {
     this.clearEvents();
     for (const avatar of this.players.values()) {
       avatar.texture?.dispose();
-      avatar.material.dispose();
+      avatar.innerMaterial.dispose();
+      avatar.outerMaterial.dispose();
     }
     this.players.clear();
     for (const geometry of this.geometries.values()) geometry.dispose();
@@ -319,13 +322,23 @@ export class HistoryScene3D {
 
   private createPlayer(id: number, uuid: string | undefined, label: string): PlayerAvatar {
     const T = this.api.Three;
-    const material = new T.MeshBasicMaterial({
-      // MeshBasicMaterial multiplies the sampled texture by its colour. Real skins must
-      // therefore be white; playerColor is only a fallback when no skin is available.
+    // Keep Minecraft's two skin layers separate. The base skin is opaque and writes
+    // depth first; only the hat/jacket/sleeves/pants layer is transparent. With one
+    // transparent DoubleSide material for both, the back face of the hat could render
+    // through its transparent front pixels before the actual face had written depth.
+    const innerMaterial = new T.MeshBasicMaterial({
+      color: uuid ? 0xffffff : playerColor(id),
+      transparent: false,
+      side: T.FrontSide,
+    });
+    const outerMaterial = new T.MeshBasicMaterial({
       color: uuid ? 0xffffff : playerColor(id),
       transparent: true,
-      alphaTest: 0.08,
+      alphaTest: 0.00001,
       side: T.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
     });
     let texture: Texture | undefined;
     if (uuid) {
@@ -342,15 +355,20 @@ export class HistoryScene3D {
           }
           loaded.generateMipmaps = false;
           loaded.needsUpdate = true;
-          material.map = loaded;
-          material.color?.setStyle?.("#ffffff");
-          material.needsUpdate = true;
+          innerMaterial.map = loaded;
+          outerMaterial.map = loaded;
+          innerMaterial.color?.setStyle?.("#ffffff");
+          outerMaterial.color?.setStyle?.("#ffffff");
+          innerMaterial.needsUpdate = true;
+          outerMaterial.needsUpdate = true;
         },
         undefined,
         () => {
           // Skin unavailable: fall back to the same deterministic colour used elsewhere.
-          material.color?.setStyle?.(playerColor(id));
-          material.needsUpdate = true;
+          innerMaterial.color?.setStyle?.(playerColor(id));
+          outerMaterial.color?.setStyle?.(playerColor(id));
+          innerMaterial.needsUpdate = true;
+          outerMaterial.needsUpdate = true;
         },
       );
     }
@@ -368,7 +386,7 @@ export class HistoryScene3D {
       z: number,
       name: string,
     ): Mesh => {
-      const mesh = new T.Mesh(geometry, material);
+      const mesh = new T.Mesh(geometry, innerMaterial);
       mesh.position.set(x, y, z);
       mesh.name = name;
       this.decoratePlayerPart(mesh, id);
@@ -380,24 +398,28 @@ export class HistoryScene3D {
     const head = new T.Group();
     head.position.set(0, 1.75, 0);
     root.add(head);
-    for (const [name, geometry] of [
-      ["head", this.geometry("head", 0.5, 0.5, 0.5, SKIN.head)],
-      ["hat", this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat)],
+    for (const [name, geometry, layerMaterial] of [
+      ["head", this.geometry("head", 0.5, 0.5, 0.5, SKIN.head), innerMaterial],
+      ["hat", this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat), outerMaterial],
     ] as const) {
-      const mesh = new T.Mesh(geometry, material);
+      const mesh = new T.Mesh(geometry, layerMaterial);
       mesh.name = name;
       this.decoratePlayerPart(mesh, id);
       head.add(mesh);
       parts.push(mesh);
     }
     addStatic(this.geometry("body", 0.5, 0.75, 0.25, SKIN.body), 0, 1.125, 0, "body");
-    addStatic(
-      this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket),
-      0,
-      1.125,
-      0,
-      "jacket",
-    );
+    {
+      const jacket = new T.Mesh(
+        this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket),
+        outerMaterial,
+      );
+      jacket.position.set(0, 1.125, 0);
+      jacket.name = "jacket";
+      this.decoratePlayerPart(jacket, id);
+      root.add(jacket);
+      parts.push(jacket);
+    }
 
     const limb = (
       key: string,
@@ -409,10 +431,13 @@ export class HistoryScene3D {
     ): Limb => {
       const group = new T.Group();
       group.position.set(x, pivotY, 0);
-      const mesh = new T.Mesh(this.geometry(key, 0.25, 0.75, 0.25, skin), material);
+      const mesh = new T.Mesh(
+        this.geometry(key, 0.25, 0.75, 0.25, skin),
+        innerMaterial,
+      );
       const overlay = new T.Mesh(
         this.geometry(overlayKey, 0.28, 0.78, 0.28, overlaySkin),
-        material,
+        outerMaterial,
       );
       mesh.position.set(0, -0.375, 0);
       overlay.position.set(0, -0.375, 0);
@@ -459,7 +484,8 @@ export class HistoryScene3D {
 
     return {
       root,
-      material,
+      innerMaterial,
+      outerMaterial,
       ...(texture ? { texture } : {}),
       parts,
       head,
