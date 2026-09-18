@@ -16,6 +16,7 @@ interface BlueMap3DDiagnostics {
   root: Object3D;
   createReplayMesh?: (url: string, label?: string) => Promise<Object3D>;
   setReplayAnimation?: (mesh: Object3D, travel: number, timeSeconds: number) => void;
+  setSuppressedObjects?: (ids: readonly string[]) => void;
 }
 
 declare global {
@@ -74,6 +75,15 @@ export class BlueMap3DReplayAdapter {
 
     this.ensureRoot(diagnostics.root);
     const identities = new Map(registry.map((entry) => [entry.id, entry]));
+    const suppressed = poses.flatMap((pose) => {
+      const identity = identities.get(pose.object);
+      return identity ? [`${identity.provider}/${identity.sourceId}`] : [];
+    });
+    // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
+    // the one-frame flash that occurred whenever its polling loop re-applied map visibility
+    // after Player History hid a mesh.
+    diagnostics.setSuppressedObjects?.(suppressed);
+
     const archivedByKey = new Map(
       geometries.map((entry) => [
         geometryKey(entry.provider, entry.sourceId, entry.version),
@@ -185,6 +195,7 @@ export class BlueMap3DReplayAdapter {
   }
 
   clear(): void {
+    window.__bluemap3d?.setSuppressedObjects?.([]);
     this.generation++;
     for (const historical of this.meshes.values()) this.root?.remove(historical.clone);
     this.meshes.clear();
