@@ -172,6 +172,24 @@ test("3D history scene creates skinned articulated players", () => {
   assert.equal(avatar.position.z, 2);
   assert.equal(avatar.userData.historyKind, "player");
 
+  const headGroup = avatar.children[0] as O;
+  const headMesh = headGroup.children[0] as Mesh;
+  const headGeometry = headMesh.geometry as G;
+  const uv = headGeometry.attributes.get("uv") as
+    | { values: Float32Array; size: number }
+    | undefined;
+  const position = headGeometry.attributes.get("position") as
+    | { values: Float32Array; size: number }
+    | undefined;
+  assert.ok(uv);
+  assert.ok(position);
+  assert.equal(uv.values.length, 48);
+  assert.equal(position.values.length, 72);
+  assert.deepEqual(
+    Array.from(uv.values.slice(0, 8)),
+    [0.25, 0.875, 0.375, 0.875, 0.25, 0.75, 0.375, 0.75],
+  );
+
   scene.setPlayerVitals(1, { yaw: 90, pitch: 20 });
   assert.ok(Math.abs(avatar.quaternion.values[1] + Math.SQRT1_2) < 0.001);
 });
