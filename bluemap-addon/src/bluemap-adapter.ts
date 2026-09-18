@@ -16,6 +16,7 @@ import {
   playerColor,
 } from "./event-presentation.js";
 import { createVitals, meterLevels, renderVitals } from "./player-vitals.js";
+import { HistoryScene3D } from "./history-scene3d.js";
 import { eventDetails, trailPoint } from "./telemetry.js";
 import type {
   HistoryEvent,
@@ -54,6 +55,7 @@ export class BlueMapAdapter {
   readonly tooltip: HTMLDivElement;
   readonly hoverListeners: AbortController;
   readonly raycaster: Raycaster;
+  readonly scene3d: HistoryScene3D;
   readonly eventMarkers = new Map<string, HtmlMarker>();
   nextEventId = 0;
   hoverActive = false;
@@ -81,7 +83,11 @@ export class BlueMapAdapter {
     this.hoverDot.anchor.set(7, 7);
     this.hoverDot.element.className = "history-trail-dot";
     this.hoverDot.element.hidden = true;
-    this.root.add(this.players, this.trails, this.events, this.hoverDot);
+    this.scene3d = new HistoryScene3D(
+      api,
+      new URL("player-history/skins/", document.baseURI).href,
+    );
+    this.root.add(this.players, this.trails, this.events, this.hoverDot, this.scene3d.root);
     app.popupMarkerSet.add(this.root);
     this.tooltip = document.createElement("div");
     this.tooltip.className = "history-map-tooltip";
@@ -92,6 +98,7 @@ export class BlueMapAdapter {
     this.hoverListeners = new AbortController();
     this.raycaster = new api.Three.Raycaster();
     this.raycaster.params.Line2 = { threshold: 6 };
+    if (this.raycaster.params.Line) this.raycaster.params.Line.threshold = 0.2;
     document.addEventListener(
       "click",
       (event) => {
@@ -179,23 +186,41 @@ export class BlueMapAdapter {
         (-(event.clientY - bounds.top) / bounds.height) * 2 + 1,
       );
       this.raycaster.setFromCamera(position, viewer.camera);
-      const hit = this.raycaster.intersectObjects(
-        this.trails.children.flatMap((marker) => (marker.line ? [marker.line] : [])),
-        false,
-      )[0];
+      const hit = this.raycaster.intersectObjects(this.scene3d.raycastObjects(), true)[0];
       if (hit) {
         const data = hit.object.userData;
-        const point = trailPoint(
-          data.historyPoints ?? [],
-          hit.faceIndex,
-          hit.pointOnLine ?? hit.point,
-        );
-        if (point) {
-          this.hoverDot.position.set(point.x / 32, point.y / 32, point.z / 32);
-          this.hoverDot.element.style.background = playerColor(point.player);
-          this.hoverDot.element.hidden = false;
-          text = `${data.historyName} · Trail\n${formatTimestamp(point.time)}\nPosition: ${formatCoordinates(point)}`;
-          this.hoverState = [point.player, point.time];
+        if (data.historyKind === "trail") {
+          const points = Array.isArray(data.historyPoints)
+            ? (data.historyPoints as HistoryPoint[])
+            : [];
+          const point = trailPoint(
+            points,
+            hit.index ?? hit.faceIndex ?? -1,
+            hit.pointOnLine ?? hit.point,
+          );
+          if (point) {
+            this.hoverDot.position.set(point.x / 32, point.y / 32, point.z / 32);
+            this.hoverDot.element.style.background = playerColor(point.player);
+            this.hoverDot.element.hidden = false;
+            text = `${String(data.historyName ?? point.player)} · Trail\n${formatTimestamp(point.time)}\nPosition: ${formatCoordinates(point)}`;
+            this.hoverState = [point.player, point.time];
+          }
+        } else if (data.historyKind === "player") {
+          text = typeof data.historyTooltip === "string" ? data.historyTooltip : undefined;
+          const player = Number(data.historyPlayer);
+          const time = Number(data.historyTime);
+          if (Number.isFinite(player) && Number.isFinite(time)) this.hoverState = [player, time];
+        } else if (data.historyKind === "events") {
+          const tooltips = Array.isArray(data.historyEventTooltips)
+            ? (data.historyEventTooltips as string[])
+            : [];
+          const points = Array.isArray(data.historyEventPoints)
+            ? (data.historyEventPoints as HistoryPoint[])
+            : [];
+          const index = hit.instanceId ?? -1;
+          text = tooltips[index];
+          const point = points[index];
+          if (point) this.hoverState = [point.player, point.time];
         }
       }
     }
@@ -275,46 +300,13 @@ export class BlueMapAdapter {
     names: Map<number, string>,
     players: HistoryRegistry["players"] = [],
   ): void {
-    const keep = new Set<string>();
-    for (const p of positions) {
-      const id = `p${p.player}`;
-      keep.add(id);
-      let marker = this.players.markers.get(id);
-      if (!marker) {
-        marker = new this.api.HtmlMarker(id);
-        marker.anchor.set(14, 14);
-        marker.element.className = "history-player";
-        const head = document.createElement("img");
-        head.alt = "Player skin head";
-        head.draggable = false;
-        const uuid = players.find((player) => player.id === p.player)?.uuid;
-        const root = this.app.mapViewer.map?.data?.mapDataRoot;
-        head.src = uuid && root ? `${root}/assets/playerheads/${uuid}.png` : FALLBACK_HEAD;
-        head.onerror = () => {
-          head.onerror = null;
-          head.src = FALLBACK_HEAD;
-        };
-        marker.element.append(createVitals(), head);
-        marker.element.dataset.historyHead = head.src;
-        marker.element.tabIndex = 0;
-        this.focusTooltip(marker.element);
-        this.players.add(marker);
-      }
-      marker.element.dataset.historyTooltip = `♟ ${names.get(p.player) || p.player}\n◷ ${formatTimestamp(p.time)}\n⌖ ${formatCoordinates(p)}`;
-      marker.element.dataset.player = String(p.player);
-      marker.element.dataset.time = String(p.time);
-      marker.element.setAttribute("aria-label", marker.element.dataset.historyTooltip);
-      marker.element.style.borderColor = playerColor(p.player);
-      marker.position.set(p.x / 32, p.y / 32, p.z / 32);
-    }
-    for (const [id, m] of this.players.markers)
-      if (!keep.has(id)) {
-        this.players.remove(m);
-      }
+    this.scene3d.setPlayers(positions, names, players);
+    // Legacy HTML heads are intentionally cleared: the player itself now exists in the
+    // world-space Three.js scene. Tooltips/vitals still work through 3D raycasting.
+    this.clear(this.players);
   }
   setPlayerVitals(player: number, state: PlayerState = {}): void {
-    const element = this.players.markers.get(`p${player}`)?.element;
-    renderVitals(element?.querySelector(".history-player-vitals"), state);
+    this.scene3d.setPlayerVitals(player, state);
   }
   setPlayerHealth(player: number, health: number, maxHealth: number): void {
     this.setPlayerVitals(player, { health, maxHealth });
@@ -326,28 +318,7 @@ export class BlueMapAdapter {
   }
   setTrails(segments: PointSegment[], names: Map<number, string> = new Map()): void {
     this.clear(this.trails);
-    segments = segments.flatMap((segment) => {
-      const parts = [];
-      for (let offset = 0; offset < segment.length - 1; offset += 255)
-        parts.push(segment.slice(offset, offset + 256));
-      return parts;
-    });
-    for (let i = 0; i < segments.length; i++) {
-      const marker = new this.api.LineMarker(`trail${i}`);
-      marker.line.depthTest = false;
-      marker.line.linewidth = 3;
-      marker.line.opacity = 1;
-      const segment = segments[i];
-      const first = segment?.[0];
-      if (!segment || !first) continue;
-      marker.line.color.setStyle(playerColor(first.player));
-      marker.line.userData.historyPoints = segment;
-      marker.line.userData.historyName = String(names.get(first.player) ?? first.player);
-      marker.setLine(segment.flatMap((point) => [point.x / 32, point.y / 32, point.z / 32]));
-      this.trails.add(marker);
-    }
-    // Keep the current tooltip stable while playback replaces line geometry.
-    // The next real pointer movement performs a fresh hit test.
+    this.scene3d.setTrails(segments, names);
   }
   setEvents(
     events: HistoryEvent[],
@@ -355,126 +326,46 @@ export class BlueMapAdapter {
     _seek?: (time: number) => void,
     registry: Partial<HistoryRegistry> = {},
   ): void {
-    const grouped = new Map<string, HistoryEvent[]>();
-    for (const event of events) {
-      if (event.type === "CHAT") {
-        grouped.set(JSON.stringify([event.point, event.type, event.payload]), [event]);
-        continue;
-      }
-      const p = event.point;
-      const key = `group:${p.player}:${p.world}:${Math.round(p.x / 256)}:${Math.round(p.y / 256)}:${Math.round(p.z / 256)}`;
-      const bucket = grouped.get(key) ?? [];
-      bucket.push(event);
-      grouped.set(key, bucket);
-    }
+    const spatial = events.filter((event) => event.type !== "CHAT");
+    this.scene3d.setEvents(spatial, names, registry);
+
+    // Text is still text: chat remains an HTML bubble while every non-text event gets
+    // a depth-tested 3D anchor.
+    const chats = events.filter((event) => event.type === "CHAT");
     const keep = new Set<string>();
-    for (const bucket of grouped.values()) {
-      bucket.sort((a, b) => a.point.time - b.point.time);
-      const e = bucket.at(-1);
-      if (!e) continue;
-      const key =
-        bucket.length === 1
-          ? JSON.stringify([e.point, e.type, e.payload])
-          : JSON.stringify([
-              "group",
-              ...bucket.map((item) => [item.point.time, item.type, item.payload]),
-            ]);
+    for (const event of chats) {
+      const key = JSON.stringify([event.point, event.type, event.payload]);
       keep.add(key);
-      let m = this.eventMarkers.get(key);
-      if (!m) {
-        m = new this.api.HtmlMarker(`event${this.nextEventId++}`);
-        this.eventMarkers.set(key, m);
-        m.anchor.set(16, 16);
-        m.element.className = "history-event";
-        m.element.style.color = eventColor(e.type);
-        m.element.style.borderColor = playerColor(e.point.player);
-        const svg = createEventIcon(e.type);
-        if (bucket.length > 1) {
-          m.element.classList.add("history-event-group");
-          const count = document.createElement("span");
-          count.className = "history-event-count";
-          count.textContent = String(bucket.length);
-          const list = document.createElement("div");
-          list.className = "history-event-list";
-          list.hidden = true;
-          for (const item of bucket) {
-            const detail = document.createElement("button");
-            detail.type = "button";
-            detail.className = "history-event-list-item";
-            detail.style.color = eventColor(item.type);
-            detail.style.borderLeftColor = playerColor(item.point.player);
-            const details = eventDetails(item.payload, registry, item.type);
-            detail.setAttribute(
-              "aria-label",
-              `${names.get(item.point.player) || item.point.player} · ${item.type.toLowerCase().replaceAll("_", " ")} · ${formatShortTimestamp(item.point.time)}`,
-            );
-            const copy = document.createElement("span");
-            const title = document.createElement("strong");
-            title.textContent =
-              formatShortTimestamp(item.point.time) +
-              " · " +
-              item.type.toLowerCase().replaceAll("_", " ");
-            const description = document.createElement("small");
-            description.textContent = details || `Position: ${formatCoordinates(item.point)}`;
-            copy.append(title, description);
-            detail.append(createEventIcon(item.type), copy);
-            detail.onclick = (event) => event.stopPropagation();
-            list.append(detail);
-          }
-          m.element.append(svg, count, list);
-        } else m.element.append(svg);
-        if (bucket.length === 1) this.focusTooltip(m.element);
-        this.events.add(m);
+      let marker = this.eventMarkers.get(key);
+      if (!marker) {
+        marker = new this.api.HtmlMarker(`chat${this.nextEventId++}`);
+        this.eventMarkers.set(key, marker);
+        marker.anchor.set(8, 18);
+        marker.element.className = "history-chat-bubble";
+        marker.element.tabIndex = 0;
+        this.focusTooltip(marker.element);
+        this.events.add(marker);
       }
-      const payload = eventDetails(e.payload, registry, e.type);
-      if (bucket.length === 1) {
-        const label = e.type.toLowerCase().replaceAll("_", " ");
-        const showPosition = [
-          "BLOCK_BREAK",
-          "BLOCK_PLACE",
-          "CONTAINER_OPEN",
-          "ITEM_PICKUP",
-          "ITEM_DROP",
-        ].includes(e.type);
-        m.element.dataset.historyTooltip = `${names.get(e.point.player) || e.point.player} · ${label}\n${formatTimestamp(e.point.time)}${showPosition ? `\nPosition: ${formatCoordinates(e.point)}` : ""}${payload ? `\n${payload}` : ""}`;
-        const player = registry.players?.find((player) => player.id === e.point.player);
-        const root = this.app.mapViewer.map?.data?.mapDataRoot;
-        m.element.dataset.historyHead =
-          player?.uuid && root ? `${root}/assets/playerheads/${player.uuid}.png` : FALLBACK_HEAD;
-      } else {
-        delete m.element.dataset.historyTooltip;
-        delete m.element.dataset.historyHead;
-      }
-      m.element.onclick = (event) => {
-        event?.stopPropagation?.();
-        if (m.element.querySelector?.(".history-event-list")) this.expandEventGroup(m);
-        else m.element.focus?.();
-      };
-      m.element.tabIndex = 0;
-      m.element.setAttribute("role", "button");
-      if (bucket.length > 1) {
-        m.element.setAttribute("aria-expanded", "false");
-        m.element.setAttribute("aria-label", `${bucket.length} events; click to expand`);
-      } else if (m.element.dataset.historyTooltip)
-        m.element.setAttribute("aria-label", m.element.dataset.historyTooltip);
-      m.element.onkeydown = (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          m.element.click();
-        }
-      };
-      m.position.set(e.point.x / 32, e.point.y / 32, e.point.z / 32);
+      const message = eventDetails(event.payload, registry, "CHAT");
+      marker.element.textContent = message;
+      marker.element.dataset.historyTooltip =
+        `${names.get(event.point.player) || event.point.player} · chat\n${formatTimestamp(event.point.time)}\n${message}`;
+      marker.element.dataset.player = String(event.point.player);
+      marker.element.dataset.time = String(event.point.time);
+      marker.element.setAttribute("aria-label", marker.element.dataset.historyTooltip);
+      marker.position.set(
+        event.point.x / 32,
+        event.point.y / 32 + 2.15,
+        event.point.z / 32,
+      );
     }
-    for (const [key, marker] of this.eventMarkers)
-      if (!keep.has(key)) {
-        this.events.remove(marker);
-        this.eventMarkers.delete(key);
-      }
-    if (this.expandedGroup && ![...this.eventMarkers.values()].includes(this.expandedGroup))
-      this.collapseEventGroup();
-    else if (this.expandedGroup)
-      for (const marker of this.eventMarkers.values())
-        marker.element.hidden = marker !== this.expandedGroup;
+
+    for (const [key, marker] of this.eventMarkers) {
+      if (keep.has(key)) continue;
+      this.events.remove(marker);
+      this.eventMarkers.delete(key);
+    }
+    this.expandedGroup = null;
   }
   layoutEvents(): void {
     for (const marker of this.eventMarkers.values()) {
@@ -542,6 +433,7 @@ export class BlueMapAdapter {
     if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
     this.tooltip.remove();
     this.clearHeatmap();
+    this.scene3d.dispose();
     this.clear(this.players);
     this.clear(this.trails);
     this.clear(this.events);
