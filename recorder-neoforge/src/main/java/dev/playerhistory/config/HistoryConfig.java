@@ -80,6 +80,7 @@ public final class HistoryConfig {
             "food",
             "xp",
             "game-mode",
+            "orientation",
             "effects",
             "held-item",
             "equipment",
