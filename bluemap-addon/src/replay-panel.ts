@@ -1178,7 +1178,9 @@ export class ReplayPanel extends HTMLElement {
         const objectReady =
           Math.floor(this.clock.time / this.objectCache.duration) === this.objectLoadedBucket;
         this.objectAdapter.setObjects(
-          objectReady ? this.objectEngine.poses(this.clock.time, objectWorld) : [],
+          objectReady && objectWorld !== undefined
+            ? this.objectEngine.poses(this.clock.time, objectWorld)
+            : [],
           this.objectManifest.registry.objects,
         );
       } else {
