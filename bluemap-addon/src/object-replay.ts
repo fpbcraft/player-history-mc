@@ -86,6 +86,7 @@ const slerp = (
 
 export class ObjectReplayEngine {
   readonly objects = new Map<number, ObjectHistoryPoint[]>();
+  private readonly travel = new Map<number, number[]>();
 
   constructor(
     private readonly positionScale: number,
@@ -97,13 +98,22 @@ export class ObjectReplayEngine {
 
   setPoints(points: ObjectHistoryPoint[]): void {
     this.objects.clear();
+    this.travel.clear();
     for (const point of points) {
       const history = this.objects.get(point.object) ?? [];
       history.push(point);
       this.objects.set(point.object, history);
     }
-    for (const history of this.objects.values())
+    for (const [id, history] of this.objects) {
       history.sort((left, right) => left.time - right.time);
+      const cumulative = new Array<number>(history.length).fill(0);
+      for (let i = 1; i < history.length; i++) {
+        const from = history[i - 1];
+        const to = history[i];
+        cumulative[i] = cumulative[i - 1] + segmentTravel(from, to, this.positionScale, this.quaternionScale);
+      }
+      this.travel.set(id, cumulative);
+    }
   }
 
   pose(id: number, time: number): ObjectPose | null {
@@ -136,6 +146,7 @@ export class ObjectReplayEngine {
         qz: fromQ[2],
         qw: fromQ[3],
         geometry: from.geometry,
+        travel: this.travelAt(id, low - 1),
       };
     }
 
@@ -153,7 +164,14 @@ export class ObjectReplayEngine {
       qz: rotation[2],
       qw: rotation[3],
       geometry: from.geometry,
+      travel:
+        this.travelAt(id, low - 1)
+        + segmentTravel(from, to, this.positionScale, this.quaternionScale) * ratio,
     };
+  }
+
+  private travelAt(id: number, index: number): number {
+    return this.travel.get(id)?.[index] ?? 0;
   }
 
   poses(time: number, world?: number): ObjectPose[] {
@@ -165,6 +183,35 @@ export class ObjectReplayEngine {
     return result;
   }
 }
+
+const segmentTravel = (
+  from: ObjectHistoryPoint | undefined,
+  to: ObjectHistoryPoint | undefined,
+  positionScale: number,
+  quaternionScale: number,
+): number => {
+  if (!from || !to || !connectsObjects(from, to)) return 0;
+  const dt = Math.max((to.time - from.time) / 1000, 0.001);
+  const dx = (to.x - from.x) / positionScale;
+  const dy = (to.y - from.y) / positionScale;
+  const dz = (to.z - from.z) / positionScale;
+  const distance = Math.hypot(dx, dy, dz);
+  if (distance > 40 * dt) return 0;
+
+  const q = normalizedQuaternion(from, quaternionScale);
+  // Rotate world delta by inverse(from rotation), yielding object-local motion.
+  const ix = q[3] * dx - q[1] * dz + q[2] * dy;
+  const iy = q[3] * dy - q[2] * dx + q[0] * dz;
+  const iz = q[3] * dz - q[0] * dy + q[1] * dx;
+  const iw = q[0] * dx + q[1] * dy + q[2] * dz;
+  const lx = ix * q[3] + iw * q[0] + iy * q[2] - iz * q[1];
+  const lz = iz * q[3] + iw * q[2] + ix * q[1] - iy * q[0];
+
+  // Create carriages can be authored along local X or Z depending on bogey orientation.
+  // The dominant horizontal component gives a stable signed odometer for both.
+  const sign = Math.abs(lz) >= Math.abs(lx) ? Math.sign(lz) : Math.sign(lx);
+  return distance * (sign || 1);
+};
 
 export class ObjectChunkCache {
   readonly cache = new Map<number, ObjectHistoryPoint[]>();
