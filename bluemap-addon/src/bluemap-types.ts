@@ -39,15 +39,32 @@ export interface MarkerSet {
 
 export interface Geometry {
   setAttribute(name: string, value: unknown): void;
+  setIndex?(value: unknown): void;
+  dispose(): void;
+}
+
+export interface Texture {
+  flipY: boolean;
+  magFilter?: unknown;
+  minFilter?: unknown;
+  generateMipmaps?: boolean;
+  needsUpdate?: boolean;
   dispose(): void;
 }
 
 export interface Material {
+  map?: Texture | null;
+  needsUpdate?: boolean;
   dispose(): void;
 }
 
 export interface Quaternion3 {
   set(x: number, y: number, z: number, w: number): Quaternion3;
+  setFromAxisAngle?(axis: unknown, angle: number): Quaternion3;
+}
+
+export interface Matrix4 {
+  makeTranslation(x: number, y: number, z: number): Matrix4;
 }
 
 export interface Object3D {
@@ -60,6 +77,7 @@ export interface Object3D {
   add(...children: Object3D[]): void;
   remove(child: Object3D): void;
   clone(recursive?: boolean): Object3D;
+  children?: Object3D[];
 }
 
 export interface Mesh extends Object3D {
@@ -69,16 +87,17 @@ export interface Mesh extends Object3D {
 }
 
 export interface RaycastHit {
-  object: { userData: MarkerLine["userData"] };
-  faceIndex: number;
+  object: Object3D & { userData: Record<string, unknown> };
+  faceIndex?: number;
+  instanceId?: number;
   point: { x: number; y: number; z: number };
   pointOnLine?: { x: number; y: number; z: number };
 }
 
 export interface Raycaster {
-  params: { Line2: { threshold: number } };
+  params: { Line2: { threshold: number }; Line?: { threshold: number } };
   setFromCamera(position: unknown, camera: unknown): void;
-  intersectObjects(objects: MarkerLine[], recursive: boolean): RaycastHit[];
+  intersectObjects(objects: unknown[], recursive: boolean): RaycastHit[];
 }
 
 export interface BlueMapRuntime {
@@ -88,18 +107,50 @@ export interface BlueMapRuntime {
   Three: {
     Raycaster: new () => Raycaster;
     Vector2: new (x: number, y: number) => unknown;
-    Color: new () => {
+    Color: new (value?: string | number) => {
       r: number;
       g: number;
       b: number;
       setHSL(h: number, s: number, l: number): { r: number; g: number; b: number };
+      setStyle?(value: string): unknown;
     };
+    Vector3: new (x?: number, y?: number, z?: number) => unknown;
+    Matrix4: new () => Matrix4;
     BufferGeometry: new () => Geometry;
-    Float32BufferAttribute: new (values: number[], size: number) => unknown;
+    Float32BufferAttribute: new (values: number[] | Float32Array, size: number) => unknown;
+    Uint32BufferAttribute?: new (values: number[] | Uint32Array, size: number) => unknown;
     MeshBasicMaterial: new (options: Record<string, unknown>) => Material;
+    LineBasicMaterial: new (options: Record<string, unknown>) => Material;
+    TextureLoader: new () => {
+      load(
+        url: string,
+        onLoad?: (texture: Texture) => void,
+        onProgress?: unknown,
+        onError?: (error: unknown) => void,
+      ): Texture;
+    };
     Mesh: new (geometry: Geometry, material: Material) => Mesh;
+    Line: new (geometry: Geometry, material: Material) => Object3D & {
+      geometry: Geometry;
+      material: Material;
+    };
+    SphereGeometry: new (
+      radius: number,
+      widthSegments?: number,
+      heightSegments?: number,
+    ) => Geometry;
+    InstancedMesh: new (geometry: Geometry, material: Material, count: number) => Object3D & {
+      geometry: Geometry;
+      material: Material;
+      count: number;
+      instanceMatrix?: { needsUpdate: boolean };
+      instanceColor?: { needsUpdate: boolean };
+      setMatrixAt(index: number, matrix: Matrix4): void;
+      setColorAt?(index: number, color: unknown): void;
+    };
     Group: new () => Object3D;
     DoubleSide: unknown;
+    NearestFilter?: unknown;
   };
 }
 
