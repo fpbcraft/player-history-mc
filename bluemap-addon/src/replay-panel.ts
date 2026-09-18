@@ -1171,7 +1171,7 @@ export class ReplayPanel extends HTMLElement {
               .filter((point): point is HistoryPoint => point !== null && point.world === world)
               .map((point) => ({ ...point, time: this.clock.time }))
           : [];
-      this.adapter.setPlayers(positions, this.names);
+      this.adapter.setPlayers(positions, this.names, this.manifest.registry.players);
 
       if (this.objectAdapter && this.objectManifest && this.objectCache && !this.isLive) {
         const objectWorld = this.objectWorld();
