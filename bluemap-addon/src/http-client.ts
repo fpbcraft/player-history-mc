@@ -4,6 +4,7 @@ import {
   parseIntegration,
   parseLiveSnapshot,
   parseManifest,
+  parseObjectManifest,
 } from "./protocol.js";
 import type {
   ChatFeed,
@@ -13,6 +14,7 @@ import type {
   IntegrationMapping,
   JsonObject,
   LiveSnapshot,
+  ObjectHistoryManifest,
 } from "./types.js";
 
 export class HistoryClient {
@@ -41,6 +43,17 @@ export class HistoryClient {
 
   async live(signal?: AbortSignal): Promise<LiveSnapshot> {
     return parseLiveSnapshot(await this.json(`data/live.json?t=${Date.now()}`, signal));
+  }
+
+  async objectManifest(signal?: AbortSignal): Promise<ObjectHistoryManifest | null> {
+    const response = await this.fetcher(new URL("data/objects/manifest.json", this.base), {
+      cache: "no-store",
+      ...(signal ? { signal } : {}),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Object history HTTP ${response.status}`);
+    if (!response.json) throw new Error("Object history response is not JSON");
+    return parseObjectManifest(await response.json());
   }
 
   async activity(day: number, signal?: AbortSignal): Promise<[number, number][]> {
