@@ -2,6 +2,7 @@ package dev.playerhistory;
 
 import dev.playerhistory.config.HistoryConfig;
 import dev.playerhistory.core.*;
+import dev.playerhistory.object.*;
 import dev.playerhistory.state.TelemetryRecorder;
 import java.util.*;
 import net.minecraft.commands.Commands;
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 @Mod("playerhistory")
 public final class PlayerHistoryMod {
   private HistoryStore store;
+  private ObjectHistoryRecorder objectHistory;
   private dev.playerhistory.web.WebChat webChat;
   private final TelemetryRecorder telemetry;
   private boolean recordingMovement = true;
@@ -69,12 +71,28 @@ public final class PlayerHistoryMod {
                   HistoryConfig.HEATMAP.get()),
               s -> LoggerFactory.getLogger("PlayerHistory").info(s));
       store.capabilities(HistoryConfig.capabilities());
+      if (HistoryConfig.OBJECTS.get()) {
+        objectHistory =
+            new ObjectHistoryRecorder(
+                root.resolve("objects"),
+                new ObjectHistoryRecorder.Options(
+                    HistoryConfig.CHUNK.get() * 60_000L,
+                    HistoryConfig.RETENTION.get(),
+                    HistoryConfig.QUEUE.get(),
+                    HistoryConfig.OBJECT_MOVEMENT.get(),
+                    HistoryConfig.OBJECT_ROTATION.get(),
+                    HistoryConfig.OBJECT_KEYFRAME.get() * 1000L),
+                message -> LoggerFactory.getLogger("PlayerHistoryObjects").info(message));
+        ObjectHistoryApi.install(objectHistory);
+      }
       if (HistoryConfig.PUBLISH.get()) {
         var target = java.nio.file.Path.of(HistoryConfig.PUBLIC_DIRECTORY.get());
-        store.publishTo(
+        var dataset =
             target.isAbsolute()
                 ? target
-                : e.getServer().getWorldPath(LevelResource.ROOT).resolve(target));
+                : e.getServer().getWorldPath(LevelResource.ROOT).resolve(target);
+        store.publishTo(dataset);
+        if (objectHistory != null) objectHistory.publishTo(dataset);
       }
       if (HistoryConfig.WEBCHAT.get()) {
         webChat = new dev.playerhistory.web.WebChat(root.resolve("webchat-sessions.json"), HistoryConfig.WEBCHAT_BIND.get(), HistoryConfig.WEBCHAT_PORT.get(), (session, message) -> {
@@ -108,6 +126,11 @@ public final class PlayerHistoryMod {
 
   private void stop(ServerStoppingEvent e) {
     if (webChat != null) { webChat.close(); webChat = null; }
+    if (objectHistory != null) {
+      ObjectHistoryApi.clear(objectHistory);
+      objectHistory.close();
+      objectHistory = null;
+    }
     if (store != null) {
       if (HistoryConfig.tracks("movement"))
         for (var p : visible.values())
@@ -147,6 +170,7 @@ public final class PlayerHistoryMod {
     nextSample = now() + HistoryConfig.SAMPLE.get();
     store.capabilities(HistoryConfig.capabilities());
     store.retentionDays(HistoryConfig.RETENTION.get());
+    if (objectHistory != null) objectHistory.retentionDays(HistoryConfig.RETENTION.get());
     if (recordingMovement && !HistoryConfig.tracks("movement")) {
       for (var point : visible.values())
         store.offer(List.of(point.with(now(), Point.OFFLINE | Point.BREAK)), List.of());
@@ -287,7 +311,10 @@ public final class PlayerHistoryMod {
                                                   ? "History disabled"
                                                   : store.stats()
                                                       + " stationarySkipped="
-                                                      + sampler.skipped),
+                                                      + sampler.skipped
+                                                      + (objectHistory == null
+                                                          ? ""
+                                                          : " " + objectHistory.stats())),
                                       false);
                               return 1;
                             })));
