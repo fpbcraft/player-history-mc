@@ -408,6 +408,32 @@ bluemap-player-replay .history-status {
   image-rendering: pixelated;
   display: block;
 }
+.history-chat-bubble {
+  max-width: 240px;
+  padding: 5px 8px;
+  border: 1px solid #ffffff45;
+  border-radius: 9px 9px 9px 2px;
+  background: #111c;
+  color: #fff;
+  font: 500 11px/1.25 system-ui, sans-serif;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  box-shadow: 0 2px 7px #0009;
+}
+.history-chat-bubble::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  bottom: -5px;
+  width: 8px;
+  height: 8px;
+  background: #111c;
+  transform: rotate(45deg);
+  border-right: 1px solid #ffffff45;
+  border-bottom: 1px solid #ffffff45;
+}
+
 .history-event {
   width: 28px;
   height: 28px;
