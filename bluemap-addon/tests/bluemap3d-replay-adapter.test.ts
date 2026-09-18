@@ -106,7 +106,7 @@ test("historical object replay clones the live mesh and suppresses the present-d
     ],
   );
 
-  assert.deepEqual(stats, { rendered: 1, unavailable: 0, geometryMismatch: 0 });
+  assert.deepEqual(stats, { rendered: 1, unavailable: 0, geometryMismatch: 0, archived: 0 });
   assert.equal(source.visible, false);
   assert.equal(root.children.length, 1);
   const historyRoot = root.children[0] as FakeObject;
@@ -122,7 +122,7 @@ test("historical object replay clones the live mesh and suppresses the present-d
   assert.equal(historyRoot.children.length, 0);
 });
 
-test("historical renderer reports unavailable and mismatched current geometry", () => {
+test("historical renderer refuses mismatched live geometry when no archive exists", () => {
   const root = new FakeObject();
   const source = new FakeObject();
   window.__bluemap3d = {
@@ -171,5 +171,81 @@ test("historical renderer reports unavailable and mismatched current geometry", 
     ],
   );
 
-  assert.deepEqual(stats, { rendered: 1, unavailable: 1, geometryMismatch: 1 });
+  assert.deepEqual(stats, { rendered: 0, unavailable: 2, geometryMismatch: 1, archived: 0 });
 });
+
+test("historical renderer loads an archived mesh when live geometry is gone", async () => {
+  const root = new FakeObject();
+  const loaded = new FakeObject();
+  const urls: string[] = [];
+  window.__bluemap3d = {
+    root,
+    objects: {},
+    createReplayMesh: async (url) => {
+      urls.push(url);
+      return loaded;
+    },
+  };
+
+  const adapter = new BlueMap3DReplayAdapter(runtime());
+  const pose = {
+    object: 8,
+    time: 1000,
+    world: 0,
+    x: 5,
+    y: 66,
+    z: 9,
+    qx: 0,
+    qy: 0,
+    qz: 0,
+    qw: 1,
+    geometry: 42,
+  };
+  const registry = [
+    { id: 8, provider: "sable_ships", sourceId: "old-ship", label: "Old ship" },
+  ];
+  const geometry = [
+    {
+      provider: "sable_ships",
+      sourceId: "old-ship",
+      version: 42,
+      mesh: "geometry/deadbeef.bm3d",
+      atlas: "geometry/deadbeef.png",
+      lastReferencedAt: 1000,
+    },
+  ];
+
+  const pending = adapter.setObjects(
+    [pose],
+    registry,
+    geometry,
+    "https://map.example/player-history/data/objects/",
+  );
+  assert.deepEqual(pending, {
+    rendered: 0,
+    unavailable: 1,
+    geometryMismatch: 0,
+    archived: 1,
+  });
+
+  await Promise.resolve();
+  const rendered = adapter.setObjects(
+    [pose],
+    registry,
+    geometry,
+    "https://map.example/player-history/data/objects/",
+  );
+  assert.deepEqual(rendered, {
+    rendered: 1,
+    unavailable: 0,
+    geometryMismatch: 0,
+    archived: 1,
+  });
+  assert.deepEqual(urls, [
+    "https://map.example/player-history/data/objects/geometry/deadbeef.bm3d",
+  ]);
+  assert.equal(loaded.position.x, 5);
+  assert.equal(loaded.position.y, 66);
+  assert.equal(loaded.position.z, 9);
+});
+
