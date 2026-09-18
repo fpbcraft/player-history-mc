@@ -7,15 +7,12 @@ import type {
   Raycaster,
 } from "./bluemap-types.js";
 import {
-  createEventIcon,
   eventColor,
-  FALLBACK_HEAD,
   formatCoordinates,
-  formatShortTimestamp,
   formatTimestamp,
   playerColor,
 } from "./event-presentation.js";
-import { createVitals, meterLevels, renderVitals } from "./player-vitals.js";
+import { meterLevels } from "./player-vitals.js";
 import { HistoryScene3D } from "./history-scene3d.js";
 import { eventDetails, trailPoint } from "./telemetry.js";
 import type {
