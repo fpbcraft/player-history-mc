@@ -100,6 +100,15 @@ export interface ObjectHistoryRegistry {
   worlds: string[];
 }
 
+export interface ObjectGeometryEntry {
+  provider: string;
+  sourceId: string;
+  version: number;
+  mesh: string;
+  atlas: string;
+  lastReferencedAt: number;
+}
+
 export interface ObjectHistoryManifest {
   protocolVersion: 1;
   earliestTimestamp: number;
@@ -109,6 +118,7 @@ export interface ObjectHistoryManifest {
   positionScale: number;
   quaternionScale: number;
   geometryArchive: boolean;
+  geometries?: ObjectGeometryEntry[];
   registry: ObjectHistoryRegistry;
 }
 
