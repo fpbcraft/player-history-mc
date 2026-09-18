@@ -59,6 +59,11 @@ final class PlayerSkinPublisher implements AutoCloseable {
     }
   }
 
+  void disable() {
+    api = null;
+    skinsRoot = null;
+  }
+
   void tick(MinecraftServer server, Path worldRoot) {
     if (api == null || skinsRoot == null) return;
     for (var player : server.getPlayerList().getPlayers()) queue(player.getUUID());
