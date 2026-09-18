@@ -89,6 +89,7 @@ export interface Mesh extends Object3D {
 export interface RaycastHit {
   object: Object3D & { userData: Record<string, unknown> };
   faceIndex?: number;
+  index?: number;
   instanceId?: number;
   point: { x: number; y: number; z: number };
   pointOnLine?: { x: number; y: number; z: number };
