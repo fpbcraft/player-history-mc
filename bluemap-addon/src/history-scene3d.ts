@@ -44,8 +44,8 @@ interface PlayerAvatar {
   last?: HistoryPoint;
   yaw: number;
   phase: number;
-  recordedYaw?: number;
-  recordedPitch?: number;
+  recordedYaw: number | undefined;
+  recordedPitch: number | undefined;
 }
 
 interface DisposableLine extends Object3D {
@@ -452,6 +452,8 @@ export class HistoryScene3D {
       leftLeg,
       yaw: 0,
       phase: 0,
+      recordedYaw: undefined,
+      recordedPitch: undefined,
     };
   }
 
