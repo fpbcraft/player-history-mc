@@ -107,7 +107,7 @@ final class ServerOverlayPublisher {
       claims.stop();
       claims.start(server);
       tickLoad.clear();
-      TickLoadTracker.drain(PUBLISH_INTERVAL_TICKS);
+      TickLoadTracker.drain();
     }
     publish();
   }
@@ -122,7 +122,7 @@ final class ServerOverlayPublisher {
     output = null;
     ticks = 0;
     tickLoad.clear();
-    TickLoadTracker.drain(PUBLISH_INTERVAL_TICKS);
+    TickLoadTracker.drain();
   }
 
   void tick(MinecraftServer current) {
@@ -141,7 +141,8 @@ final class ServerOverlayPublisher {
       for (var claim : claims.snapshot())
         claimByDimension.computeIfAbsent(claim.dimension(), ignored -> new ArrayList<>()).add(claim);
 
-      updateTickLoad(TickLoadTracker.drain(PUBLISH_INTERVAL_TICKS));
+      TickLoadTracker.Window loadWindow = TickLoadTracker.drain();
+      updateTickLoad(loadWindow.samples());
       var loadByDimension = new HashMap<String, List<TickLoadCell>>();
       tickLoad.forEach(
           (key, value) -> {
@@ -190,11 +191,11 @@ final class ServerOverlayPublisher {
     for (TickLoadTracker.Sample sample : samples) {
       LoadKey key = new LoadKey(sample.dimension(), sample.x(), sample.z());
       SmoothedLoad value = tickLoad.computeIfAbsent(key, ignored -> new SmoothedLoad());
-      boolean fresh = value.missingWindows == 0 && value.mspt > 0;
-      value.mspt = blend(value.mspt, sample.mspt(), fresh);
-      value.chunkMspt = blend(value.chunkMspt, sample.chunkMspt(), fresh);
-      value.entityMspt = blend(value.entityMspt, sample.entityMspt(), fresh);
-      value.blockEntityMspt = blend(value.blockEntityMspt, sample.blockEntityMspt(), fresh);
+      boolean hasPrevious = value.mspt > 0;
+      value.mspt = blend(value.mspt, sample.mspt(), hasPrevious);
+      value.chunkMspt = blend(value.chunkMspt, sample.chunkMspt(), hasPrevious);
+      value.entityMspt = blend(value.entityMspt, sample.entityMspt(), hasPrevious);
+      value.blockEntityMspt = blend(value.blockEntityMspt, sample.blockEntityMspt(), hasPrevious);
       value.entityTicks = sample.entityTicks();
       value.blockEntityTicks = sample.blockEntityTicks();
       value.missingWindows = 0;
