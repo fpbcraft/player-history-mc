@@ -169,6 +169,7 @@ public final class BlueMapIntegration {
       skins.configure(api, webRoot);
       Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
+      if (server != null) serverOverlays.start(server, webRoot);
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);
