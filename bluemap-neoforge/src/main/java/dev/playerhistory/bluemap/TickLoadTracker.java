@@ -43,7 +43,7 @@ public final class TickLoadTracker {
   }
 
   public static void recordBlockEntity(ServerLevel level, BlockPos pos, long nanos) {
-    record(level, ChunkPos.asLong(pos), 0, 0, nanos, 0, 1);
+    record(level, new ChunkPos(pos).toLong(), 0, 0, nanos, 0, 1);
   }
 
   public static void entityPre(Entity entity) {
