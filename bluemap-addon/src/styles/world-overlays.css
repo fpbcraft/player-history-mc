@@ -2,7 +2,7 @@
   position: fixed;
   z-index: 1200;
   top: max(64px, calc(env(safe-area-inset-top) + 12px));
-  right: 12px;
+  right: 68px;
   color: var(--theme-fg, #eee);
   font: 12px/1.35 system-ui, sans-serif;
 }
@@ -28,7 +28,7 @@
 }
 .world-overlays__panel {
   clear: both;
-  width: min(300px, calc(100vw - 24px));
+  width: min(330px, calc(100vw - 88px));
   margin-top: 42px;
   padding: 12px;
 }
@@ -72,7 +72,7 @@
 .world-overlays__legend i {
   width: 9px;
   height: 9px;
-  border: 1px solid #fff6;
+  border: 1px solid #fff9;
   border-radius: 2px;
 }
 .world-overlays__status {
@@ -83,6 +83,9 @@
 @media (max-width: 600px) {
   .world-overlays {
     top: max(52px, calc(env(safe-area-inset-top) + 8px));
-    right: 8px;
+    right: 60px;
+  }
+  .world-overlays__panel {
+    width: min(300px, calc(100vw - 72px));
   }
 }
