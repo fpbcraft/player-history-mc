@@ -23,11 +23,20 @@ public abstract class BlockEntityTickProfilerMixin {
       return;
     }
 
+    // Some modded/removed tickers can expose a null position, and a ticker may
+    // detach itself during tick(). Capture the position before ticking and skip
+    // profiling unbound tickers rather than letting diagnostics affect gameplay.
+    var pos = ticker.getPos();
+    if (pos == null) {
+      ticker.tick();
+      return;
+    }
+
     long started = System.nanoTime();
     try {
       ticker.tick();
     } finally {
-      TickLoadTracker.recordBlockEntity(serverLevel, ticker.getPos(), System.nanoTime() - started);
+      TickLoadTracker.recordBlockEntity(serverLevel, pos, System.nanoTime() - started);
     }
   }
 }
