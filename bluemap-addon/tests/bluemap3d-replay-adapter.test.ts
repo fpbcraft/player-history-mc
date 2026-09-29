@@ -70,9 +70,11 @@ test("historical object replay clones the live mesh and suppresses the present-d
   const root = new FakeObject();
   const source = new FakeObject();
   const animations: [number, number][] = [];
+  const suppressions: string[][] = [];
   window.__bluemap3d = {
     root,
     setReplayAnimation: (_mesh, travel, time) => animations.push([travel, time]),
+    setSuppressedObjects: (ids) => suppressions.push([...ids]),
     objects: {
       "create_contraptions/train/0": {
         mesh: source,
@@ -120,10 +122,81 @@ test("historical object replay clones the live mesh and suppresses the present-d
   assert.equal(clone.position.z, -4);
   assert.deepEqual(clone.quaternion.values, [0, Math.SQRT1_2, 0, Math.SQRT1_2]);
   assert.deepEqual(animations, [[3.5, 1]]);
+  assert.deepEqual(suppressions, [["create_contraptions/train/0"]]);
 
   adapter.clear();
+  assert.deepEqual(suppressions, [["create_contraptions/train/0"], []]);
   assert.equal(source.visible, true);
   assert.equal(historyRoot.children.length, 0);
+});
+
+
+test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", () => {
+  const root = new FakeObject();
+  const source = new FakeObject();
+  let frame: FrameRequestCallback | undefined;
+  const previousRequest = window.requestAnimationFrame;
+  const previousCancel = window.cancelAnimationFrame;
+
+  window.requestAnimationFrame = (callback) => {
+    frame = callback;
+    return 17;
+  };
+  window.cancelAnimationFrame = () => {};
+
+  try {
+    window.__bluemap3d = {
+      root,
+      objects: {
+        "create_contraptions/train/0": {
+          mesh: source,
+          meshUrl: "assets/bluemap3d/meshes/create/train_0-v5-7.bm3d",
+        },
+      },
+    };
+
+    const adapter = new BlueMap3DReplayAdapter(runtime());
+    adapter.setObjects(
+      [
+        {
+          object: 3,
+          time: 1000,
+          world: 0,
+          x: 1,
+          y: 64,
+          z: 1,
+          qx: 0,
+          qy: 0,
+          qz: 0,
+          qw: 1,
+          geometry: 7,
+          travel: 0,
+        },
+      ],
+      [
+        {
+          id: 3,
+          provider: "create_contraptions",
+          sourceId: "train/0",
+          label: "Carriage",
+        },
+      ],
+    );
+
+    assert.equal(source.visible, false);
+
+    // Simulate an older BlueMap3D feed poll re-applying its normal visibility.
+    source.visible = true;
+    assert.ok(frame);
+    frame(16);
+    assert.equal(source.visible, false);
+
+    adapter.clear();
+    assert.equal(source.visible, true);
+  } finally {
+    window.requestAnimationFrame = previousRequest;
+    window.cancelAnimationFrame = previousCancel;
+  }
 });
 
 test("historical renderer refuses mismatched live geometry when no archive exists", () => {
@@ -131,6 +204,7 @@ test("historical renderer refuses mismatched live geometry when no archive exist
   const source = new FakeObject();
   window.__bluemap3d = {
     root,
+    setSuppressedObjects: () => {},
     objects: {
       "sable_ships/ship": {
         mesh: source,
@@ -187,6 +261,7 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
   window.__bluemap3d = {
     root,
     objects: {},
+    setSuppressedObjects: () => {},
     createReplayMesh: async (url) => {
       urls.push(url);
       return loaded;
