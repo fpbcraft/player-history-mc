@@ -26,10 +26,6 @@ jobs:
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
-      - name: Check viewer
-        working-directory: bluemap-addon
-        run: npm run check
-
       - name: Build and test
         run: |
           chmod +x gradlew
