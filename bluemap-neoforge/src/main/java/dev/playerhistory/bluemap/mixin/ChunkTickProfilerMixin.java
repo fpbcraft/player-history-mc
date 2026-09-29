@@ -11,17 +11,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerLevel.class)
 public abstract class ChunkTickProfilerMixin {
-  @Unique private long playerhistory$chunkTickStarted;
+  @Unique
+  private final ThreadLocal<Long> playerhistory$chunkTickStarted =
+      ThreadLocal.withInitial(() -> 0L);
 
   @Inject(method = "tickChunk", at = @At("HEAD"))
   private void playerhistory$beforeChunkTick(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
-    playerhistory$chunkTickStarted = TickLoadTracker.sampling() ? System.nanoTime() : 0L;
+    playerhistory$chunkTickStarted.set(TickLoadTracker.sampling() ? System.nanoTime() : 0L);
   }
 
   @Inject(method = "tickChunk", at = @At("RETURN"))
   private void playerhistory$afterChunkTick(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
-    if (playerhistory$chunkTickStarted == 0L) return;
-    long elapsed = System.nanoTime() - playerhistory$chunkTickStarted;
+    long started = playerhistory$chunkTickStarted.get();
+    playerhistory$chunkTickStarted.remove();
+    if (started == 0L) return;
+    long elapsed = System.nanoTime() - started;
     TickLoadTracker.recordChunk((ServerLevel) (Object) this, chunk.getPos(), elapsed);
   }
 }
