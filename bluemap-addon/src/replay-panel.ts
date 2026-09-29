@@ -557,11 +557,7 @@ export class ReplayPanel extends HTMLElement {
       void this.pollLive();
       this.lifecycle.interval(() => this.pollLive(), 1000);
     };
-    if (this.opened || this.heatEnabled) {
-      void this.refresh(true).then(startLivePolling);
-    } else {
-      this.lifecycle.timeout(startLivePolling, 2500);
-    }
+    void this.refresh(true).then(startLivePolling);
     this.lifecycle.interval(() => {
       if (this.opened || this.heatEnabled) void this.refresh();
     }, 45000);
@@ -828,33 +824,35 @@ export class ReplayPanel extends HTMLElement {
         this.integration = await this.historyClient.integration(controller.signal);
       }
 
-      const objectManifest = await this.historyClient.objectManifest(controller.signal);
-      this.objectManifest = objectManifest ?? undefined;
-      if (objectManifest) {
-        if (
-          !this.objectCache ||
-          this.objectCache.duration !== objectManifest.chunkDurationMs
-        ) {
+      if (this.opened) {
+        const objectManifest = await this.historyClient.objectManifest(controller.signal);
+        this.objectManifest = objectManifest ?? undefined;
+        if (objectManifest) {
+          if (
+            !this.objectCache ||
+            this.objectCache.duration !== objectManifest.chunkDurationMs
+          ) {
+            this.objectCache?.clear();
+            this.objectCache = new ObjectChunkCache(
+              new URL("data/objects", BASE_URL).href,
+              objectManifest.chunkDurationMs,
+              undefined,
+              objectManifest.chunkRanges,
+            );
+            this.objectEngine = new ObjectReplayEngine(
+              objectManifest.positionScale,
+              objectManifest.quaternionScale,
+            );
+            this.objectLoadedBucket = undefined;
+          }
+          this.objectCache.setAvailableRanges(objectManifest.chunkRanges);
+        } else {
           this.objectCache?.clear();
-          this.objectCache = new ObjectChunkCache(
-            new URL("data/objects", BASE_URL).href,
-            objectManifest.chunkDurationMs,
-            undefined,
-            objectManifest.chunkRanges,
-          );
-          this.objectEngine = new ObjectReplayEngine(
-            objectManifest.positionScale,
-            objectManifest.quaternionScale,
-          );
+          this.objectCache = undefined;
           this.objectLoadedBucket = undefined;
+          this.objectEngine.setPoints([]);
+          this.objectAdapter?.clear();
         }
-        this.objectCache.setAvailableRanges(objectManifest.chunkRanges);
-      } else {
-        this.objectCache?.clear();
-        this.objectCache = undefined;
-        this.objectLoadedBucket = undefined;
-        this.objectEngine.setPoints([]);
-        this.objectAdapter?.clear();
       }
       if (!this.cache || this.cache.duration !== m.chunkDurationMs) {
         this.cache?.clear();
@@ -1308,7 +1306,9 @@ export class ReplayPanel extends HTMLElement {
     this.liveLoading = true;
     const controller = this.requests.start("live");
     try {
-      const data = await this.historyClient.live(controller.signal);
+      const data = this.opened
+        ? await this.historyClient.live(controller.signal)
+        : await this.historyClient.presence(controller.signal);
       if (
         !this.isConnected ||
         data.protocolVersion !== 2 ||
