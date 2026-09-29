@@ -42,11 +42,11 @@ export class HistoryClient {
   }
 
   async live(signal?: AbortSignal): Promise<LiveSnapshot> {
-    return parseLiveSnapshot(await this.json("data/live.json", signal));
+    return parseLiveSnapshot(await this.json(`data/live.json?t=${Date.now()}`, signal));
   }
 
   async presence(signal?: AbortSignal): Promise<LiveSnapshot> {
-    return parseLiveSnapshot(await this.json("data/presence.json", signal));
+    return parseLiveSnapshot(await this.json(`data/presence.json?t=${Date.now()}`, signal));
   }
 
   async objectManifest(signal?: AbortSignal): Promise<ObjectHistoryManifest | null> {
