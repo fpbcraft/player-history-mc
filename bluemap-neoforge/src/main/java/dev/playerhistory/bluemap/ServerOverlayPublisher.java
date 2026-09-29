@@ -146,6 +146,8 @@ final class ServerOverlayPublisher {
       Object value = getChunks.invoke(chunkMap);
       if (!(value instanceof Iterable<?> holders)) return result;
       for (Object holder : holders) {
+        Method getTickingChunk = findMethod(holder.getClass(), "getTickingChunk");
+        if (getTickingChunk.invoke(holder) == null) continue;
         Method getPos = findMethod(holder.getClass(), "getPos");
         Object pos = getPos.invoke(holder);
         if (pos instanceof ChunkPos chunk) result.add(new ChunkCell(chunk.x, chunk.z));
