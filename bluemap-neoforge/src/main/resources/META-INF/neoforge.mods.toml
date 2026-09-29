@@ -33,3 +33,6 @@ modId="bluemap3d"
 type="optional"
 versionRange="[1.0.0,)"
 side="SERVER"
+
+[[mixins]]
+config="playerhistory_bluemap.mixins.json"
