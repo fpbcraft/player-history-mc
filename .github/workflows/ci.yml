@@ -2,12 +2,10 @@ name: CI
 
 on:
   push:
-    branches-ignore:
-      - "generated/**"
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -36,21 +34,6 @@ jobs:
       - name: Verify BlueMap mixin config is packaged
         run: |
           jar tf bluemap-neoforge/build/libs/player-history-bluemap-*.jar | grep -qx 'playerhistory_bluemap.mixins.json'
-
-      - name: Publish 0.8.26 test jars to generated branch
-        if: github.event_name == 'push' && github.ref_name == 'feat/server-map-overlays'
-        run: |
-          mkdir -p /tmp/player-history-jars
-          cp recorder-neoforge/build/libs/*.jar /tmp/player-history-jars/
-          cp bluemap-neoforge/build/libs/*.jar /tmp/player-history-jars/
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan generated-jars
-          git rm -rf .
-          cp /tmp/player-history-jars/*.jar .
-          git add *.jar
-          git commit -m "Player History 0.8.26 test jars"
-          git push --force origin HEAD:refs/heads/generated/player-history-0.8.26
 
       - name: Upload test jars
         continue-on-error: true
