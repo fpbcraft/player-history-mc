@@ -11,10 +11,13 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -22,18 +25,47 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
 final class ServerOverlayPublisher {
   private static final int PUBLISH_INTERVAL_TICKS = 40;
   private static final Gson GSON = new Gson();
+  private static final Set<String> CREATE_MACHINE_IDS =
+      Set.of(
+          "mechanical_press",
+          "mechanical_mixer",
+          "millstone",
+          "crushing_wheel_controller",
+          "mechanical_saw",
+          "mechanical_drill",
+          "deployer",
+          "encased_fan",
+          "mechanical_pump",
+          "mechanical_arm",
+          "mechanical_crafter",
+          "spout",
+          "item_drain",
+          "basin",
+          "hose_pulley",
+          "steam_engine",
+          "portable_storage_interface");
 
   record ChunkCell(int x, int z) {}
   record EntityCell(int x, int z, int total, int living, int items, int players) {}
+  record CreateMachineCell(
+      int x,
+      int z,
+      int machines,
+      int active,
+      int overstressed,
+      float averageRpm,
+      float maxRpm) {}
   record DimensionData(
       List<ChunkCell> loaded,
-      List<ChunkCell> forced,
+      List<ChunkCell> pinned,
       List<EntityCell> entities,
-      List<ClaimsOverlaySource.ClaimCell> claims) {}
+      List<ClaimsOverlaySource.ClaimCell> claims,
+      List<CreateMachineCell> create) {}
   record Snapshot(int version, long generatedAt, Map<String, DimensionData> dimensions) {}
 
   private final Consumer<String> log;
@@ -89,25 +121,35 @@ final class ServerOverlayPublisher {
       Map<String, DimensionData> dimensions = new TreeMap<>();
       for (ServerLevel level : current.getAllLevels()) {
         String key = level.dimension().location().toString();
+        List<ClaimsOverlaySource.ClaimCell> dimensionClaims =
+            List.copyOf(claimByDimension.getOrDefault(key, List.of()));
+        List<ChunkCell> loaded = loadedChunks(level);
         dimensions.put(
             key,
             new DimensionData(
-                loadedChunks(level),
-                forcedChunks(level),
+                loaded,
+                pinnedChunks(level, dimensionClaims),
                 entityDensity(level),
-                List.copyOf(claimByDimension.getOrDefault(key, List.of()))));
+                dimensionClaims,
+                createMachines(level, loaded)));
       }
       atomicWrite(
           destination,
-          GSON.toJson(new Snapshot(1, System.currentTimeMillis(), dimensions)));
+          GSON.toJson(new Snapshot(2, System.currentTimeMillis(), dimensions)));
     } catch (Exception error) {
       log.accept("Could not publish BlueMap server overlays: " + error);
     }
   }
 
-  private static List<ChunkCell> forcedChunks(ServerLevel level) {
-    var result = new ArrayList<ChunkCell>();
-    for (long packed : level.getForcedChunks()) {
+  private static List<ChunkCell> pinnedChunks(
+      ServerLevel level, List<ClaimsOverlaySource.ClaimCell> claims) {
+    var positions = new HashSet<Long>();
+    for (long packed : level.getForcedChunks()) positions.add(packed);
+    for (var claim : claims)
+      if (claim.forceLoadMarked()) positions.add(ChunkPos.asLong(claim.x(), claim.z()));
+
+    var result = new ArrayList<ChunkCell>(positions.size());
+    for (long packed : positions) {
       ChunkPos pos = new ChunkPos(packed);
       result.add(new ChunkCell(pos.x, pos.z));
     }
@@ -136,6 +178,65 @@ final class ServerOverlayPublisher {
     return result;
   }
 
+  private static List<CreateMachineCell> createMachines(
+      ServerLevel level, List<ChunkCell> loadedChunks) {
+    var result = new ArrayList<CreateMachineCell>();
+    for (ChunkCell cell : loadedChunks) {
+      var chunk = level.getChunkSource().getChunkNow(cell.x(), cell.z());
+      if (chunk == null) continue;
+
+      int machines = 0;
+      int active = 0;
+      int overstressed = 0;
+      float rpmTotal = 0;
+      float maxRpm = 0;
+
+      for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
+        var key = BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
+        if (!"create".equals(key.getNamespace()) || !CREATE_MACHINE_IDS.contains(key.getPath()))
+          continue;
+
+        machines++;
+        float rpm = reflectedFloat(blockEntity, "getSpeed");
+        float absoluteRpm = Math.abs(rpm);
+        if (absoluteRpm > 0.01f) active++;
+        rpmTotal += absoluteRpm;
+        maxRpm = Math.max(maxRpm, absoluteRpm);
+        if (reflectedBoolean(blockEntity, "isOverStressed")) overstressed++;
+      }
+
+      if (machines > 0)
+        result.add(
+            new CreateMachineCell(
+                cell.x(),
+                cell.z(),
+                machines,
+                active,
+                overstressed,
+                rpmTotal / machines,
+                maxRpm));
+    }
+    return result;
+  }
+
+  private static float reflectedFloat(Object target, String name) {
+    try {
+      Object value = findMethod(target.getClass(), name).invoke(target);
+      return value instanceof Number number ? number.floatValue() : 0;
+    } catch (ReflectiveOperationException ignored) {
+      return 0;
+    }
+  }
+
+  private static boolean reflectedBoolean(Object target, String name) {
+    try {
+      Object value = findMethod(target.getClass(), name).invoke(target);
+      return value instanceof Boolean flag && flag;
+    } catch (ReflectiveOperationException ignored) {
+      return false;
+    }
+  }
+
   private static List<ChunkCell> loadedChunks(ServerLevel level) {
     var result = new ArrayList<ChunkCell>();
     try {
@@ -153,7 +254,7 @@ final class ServerOverlayPublisher {
         if (pos instanceof ChunkPos chunk) result.add(new ChunkCell(chunk.x, chunk.z));
       }
     } catch (ReflectiveOperationException ignored) {
-      // BlueMap targets a pinned MC/NeoForge version, but keep the overlay optional if internals move.
+      // Keep the overlay optional if pinned MC/NeoForge internals move.
     }
     return result;
   }
