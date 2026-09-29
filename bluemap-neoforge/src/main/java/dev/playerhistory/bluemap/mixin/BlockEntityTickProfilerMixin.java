@@ -18,7 +18,7 @@ public abstract class BlockEntityTickProfilerMixin {
               target = "Lnet/minecraft/world/level/block/entity/TickingBlockEntity;tick()V"))
   private void playerhistory$measureBlockEntityTick(TickingBlockEntity ticker) {
     Level level = (Level) (Object) this;
-    if (!(level instanceof ServerLevel serverLevel)) {
+    if (!(level instanceof ServerLevel serverLevel) || !TickLoadTracker.sampling()) {
       ticker.tick();
       return;
     }
