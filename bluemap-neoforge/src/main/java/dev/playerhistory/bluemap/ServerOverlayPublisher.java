@@ -48,10 +48,14 @@ final class ServerOverlayPublisher {
   }
 
   void start(MinecraftServer server, Path webRoot) {
+    MinecraftServer previous = this.server;
     this.server = server;
     this.output = webRoot.resolve("player-history/server-overlays.json");
     this.ticks = 0;
-    claims.start(server);
+    if (previous != server) {
+      claims.stop();
+      claims.start(server);
+    }
     publish();
   }
 
