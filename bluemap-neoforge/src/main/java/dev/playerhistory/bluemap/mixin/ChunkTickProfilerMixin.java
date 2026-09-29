@@ -15,11 +15,12 @@ public abstract class ChunkTickProfilerMixin {
 
   @Inject(method = "tickChunk", at = @At("HEAD"))
   private void playerhistory$beforeChunkTick(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
-    playerhistory$chunkTickStarted = System.nanoTime();
+    playerhistory$chunkTickStarted = TickLoadTracker.sampling() ? System.nanoTime() : 0L;
   }
 
   @Inject(method = "tickChunk", at = @At("RETURN"))
   private void playerhistory$afterChunkTick(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
+    if (playerhistory$chunkTickStarted == 0L) return;
     long elapsed = System.nanoTime() - playerhistory$chunkTickStarted;
     TickLoadTracker.recordChunk((ServerLevel) (Object) this, chunk.getPos(), elapsed);
   }
