@@ -144,6 +144,11 @@ export interface BlueMapRuntime {
       geometry: Geometry;
       material: Material;
     };
+    LineSegments: new (geometry: Geometry, material: Material) => Object3D & {
+      geometry: Geometry;
+      material: Material;
+      renderOrder: number;
+    };
     SphereGeometry: new (
       radius: number,
       widthSegments?: number,
