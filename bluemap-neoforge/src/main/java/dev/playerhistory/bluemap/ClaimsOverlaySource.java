@@ -6,7 +6,13 @@ import net.minecraft.server.MinecraftServer;
 import net.neoforged.fml.ModList;
 
 interface ClaimsOverlaySource {
-  record ClaimCell(String dimension, int x, int z, String owner, int color) {}
+  record ClaimCell(
+      String dimension,
+      int x,
+      int z,
+      String owner,
+      int color,
+      boolean forceLoadMarked) {}
 
   void start(MinecraftServer server);
   void stop();
