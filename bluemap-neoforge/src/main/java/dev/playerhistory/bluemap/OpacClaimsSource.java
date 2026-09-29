@@ -8,7 +8,6 @@ import java.util.function.Consumer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
-import xaero.pac.common.claims.player.api.IPlayerClaimPosListAPI;
 import xaero.pac.common.claims.tracker.api.IClaimsManagerListenerAPI;
 import xaero.pac.common.server.api.OpenPACServerAPI;
 
@@ -70,8 +69,22 @@ public final class OpacClaimsSource implements ClaimsOverlaySource, IClaimsManag
                         entry -> {
                           String dimension = entry.getKey().toString();
                           entry.getValue().getStream()
-                              .flatMap(IPlayerClaimPosListAPI::getStream)
-                              .forEach(pos -> next.add(new ClaimCell(dimension, pos.x, pos.z, label, color)));
+                              .forEach(
+                                  positions -> {
+                                    boolean forceLoadMarked =
+                                        positions.getClaimState().isForceloadable();
+                                    positions.getStream()
+                                        .forEach(
+                                            pos ->
+                                                next.add(
+                                                    new ClaimCell(
+                                                        dimension,
+                                                        pos.x,
+                                                        pos.z,
+                                                        label,
+                                                        color,
+                                                        forceLoadMarked)));
+                                  });
                         });
               });
       cells = List.copyOf(next);
