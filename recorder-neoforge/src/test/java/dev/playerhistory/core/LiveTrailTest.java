@@ -16,18 +16,26 @@ class LiveTrailTest {
       long now = System.currentTimeMillis();
       Point first = Point.at(player, now, world, 1, 64, 1, Point.BREAK);
       assertTrue(store.offer(List.of(first, Point.at(player, now + 1, world, 2, 64, 1, 0)), List.of()));
-      boolean found = false;
+      boolean found = false, foundPresence = false;
       for (int i = 0; i < 30; i++) {
         Thread.sleep(50);
         Path live = root.resolve("public/live.json");
-        if (!Files.exists(live)) continue;
-        var data = com.google.gson.JsonParser.parseString(Files.readString(live)).getAsJsonObject();
-        if (data.getAsJsonArray("points").size() == 2) {
-          found = true;
-          break;
+        if (Files.exists(live)) {
+          var data = com.google.gson.JsonParser.parseString(Files.readString(live)).getAsJsonObject();
+          found = data.getAsJsonArray("points").size() == 2;
         }
+        Path presence = root.resolve("public/presence.json");
+        if (Files.exists(presence)) {
+          var data =
+              com.google.gson.JsonParser.parseString(Files.readString(presence)).getAsJsonObject();
+          var points = data.getAsJsonArray("points");
+          foundPresence =
+              points.size() == 1 && points.get(0).getAsJsonObject().get("x").getAsInt() == 64;
+        }
+        if (found && foundPresence) break;
       }
       assertTrue(found, "live feed contains new movement within 1.5 seconds");
+      assertTrue(foundPresence, "presence feed contains only the latest player position");
       Path historical = root.resolve("public/chunks/" + (now / 300000 * 300000) + ".json");
       assertFalse(Files.exists(historical), "historical batch is not flushed early");
     }
