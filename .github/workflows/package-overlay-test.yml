@@ -1,0 +1,47 @@
+name: Package overlay test jars
+
+on:
+  push:
+    branches:
+      - feat/server-map-overlays
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.head_commit.message == 'chore: package 0.8.24 test jars'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: bluemap-addon/package-lock.json
+      - name: Install viewer dependencies
+        working-directory: bluemap-addon
+        run: npm ci
+      - name: Build jars
+        run: |
+          chmod +x gradlew
+          ./gradlew :recorder-neoforge:build :bluemap-neoforge:build --no-daemon
+      - name: Publish test jars
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="player-history-v0.8.24-overlay-test"
+          gh release delete "$tag" --cleanup-tag --yes || true
+          gh release create "$tag" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Player History 0.8.24 overlay test" \
+            --notes "Test build for the BlueMap overlay improvements and Create machine telemetry." \
+            recorder-neoforge/build/libs/*.jar \
+            bluemap-neoforge/build/libs/*.jar
