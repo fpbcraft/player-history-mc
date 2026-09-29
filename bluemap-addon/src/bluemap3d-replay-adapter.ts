@@ -52,6 +52,8 @@ export class BlueMap3DReplayAdapter {
   private readonly pending = new Map<number, string>();
   private readonly desired = new Map<number, string>();
   private hiddenSources = new Set<Object3D>();
+  private suppressedIds = new Set<string>();
+  private fallbackFrame?: number;
   private generation = 0;
 
   constructor(private readonly api: BlueMapRuntime) {}
@@ -82,7 +84,7 @@ export class BlueMap3DReplayAdapter {
     // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
     // the one-frame flash that occurred whenever its polling loop re-applied map visibility
     // after Player History hid a mesh.
-    diagnostics.setSuppressedObjects?.(suppressed);
+    this.syncLiveSuppression(diagnostics, suppressed);
 
     const archivedByKey = new Map(
       geometries.map((entry) => [
@@ -195,7 +197,7 @@ export class BlueMap3DReplayAdapter {
   }
 
   clear(): void {
-    window.__bluemap3d?.setSuppressedObjects?.([]);
+    this.syncLiveSuppression(window.__bluemap3d, []);
     this.generation++;
     for (const historical of this.meshes.values()) this.root?.remove(historical.clone);
     this.meshes.clear();
@@ -210,6 +212,61 @@ export class BlueMap3DReplayAdapter {
     if (this.root && this.parentRoot) this.parentRoot.remove(this.root);
     this.root = undefined;
     this.parentRoot = undefined;
+  }
+
+  private syncLiveSuppression(
+    diagnostics: BlueMap3DDiagnostics | undefined,
+    ids: readonly string[],
+  ): void {
+    this.suppressedIds = new Set(ids);
+
+    if (diagnostics?.setSuppressedObjects) {
+      diagnostics.setSuppressedObjects(ids);
+      this.stopFallbackSuppression();
+      return;
+    }
+
+    // Older BlueMap3D builds do not own replay suppression. Their feed poll can set a
+    // live mesh visible again while Player History is paused between replay updates, so
+    // keep the current live copies hidden from the render loop as a compatibility fallback.
+    if (this.suppressedIds.size > 0) this.ensureFallbackSuppression();
+    else this.stopFallbackSuppression();
+  }
+
+  private ensureFallbackSuppression(): void {
+    if (
+      this.fallbackFrame !== undefined ||
+      typeof window.requestAnimationFrame !== "function"
+    )
+      return;
+
+    const enforce = () => {
+      this.fallbackFrame = undefined;
+      if (this.suppressedIds.size === 0) return;
+
+      const diagnostics = window.__bluemap3d;
+      if (diagnostics?.objects) {
+        for (const id of this.suppressedIds) {
+          const mesh = diagnostics.objects[id]?.mesh;
+          if (mesh) mesh.visible = false;
+        }
+      }
+
+      if (
+        this.suppressedIds.size > 0 &&
+        typeof window.requestAnimationFrame === "function"
+      )
+        this.fallbackFrame = window.requestAnimationFrame(enforce);
+    };
+
+    this.fallbackFrame = window.requestAnimationFrame(enforce);
+  }
+
+  private stopFallbackSuppression(): void {
+    if (this.fallbackFrame === undefined) return;
+    if (typeof window.cancelAnimationFrame === "function")
+      window.cancelAnimationFrame(this.fallbackFrame);
+    this.fallbackFrame = undefined;
   }
 
   private loadArchived(
