@@ -21,12 +21,18 @@ tasks.register('buildViewer', Exec) {
 }
 sourceSets.main.resources {
  srcDir('../bluemap-addon/dist')
- include '**/*.toml', '**/*.json', 'player-history.js', 'player-history.css'
+ include '**/*.toml', '**/*.json', 'playerhistory_bluemap.mixins.json', 'player-history.js', 'player-history.css'
 }
 tasks.named('processResources') {
  dependsOn 'buildViewer'
  inputs.property 'version', project.version
  filesMatching('META-INF/neoforge.mods.toml') { expand version: project.version }
+ doLast {
+  def mixinConfig = destinationDir.toPath().resolve('playerhistory_bluemap.mixins.json')
+  if (!java.nio.file.Files.isRegularFile(mixinConfig)) {
+   throw new GradleException("Missing packaged mixin config: " + mixinConfig)
+  }
+ }
 }
 base { archivesName = 'player-history-bluemap' }
 
