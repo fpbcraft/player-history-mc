@@ -1,7 +1,7 @@
-import type { BlueMapApp, BlueMapRuntime, MarkerSet, Mesh } from "./bluemap-types.js";
+import type { BlueMapApp, BlueMapRuntime, MarkerSet, Object3D } from "./bluemap-types.js";
 import { preferences } from "./preferences.js";
 
-type OverlayKey = "heatmap" | "loaded" | "claims" | "forced" | "entities";
+type OverlayKey = "heatmap" | "loaded" | "claims" | "entities" | "create";
 type ServerOverlayKey = Exclude<OverlayKey, "heatmap">;
 
 interface ChunkCell { x: number; z: number }
@@ -15,12 +15,22 @@ interface ClaimCell extends ChunkCell {
   dimension: string;
   owner: string;
   color: number;
+  forceLoadMarked?: boolean;
+}
+interface CreateMachineCell extends ChunkCell {
+  machines: number;
+  active: number;
+  overstressed: number;
+  averageRpm: number;
+  maxRpm: number;
 }
 interface DimensionData {
   loaded?: ChunkCell[];
+  pinned?: ChunkCell[];
   forced?: ChunkCell[];
   entities?: EntityCell[];
   claims?: ClaimCell[];
+  create?: CreateMachineCell[];
 }
 interface ServerOverlaySnapshot {
   version: number;
@@ -31,14 +41,15 @@ interface Integration {
   mapWorlds?: Record<string, string>;
 }
 
-const SERVER_KEYS: ServerOverlayKey[] = ["loaded", "claims", "forced", "entities"];
+const SERVER_KEYS: ServerOverlayKey[] = ["loaded", "claims", "entities", "create"];
 const storageKey = (key: ServerOverlayKey) => `fpbcraft-map-overlay-${key}`;
 
 class WorldOverlayController {
   private readonly root: MarkerSet;
-  private readonly meshes = new Map<ServerOverlayKey, Mesh>();
+  private readonly objects = new Map<ServerOverlayKey, Object3D>();
   private readonly enabled: Record<OverlayKey, boolean>;
   private readonly inputs = new Map<OverlayKey, HTMLInputElement>();
+  private readonly details = new Map<OverlayKey, HTMLElement>();
   private readonly host = document.createElement("div");
   private readonly panel = document.createElement("div");
   private readonly status = document.createElement("small");
@@ -56,8 +67,8 @@ class WorldOverlayController {
       heatmap: preferences.heatmap(),
       loaded: localStorage.getItem(storageKey("loaded")) === "true",
       claims: localStorage.getItem(storageKey("claims")) === "true",
-      forced: localStorage.getItem(storageKey("forced")) === "true",
       entities: localStorage.getItem(storageKey("entities")) === "true",
+      create: localStorage.getItem(storageKey("create")) === "true",
     };
     this.root = new api.MarkerSet("fpbcraft-world-overlays", {
       label: "World overlays",
@@ -73,6 +84,14 @@ class WorldOverlayController {
       const input = this.inputs.get("heatmap");
       if (input) input.checked = enabled;
     });
+    document.addEventListener("player-history:range-state", (event) => {
+      const label = (event as CustomEvent<{ label?: string }>).detail?.label;
+      this.updateHeatmapDescription(label);
+    });
+
+    const currentRange =
+      document.querySelector<HTMLElement>('bluemap-player-replay [name="range-label"]')?.textContent;
+    this.updateHeatmapDescription(currentRange || undefined);
   }
 
   private createControls(): void {
@@ -90,11 +109,11 @@ class WorldOverlayController {
     this.panel.append(heading);
 
     const options: [OverlayKey, string, string][] = [
-      ["heatmap", "Player activity heatmap", "Time spent by recorded players"],
-      ["loaded", "Loaded chunks", "Chunks currently held by the server"],
+      ["heatmap", "Player activity heatmap", "Time spent by recorded players · follows the History range"],
+      ["loaded", "Loaded chunks", "Currently loaded chunks · force-load marks outlined in gold"],
       ["claims", "OPAC regions", "Open Parties and Claims ownership"],
-      ["forced", "Forced chunks", "Chunks explicitly kept loaded"],
       ["entities", "Entity density", "Live entity count by chunk"],
+      ["create", "Create machines", "Production machines by chunk · running / idle / overstressed"],
     ];
     for (const [key, label, description] of options) {
       const row = document.createElement("label");
@@ -109,6 +128,7 @@ class WorldOverlayController {
       title.textContent = label;
       const detail = document.createElement("small");
       detail.textContent = description;
+      this.details.set(key, detail);
       text.append(title, detail);
       row.append(input, text);
       this.panel.append(row);
@@ -128,6 +148,14 @@ class WorldOverlayController {
     document.body.append(this.host);
   }
 
+  private updateHeatmapDescription(label?: string): void {
+    const detail = this.details.get("heatmap");
+    if (!detail) return;
+    detail.textContent = label
+      ? `Time spent by recorded players · History range: ${label}`
+      : "Time spent by recorded players · follows the History range";
+  }
+
   private setEnabled(key: OverlayKey, enabled: boolean): void {
     this.enabled[key] = enabled;
     if (key === "heatmap") {
@@ -139,7 +167,7 @@ class WorldOverlayController {
     }
 
     localStorage.setItem(storageKey(key), String(enabled));
-    if (!enabled) this.clearMesh(key);
+    if (!enabled) this.clearObject(key);
     if (this.lastSnapshot) this.render(this.lastSnapshot);
     this.updatePolling();
   }
@@ -177,7 +205,8 @@ class WorldOverlayController {
       );
       if (!response.ok) throw new Error(`server-overlays.json HTTP ${response.status}`);
       const snapshot = (await response.json()) as ServerOverlaySnapshot;
-      if (snapshot.version !== 1) throw new Error("Unsupported server overlay version");
+      if (snapshot.version !== 1 && snapshot.version !== 2)
+        throw new Error("Unsupported server overlay version");
       this.lastSnapshot = snapshot;
       this.render(snapshot);
     } catch (error) {
@@ -197,50 +226,100 @@ class WorldOverlayController {
     const dimension = this.currentDimension();
     const data = dimension ? snapshot.dimensions?.[dimension] : undefined;
     if (!data) {
-      for (const key of SERVER_KEYS) this.clearMesh(key);
+      for (const key of SERVER_KEYS) this.clearObject(key);
       this.status.textContent = "No live overlay data for this map.";
       return;
     }
 
-    if (this.enabled.loaded)
-      this.setMesh("loaded", data.loaded ?? [], () => this.color("#5aa9e6"), 0.17, 111);
-    if (this.enabled.forced)
-      this.setMesh("forced", data.forced ?? [], () => this.color("#ffb347"), 0.42, 114);
+    const pinned = data.pinned ?? data.forced ?? [];
+    if (this.enabled.loaded) {
+      this.setArea(
+        "loaded",
+        data.loaded ?? [],
+        () => this.color("#5ab6ff"),
+        0.30,
+        111,
+        () => this.color("#9ed5ff"),
+      );
+      this.addBoundaryTo(
+        "loaded",
+        pinned,
+        () => this.color("#ffc15a"),
+        0.98,
+        114,
+        () => "force-load",
+        2,
+      );
+    }
     if (this.enabled.entities) {
       const rows = data.entities ?? [];
       const max = Math.max(1, ...rows.map((row) => row.total));
-      this.setMesh(
+      this.setArea(
         "entities",
         rows,
         (row) => {
           const value = Math.log1p((row as EntityCell).total) / Math.log1p(max);
           return this.api.Three.Color
-            ? new this.api.Three.Color().setHSL((1 - value) * 0.33, 1, 0.5)
+            ? new this.api.Three.Color().setHSL((1 - value) * 0.33, 1, 0.55)
             : this.color("#ef5350");
         },
-        0.42,
+        0.52,
         116,
+        (row) => {
+          const value = Math.log1p((row as EntityCell).total) / Math.log1p(max);
+          return new this.api.Three.Color().setHSL((1 - value) * 0.33, 1, 0.68);
+        },
       );
     }
     if (this.enabled.claims) {
       const rows = data.claims ?? [];
-      this.setMesh(
+      this.setArea(
         "claims",
         rows,
         (row) => new this.api.Three.Color((row as ClaimCell).color),
-        0.24,
+        0.38,
         112,
+        (row) => new this.api.Three.Color((row as ClaimCell).color),
+        (row) => (row as ClaimCell).owner,
       );
       this.renderClaimLegend(rows);
     } else {
       this.legend.replaceChildren();
     }
+    if (this.enabled.create) {
+      const rows = data.create ?? [];
+      this.setArea(
+        "create",
+        rows,
+        (row) => this.createColor(row as CreateMachineCell),
+        0.54,
+        118,
+        (row) => this.createOutlineColor(row as CreateMachineCell),
+      );
+    }
 
     const entityCount = (data.entities ?? []).reduce((sum, row) => sum + row.total, 0);
+    const createRows = data.create ?? [];
+    const machineCount = createRows.reduce((sum, row) => sum + row.machines, 0);
+    const activeMachines = createRows.reduce((sum, row) => sum + row.active, 0);
+    const overstressed = createRows.reduce((sum, row) => sum + row.overstressed, 0);
     const age = Math.max(0, Math.round((Date.now() - snapshot.generatedAt) / 1000));
     this.status.textContent =
-      `${data.loaded?.length ?? 0} loaded · ${data.forced?.length ?? 0} forced · ` +
-      `${entityCount} entities · ${data.claims?.length ?? 0} claimed chunks · ${age}s old`;
+      `${data.loaded?.length ?? 0} loaded · ${pinned.length} force-load marked · ` +
+      `${entityCount} entities · ${data.claims?.length ?? 0} claimed · ` +
+      `${machineCount} Create machines (${activeMachines} running, ${overstressed} overstressed) · ${age}s old`;
+  }
+
+  private createColor(row: CreateMachineCell) {
+    if (row.overstressed > 0) return this.color("#ff5c5c");
+    if (row.active > 0) return this.color("#4fd1a1");
+    return this.color("#f0b75a");
+  }
+
+  private createOutlineColor(row: CreateMachineCell) {
+    if (row.overstressed > 0) return this.color("#ffaaaa");
+    if (row.active > 0) return this.color("#a9f1d8");
+    return this.color("#ffe0a3");
   }
 
   private renderClaimLegend(rows: ClaimCell[]): void {
@@ -265,60 +344,154 @@ class WorldOverlayController {
     return new this.api.Three.Color(value);
   }
 
-  private setMesh(
+  private setArea(
     key: ServerOverlayKey,
     rows: ChunkCell[],
     colorFor: (row: ChunkCell) => { r: number; g: number; b: number },
     opacity: number,
     renderOrder: number,
+    outlineColorFor: (row: ChunkCell) => { r: number; g: number; b: number },
+    regionFor: (row: ChunkCell) => string = () => "all",
   ): void {
-    this.clearMesh(key);
-    if (!rows.length) return;
+    this.clearObject(key);
     const T = this.api.Three;
+    const group = new T.Group();
+    group.name = `fpbcraft-overlay-${key}`;
+
+    if (rows.length) {
+      const positions: number[] = [];
+      const colors: number[] = [];
+      const height = (this.app.mapViewer.controlsManager?.position?.y ?? 64) + (renderOrder - 110) * 0.01;
+      for (const row of rows) {
+        const x = row.x * 16;
+        const z = row.z * 16;
+        const color = colorFor(row);
+        for (const [dx, dz] of [
+          [0, 0],
+          [1, 1],
+          [1, 0],
+          [0, 0],
+          [0, 1],
+          [1, 1],
+        ] as const) {
+          positions.push(x + dx * 16, height, z + dz * 16);
+          colors.push(color.r, color.g, color.b);
+        }
+      }
+      const geometry = new T.BufferGeometry();
+      geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
+      const material = new T.MeshBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity,
+        depthTest: false,
+        depthWrite: false,
+        side: T.DoubleSide,
+      });
+      const mesh = new T.Mesh(geometry, material);
+      mesh.renderOrder = renderOrder;
+      mesh.name = `fpbcraft-overlay-${key}-fill`;
+      group.add(mesh);
+      this.addBoundary(group, rows, outlineColorFor, 0.94, renderOrder + 1, regionFor, 1);
+    }
+
+    this.root.add(group);
+    this.objects.set(key, group);
+  }
+
+  private addBoundaryTo(
+    key: ServerOverlayKey,
+    rows: ChunkCell[],
+    colorFor: (row: ChunkCell) => { r: number; g: number; b: number },
+    opacity: number,
+    renderOrder: number,
+    regionFor: (row: ChunkCell) => string = () => "all",
+    lineWidth = 1,
+  ): void {
+    const group = this.objects.get(key);
+    if (!group || !rows.length) return;
+    this.addBoundary(group, rows, colorFor, opacity, renderOrder, regionFor, lineWidth);
+  }
+
+  private addBoundary(
+    group: Object3D,
+    rows: ChunkCell[],
+    colorFor: (row: ChunkCell) => { r: number; g: number; b: number },
+    opacity: number,
+    renderOrder: number,
+    regionFor: (row: ChunkCell) => string,
+    lineWidth: number,
+  ): void {
+    const T = this.api.Three;
+    const regions = new Map<string, Map<string, ChunkCell>>();
+    for (const row of rows) {
+      const region = regionFor(row);
+      let cells = regions.get(region);
+      if (!cells) regions.set(region, (cells = new Map()));
+      cells.set(`${row.x},${row.z}`, row);
+    }
+
     const positions: number[] = [];
     const colors: number[] = [];
     const height = (this.app.mapViewer.controlsManager?.position?.y ?? 64) + (renderOrder - 110) * 0.01;
-    for (const row of rows) {
-      const x = row.x * 16;
-      const z = row.z * 16;
+    const addSegment = (
+      row: ChunkCell,
+      ax: number,
+      az: number,
+      bx: number,
+      bz: number,
+    ) => {
       const color = colorFor(row);
-      for (const [dx, dz] of [
-        [0, 0],
-        [1, 1],
-        [1, 0],
-        [0, 0],
-        [0, 1],
-        [1, 1],
-      ] as const) {
-        positions.push(x + dx * 16, height, z + dz * 16);
-        colors.push(color.r, color.g, color.b);
+      positions.push(ax, height, az, bx, height, bz);
+      colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+    };
+
+    for (const cells of regions.values()) {
+      for (const row of cells.values()) {
+        const x = row.x * 16;
+        const z = row.z * 16;
+        if (!cells.has(`${row.x},${row.z - 1}`)) addSegment(row, x, z, x + 16, z);
+        if (!cells.has(`${row.x + 1},${row.z}`)) addSegment(row, x + 16, z, x + 16, z + 16);
+        if (!cells.has(`${row.x},${row.z + 1}`)) addSegment(row, x + 16, z + 16, x, z + 16);
+        if (!cells.has(`${row.x - 1},${row.z}`)) addSegment(row, x, z + 16, x, z);
       }
     }
+
+    if (!positions.length) return;
     const geometry = new T.BufferGeometry();
     geometry.setAttribute("position", new T.Float32BufferAttribute(positions, 3));
     geometry.setAttribute("color", new T.Float32BufferAttribute(colors, 3));
-    const material = new T.MeshBasicMaterial({
+    const material = new T.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
       opacity,
       depthTest: false,
       depthWrite: false,
-      side: T.DoubleSide,
+      linewidth: lineWidth,
     });
-    const mesh = new T.Mesh(geometry, material);
-    mesh.renderOrder = renderOrder;
-    mesh.name = `fpbcraft-overlay-${key}`;
-    this.root.add(mesh);
-    this.meshes.set(key, mesh);
+    const lines = new T.LineSegments(geometry, material);
+    lines.renderOrder = renderOrder;
+    group.add(lines);
   }
 
-  private clearMesh(key: ServerOverlayKey): void {
-    const mesh = this.meshes.get(key);
-    if (!mesh) return;
-    this.root.remove(mesh);
-    mesh.geometry.dispose();
-    mesh.material.dispose();
-    this.meshes.delete(key);
+  private clearObject(key: ServerOverlayKey): void {
+    const object = this.objects.get(key);
+    if (!object) return;
+    this.root.remove(object);
+    this.disposeObject(object);
+    this.objects.delete(key);
+  }
+
+  private disposeObject(object: Object3D): void {
+    for (const child of object.children ?? []) this.disposeObject(child);
+    const disposable = object as Object3D & {
+      geometry?: { dispose(): void };
+      material?: { dispose(): void } | Array<{ dispose(): void }>;
+    };
+    disposable.geometry?.dispose();
+    if (Array.isArray(disposable.material)) disposable.material.forEach((material) => material.dispose());
+    else disposable.material?.dispose();
   }
 }
 
