@@ -44,7 +44,7 @@ class WorldOverlayController {
   private readonly status = document.createElement("small");
   private readonly legend = document.createElement("div");
   private integration?: Integration;
-  private timer?: number;
+  private timer: number | undefined;
   private loading = false;
   private lastSnapshot?: ServerOverlaySnapshot;
 
