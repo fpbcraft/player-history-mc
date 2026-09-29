@@ -4,7 +4,7 @@ import com.google.gson.Gson;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
-import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.server.MinecraftServer;\nimport net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
@@ -38,11 +38,11 @@ public final class BlueMapIntegration {
 
   private final String version;
   private volatile Object api;
-  private volatile Path worldRoot;
+  private volatile Path worldRoot;\n  private volatile MinecraftServer server;
   private final Map<String, Object> levels = new HashMap<>();
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
   private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
-  private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
+  private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);\n  private final ServerOverlayPublisher serverOverlays = new ServerOverlayPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
@@ -67,7 +67,7 @@ public final class BlueMapIntegration {
                   a -> {
                     api = null;
                     objectHistory.webRoot(null);
-                    skins.disable();
+                    skins.disable();\n                    serverOverlays.stop();
                   });
     } catch (Exception ex) {
       log.accept("Cannot connect to BlueMap API: " + ex);
@@ -92,7 +92,7 @@ public final class BlueMapIntegration {
   private void tick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
     objectHistory.tick(
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
-    skins.tick(event.getServer(), worldRoot);
+    skins.tick(event.getServer(), worldRoot);\n    serverOverlays.tick(event.getServer());
   }
 
   private static Object call(
