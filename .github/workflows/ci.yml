@@ -31,6 +31,10 @@ jobs:
           chmod +x gradlew
           ./gradlew test build --no-daemon
 
+      - name: Verify BlueMap mixin config is packaged
+        run: |
+          jar tf bluemap-neoforge/build/libs/player-history-bluemap-*.jar | grep -qx 'playerhistory_bluemap.mixins.json'
+
       - name: Upload test jars
         continue-on-error: true
         uses: actions/upload-artifact@v4
