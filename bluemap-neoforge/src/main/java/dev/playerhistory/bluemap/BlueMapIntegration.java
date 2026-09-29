@@ -53,6 +53,8 @@ public final class BlueMapIntegration {
     NeoForge.EVENT_BUS.addListener(this::start);
     NeoForge.EVENT_BUS.addListener(this::stop);
     NeoForge.EVENT_BUS.addListener(this::tick);
+    NeoForge.EVENT_BUS.addListener(this::entityTickPre);
+    NeoForge.EVENT_BUS.addListener(this::entityTickPost);
     try {
       var type = Class.forName("de.bluecolored.bluemap.api.BlueMapAPI");
       type.getMethod("onEnable", Consumer.class)
@@ -101,6 +103,14 @@ public final class BlueMapIntegration {
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
     skins.tick(event.getServer(), worldRoot);
     serverOverlays.tick(event.getServer());
+  }
+
+  private void entityTickPre(net.neoforged.neoforge.event.tick.EntityTickEvent.Pre event) {
+    TickLoadTracker.entityPre(event.getEntity());
+  }
+
+  private void entityTickPost(net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) {
+    TickLoadTracker.entityPost(event.getEntity());
   }
 
   private static Object call(
