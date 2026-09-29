@@ -12,12 +12,13 @@ import net.minecraft.world.level.ChunkPos;
 
 public final class TickLoadTracker {
   private static final int SAMPLE_EVERY_TICKS = 10;
+  private static final Object LOCK = new Object();
   private static final Map<Key, Mutable> LOAD = new HashMap<>();
   private static final Map<Entity, Long> ENTITY_STARTS = new IdentityHashMap<>();
 
   private static int serverTickCounter;
   private static int sampledTicks;
-  private static boolean sampling;
+  private static volatile boolean sampling;
 
   private TickLoadTracker() {}
 
@@ -51,7 +52,9 @@ public final class TickLoadTracker {
 
   public static void endServerTick() {
     sampling = false;
-    ENTITY_STARTS.clear();
+    synchronized (LOCK) {
+      ENTITY_STARTS.clear();
+    }
   }
 
   public static boolean sampling() {
@@ -70,28 +73,38 @@ public final class TickLoadTracker {
 
   public static void entityPre(Entity entity) {
     if (!sampling || !(entity.level() instanceof ServerLevel)) return;
-    ENTITY_STARTS.put(entity, System.nanoTime());
+    synchronized (LOCK) {
+      ENTITY_STARTS.put(entity, System.nanoTime());
+    }
   }
 
   public static void entityPost(Entity entity) {
     if (!(entity.level() instanceof ServerLevel level)) return;
-    Long start = ENTITY_STARTS.remove(entity);
+    Long start;
+    synchronized (LOCK) {
+      start = ENTITY_STARTS.remove(entity);
+    }
     if (start == null) return;
     record(level, entity.chunkPosition().toLong(), 0, System.nanoTime() - start, 0, 1, 0);
   }
 
   public static Window drain() {
-    int ticks = sampledTicks;
-    sampledTicks = 0;
-
-    if (ticks <= 0 || LOAD.isEmpty()) {
+    Map<Key, Mutable> snapshot;
+    int ticks;
+    synchronized (LOCK) {
+      ticks = sampledTicks;
+      sampledTicks = 0;
+      if (ticks <= 0 || LOAD.isEmpty()) {
+        LOAD.clear();
+        return new Window(List.of(), Math.max(0, ticks));
+      }
+      snapshot = new HashMap<>(LOAD);
       LOAD.clear();
-      return new Window(List.of(), Math.max(0, ticks));
     }
 
     double divisor = ticks;
-    var result = new ArrayList<Sample>(LOAD.size());
-    LOAD.forEach(
+    var result = new ArrayList<Sample>(snapshot.size());
+    snapshot.forEach(
         (key, value) -> {
           ChunkPos pos = new ChunkPos(key.chunk());
           double chunkMspt = value.chunkNanos / divisor / 1_000_000.0;
@@ -109,7 +122,6 @@ public final class TickLoadTracker {
                   value.entityTicks,
                   value.blockEntityTicks));
         });
-    LOAD.clear();
     return new Window(List.copyOf(result), ticks);
   }
 
@@ -122,11 +134,13 @@ public final class TickLoadTracker {
       int entityTicks,
       int blockEntityTicks) {
     String dimension = level.dimension().location().toString();
-    Mutable value = LOAD.computeIfAbsent(new Key(dimension, packedChunk), ignored -> new Mutable());
-    value.chunkNanos += Math.max(0, chunkNanos);
-    value.entityNanos += Math.max(0, entityNanos);
-    value.blockEntityNanos += Math.max(0, blockEntityNanos);
-    value.entityTicks += entityTicks;
-    value.blockEntityTicks += blockEntityTicks;
+    synchronized (LOCK) {
+      Mutable value = LOAD.computeIfAbsent(new Key(dimension, packedChunk), ignored -> new Mutable());
+      value.chunkNanos += Math.max(0, chunkNanos);
+      value.entityNanos += Math.max(0, entityNanos);
+      value.blockEntityNanos += Math.max(0, blockEntityNanos);
+      value.entityTicks += entityTicks;
+      value.blockEntityTicks += blockEntityTicks;
+    }
   }
 }
