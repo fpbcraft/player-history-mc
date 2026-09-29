@@ -553,12 +553,15 @@ export class ReplayPanel extends HTMLElement {
     this.restoreVisibility();
     this.sync();
     this.lifecycle.frame((time) => this.tickFrame(time));
+    const startLivePolling = () => {
+      void this.pollLive();
+      this.lifecycle.interval(() => this.pollLive(), 1000);
+    };
     if (this.opened || this.heatEnabled) {
-      void this.refresh(true).then(() => this.pollLive());
+      void this.refresh(true).then(startLivePolling);
     } else {
-      this.lifecycle.timeout(() => void this.pollLive(), 750);
+      this.lifecycle.timeout(startLivePolling, 2500);
     }
-    this.lifecycle.interval(() => this.pollLive(), 1000);
     this.lifecycle.interval(() => {
       if (this.opened || this.heatEnabled) void this.refresh();
     }, 45000);
