@@ -477,13 +477,18 @@ export class ReplayPanel extends HTMLElement {
       this.updateOverlays();
     };
     this.q("heat").onclick = () => {
-      this.heatEnabled = !this.heatEnabled;
-      preferences.saveHeatmap(this.heatEnabled);
-      this.requests.abort("heatmap");
-      this.sync();
-      this.updateOverlays();
-      if (this.heatEnabled) this.loadHeat();
+      void this.setHeatmapOverlay(!this.heatEnabled);
     };
+    document.addEventListener(
+      "player-history:heatmap-toggle",
+      (event) => {
+        const enabled = Boolean(
+          (event as CustomEvent<{ enabled?: boolean }>).detail?.enabled,
+        );
+        void this.setHeatmapOverlay(enabled);
+      },
+      { signal: this.lifecycle.signal },
+    );
     document.addEventListener(
       "pointerdown",
       (event) => {
@@ -548,10 +553,30 @@ export class ReplayPanel extends HTMLElement {
     this.restoreVisibility();
     this.sync();
     this.lifecycle.frame((time) => this.tickFrame(time));
-    this.refresh(true).then(() => this.pollLive());
+    if (this.opened || this.heatEnabled) {
+      void this.refresh(true).then(() => this.pollLive());
+    } else {
+      this.lifecycle.timeout(() => void this.pollLive(), 750);
+    }
     this.lifecycle.interval(() => this.pollLive(), 1000);
-    this.lifecycle.interval(() => this.refresh(), 45000);
+    this.lifecycle.interval(() => {
+      if (this.opened || this.heatEnabled) void this.refresh();
+    }, 45000);
   }
+  private async setHeatmapOverlay(enabled: boolean): Promise<void> {
+    this.heatEnabled = enabled;
+    preferences.saveHeatmap(enabled);
+    this.requests.abort("heatmap");
+    this.sync();
+    this.updateOverlays();
+    document.dispatchEvent(
+      new CustomEvent("player-history:heatmap-state", { detail: { enabled } }),
+    );
+    if (!enabled) return;
+    if (!this.manifest) await this.refresh(true);
+    else await this.loadHeat();
+  }
+
   closeChoices() {
     this.require<HTMLDetailsElement>(".history-event-control").open = false;
     for (const kind of ["speed", "trails"] as const) {
@@ -851,7 +876,7 @@ export class ReplayPanel extends HTMLElement {
       this.clock.refresh(m.earliestTimestamp, latest, reset);
       this.renderPlayers();
       if (changed) await this.reloadRange();
-      else this.loadActivity();
+      else if (this.opened) this.loadActivity();
       this.render();
       this.updateOverlays();
     } catch (error) {
@@ -961,7 +986,8 @@ export class ReplayPanel extends HTMLElement {
     }
   }
   async reloadRange() {
-    this.loadActivity();
+    if (this.opened) this.loadActivity();
+    else this.requests.abort("activity");
     if (!this.cache) return;
     this.cache.clear();
     this.objectCache?.clear();
@@ -976,10 +1002,14 @@ export class ReplayPanel extends HTMLElement {
     this.requests.abort("heatmap");
     this.heatRows = null;
     this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
+    if (this.opened) {
+      this.loadRangeEvents();
+      await this.loadWindow();
+    } else {
+      this.rangeEvents = [];
+    }
     this.updateOverlays();
-    this.loadRangeEvents();
-    await this.loadWindow();
-    if (this.heatEnabled && this.opened) this.loadHeat();
+    if (this.heatEnabled) void this.loadHeat();
   }
   sync() {
     const c = this.clock,
@@ -1258,7 +1288,7 @@ export class ReplayPanel extends HTMLElement {
       timelineRoot: timeline,
       chatRoot: chat,
       trailDataKey: this.trailDataKey,
-      trailMode: this.trailMode,
+      trailMode: this.opened ? this.trailMode : 0,
       world: this.world(),
       keys: this.overlayKeys,
       timelineWidth: timeline.clientWidth,
@@ -1299,7 +1329,7 @@ export class ReplayPanel extends HTMLElement {
       }
       this.liveChatInitialized = true;
       this.eventRevision++;
-      if (!this.manifest) await this.refresh();
+      if (!this.manifest && (this.opened || this.heatEnabled)) await this.refresh();
       if (this.manifest && data.registry) this.manifest.registry = data.registry;
       for (const player of data.registry?.players || []) {
         if (!this.names.has(player.id)) this.selection.add(player.id);
@@ -1315,7 +1345,12 @@ export class ReplayPanel extends HTMLElement {
         this.render();
         this.updateOverlays();
         const bucket = Math.floor(this.clock.time / this.cache.duration);
-        if (bucket !== this.loadedBucket && bucket !== this.pendingBucket) this.loadWindow();
+        if (
+          this.opened &&
+          bucket !== this.loadedBucket &&
+          bucket !== this.pendingBucket
+        )
+          void this.loadWindow();
       }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
@@ -1485,7 +1520,7 @@ export class ReplayPanel extends HTMLElement {
           if (cells.size > 100000) throw Error("Heatmap exceeds the browser cell limit.");
         }
       }
-      if (controller.signal.aborted || !this.opened) return;
+      if (controller.signal.aborted) return;
       this.heatRows = [...cells.values()];
       this.heatVersion = (this.heatVersion || 0) + 1;
       this.statusCoordinator.show(
