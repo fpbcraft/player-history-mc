@@ -32,6 +32,7 @@ jobs:
           ./gradlew test build --no-daemon
 
       - name: Upload test jars
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: player-history-object-history
