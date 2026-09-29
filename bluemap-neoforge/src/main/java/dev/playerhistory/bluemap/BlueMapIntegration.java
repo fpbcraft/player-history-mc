@@ -79,7 +79,8 @@ public final class BlueMapIntegration {
   }
 
   private void start(ServerStartedEvent event) {
-    worldRoot = event.getServer().getWorldPath(LevelResource.ROOT);
+    server = event.getServer();
+    worldRoot = server.getWorldPath(LevelResource.ROOT);
     event
         .getServer()
         .getAllLevels()
@@ -89,6 +90,8 @@ public final class BlueMapIntegration {
 
   private void stop(ServerStoppingEvent event) {
     objectHistory.reset();
+    serverOverlays.stop();
+    server = null;
     worldRoot = null;
     levels.clear();
   }
