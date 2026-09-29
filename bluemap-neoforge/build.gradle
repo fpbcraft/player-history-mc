@@ -1,5 +1,13 @@
 plugins { id 'java-library'; id 'net.neoforged.moddev' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories {
+ exclusiveContent {
+  forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+  filter { includeGroup 'maven.modrinth' }
+ }
+}
+
 neoForge { version = '21.1.248'; mods { playerhistory_bluemap { sourceSet sourceSets.main } } }
 tasks.register('buildViewer', Exec) {
  workingDir rootProject.file('bluemap-addon')
@@ -21,7 +29,7 @@ base { archivesName = 'player-history-bluemap' }
 
 neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); programArgument 'nogui' } }
 
-
 dependencies {
-  implementation project(':recorder-neoforge')
+ implementation project(':recorder-neoforge')
+ compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
 }
