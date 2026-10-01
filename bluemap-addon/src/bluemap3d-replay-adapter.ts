@@ -324,6 +324,7 @@ const applyPose = (mesh: Object3D, pose: ObjectPose): void => {
   mesh.visible = true;
   mesh.position.set(pose.x, pose.y, pose.z);
   mesh.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
+  mesh.scale.set(pose.sx, pose.sy, pose.sz);
 };
 
 const prepareClone = (clone: Object3D, label: string, object: number): void => {
