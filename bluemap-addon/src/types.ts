@@ -113,7 +113,7 @@ export interface ObjectGeometryEntry {
 }
 
 export interface ObjectHistoryManifest {
-  protocolVersion: 1;
+  protocolVersion: 1 | 2;
   earliestTimestamp: number;
   latestTimestamp: number;
   chunkDurationMs: number;
