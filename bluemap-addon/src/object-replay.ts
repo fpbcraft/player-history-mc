@@ -87,14 +87,25 @@ const slerp = (
 export class ObjectReplayEngine {
   readonly objects = new Map<number, ObjectHistoryPoint[]>();
   private readonly travel = new Map<number, number[]>();
+  private readonly positionScale: number;
+  private readonly quaternionScale: number;
+  private readonly scaleScale: number;
 
   constructor(
-    private readonly positionScale: number,
-    private readonly quaternionScale: number,
-    private readonly scaleScale = 1024,
+    positionScale: number,
+    quaternionScale: number,
+    scaleOrPoints: number | ObjectHistoryPoint[] = 1024,
     points: ObjectHistoryPoint[] = [],
   ) {
-    this.setPoints(points);
+    this.positionScale = positionScale;
+    this.quaternionScale = quaternionScale;
+    if (Array.isArray(scaleOrPoints)) {
+      this.scaleScale = 1024;
+      this.setPoints(scaleOrPoints);
+    } else {
+      this.scaleScale = scaleOrPoints;
+      this.setPoints(points);
+    }
   }
 
   setPoints(points: ObjectHistoryPoint[]): void {
