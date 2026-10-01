@@ -11,11 +11,15 @@ public record ObjectPoint(
     short qy,
     short qz,
     short qw,
+    short sx,
+    short sy,
+    short sz,
     long geometry,
     int flags) {
   public static final int OFFLINE = 1, BREAK = 2, CONTEXT = 4;
   public static final int POSITION_SCALE = 32;
   public static final int QUATERNION_SCALE = 32767;
+  public static final int SCALE_SCALE = 1024;
 
   public boolean online() {
     return (flags & OFFLINE) == 0;
@@ -23,7 +27,7 @@ public record ObjectPoint(
 
   public ObjectPoint with(long newTime, int newFlags) {
     return new ObjectPoint(
-        object, newTime, world, x, y, z, qx, qy, qz, qw, geometry, newFlags);
+        object, newTime, world, x, y, z, qx, qy, qz, qw, sx, sy, sz, geometry, newFlags);
   }
 
   public static ObjectPoint at(
@@ -52,6 +56,9 @@ public record ObjectPoint(
         quantize(qy),
         quantize(qz),
         quantize(qw),
+        quantizeScale(snapshot.sx()),
+        quantizeScale(snapshot.sy()),
+        quantizeScale(snapshot.sz()),
         snapshot.geometryVersion(),
         flags);
   }
@@ -65,6 +72,12 @@ public record ObjectPoint(
 
   private static short quantize(float value) {
     int q = Math.round(Math.max(-1f, Math.min(1f, value)) * QUATERNION_SCALE);
+    return (short) q;
+  }
+
+  private static short quantizeScale(float value) {
+    int q = Math.round(Math.max(0f, Math.min(Short.MAX_VALUE / (float) SCALE_SCALE, value))
+        * SCALE_SCALE);
     return (short) q;
   }
 }
