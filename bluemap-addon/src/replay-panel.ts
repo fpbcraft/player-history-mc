@@ -632,6 +632,10 @@ export class ReplayPanel extends HTMLElement {
   }
   close() {
     this.closeChoices();
+    // Closing history always returns the 3D scene to its live state. Do this directly
+    // instead of waiting for another render frame, otherwise provider suppression can
+    // outlive the panel and make live contraptions appear missing.
+    this.objectAdapter?.clear();
     this.opened = false;
     preferences.saveHistoryOpen(false);
     this.lifecycle.clearInterval(this.chatTimer);
@@ -719,6 +723,9 @@ export class ReplayPanel extends HTMLElement {
   }
   goNow() {
     this.isLive = true;
+    // Clear replay suppression immediately. render() normally does this too, but it can
+    // return early while manifests/windows are reloading.
+    this.objectAdapter?.clear();
     this.clock.isPlaying = false;
     if (this.clock.customRange) {
       this.clock.customRange = null;
@@ -887,6 +894,7 @@ export class ReplayPanel extends HTMLElement {
       this.clock.customRange = null;
       this.isLive = true;
     }
+    if (this.isLive) this.objectAdapter?.clear();
     if (!calendar && choice !== "dates")
       this.clock.rangeDuration =
         choice === "all"
