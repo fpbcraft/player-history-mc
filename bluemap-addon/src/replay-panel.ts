@@ -817,6 +817,7 @@ export class ReplayPanel extends HTMLElement {
           this.objectEngine = new ObjectReplayEngine(
             objectManifest.positionScale,
             objectManifest.quaternionScale,
+            objectManifest.scaleScale,
           );
           this.objectLoadedBucket = undefined;
         }
