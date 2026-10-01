@@ -30,7 +30,7 @@ public final class BlueMapIntegration {
     OBJECT_PROVIDERS =
         b.defineListAllowEmpty(
             "object-history.providers",
-            List.of("create_contraptions", "sable_ships"),
+            List.of(),
             () -> "",
             value -> value instanceof String);
     SPEC = b.build();
