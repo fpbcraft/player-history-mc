@@ -77,10 +77,21 @@ export class BlueMap3DReplayAdapter {
 
     this.ensureRoot(diagnostics.root);
     const identities = new Map(registry.map((entry) => [entry.id, entry]));
-    const suppressed = poses.flatMap((pose) => {
-      const identity = identities.get(pose.object);
-      return identity ? [`${identity.provider}/${identity.sourceId}`] : [];
+
+    // Historical replay represents a provider's COMPLETE state at the selected time.
+    // Suppressing only ids that have a historical pose is insufficient for providers with
+    // dynamic child topology (ropes/springs) and for objects created after the replay time:
+    // extra present-day children remain visible and overlap the replay geometry.
+    //
+    // Hide every currently-live object belonging to a provider represented by this
+    // history registry, then add back only the historical poses below. This is generic and
+    // also makes "object did not exist yet" render correctly for all providers.
+    const replayProviders = new Set(registry.map((entry) => entry.provider));
+    const suppressed = Object.keys(diagnostics.objects).filter((id) => {
+      const slash = id.indexOf("/");
+      return slash > 0 && replayProviders.has(id.slice(0, slash));
     });
+
     // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
     // the one-frame flash that occurred whenever its polling loop re-applied map visibility
     // after Player History hid a mesh.
