@@ -91,6 +91,7 @@ export class ObjectReplayEngine {
   constructor(
     private readonly positionScale: number,
     private readonly quaternionScale: number,
+    private readonly scaleScale = 1024,
     points: ObjectHistoryPoint[] = [],
   ) {
     this.setPoints(points);
@@ -145,6 +146,9 @@ export class ObjectReplayEngine {
         qy: fromQ[1],
         qz: fromQ[2],
         qw: fromQ[3],
+        sx: from.sx / this.scaleScale,
+        sy: from.sy / this.scaleScale,
+        sz: from.sz / this.scaleScale,
         geometry: from.geometry,
         travel: this.travelAt(id, low - 1),
       };
@@ -163,6 +167,9 @@ export class ObjectReplayEngine {
       qy: rotation[1],
       qz: rotation[2],
       qw: rotation[3],
+      sx: (from.sx + (to.sx - from.sx) * ratio) / this.scaleScale,
+      sy: (from.sy + (to.sy - from.sy) * ratio) / this.scaleScale,
+      sz: (from.sz + (to.sz - from.sz) * ratio) / this.scaleScale,
       geometry: from.geometry,
       travel:
         this.travelAt(id, low - 1)
