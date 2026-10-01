@@ -27,6 +27,9 @@ const p = (
   qy,
   qz: 0,
   qw,
+  sx: 1024,
+  sy: 1024,
+  sz: 1024,
   geometry,
   flags,
 });
