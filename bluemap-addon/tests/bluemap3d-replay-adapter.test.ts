@@ -24,6 +24,7 @@ class FakeQuaternion implements Quaternion3 {
 
 class FakeObject implements Object3D {
   readonly position = new FakePosition();
+  readonly scale = new FakePosition();
   readonly quaternion = new FakeQuaternion();
   visible = true;
   name = "";
@@ -48,6 +49,7 @@ class FakeObject implements Object3D {
     copy.visible = this.visible;
     copy.name = this.name;
     copy.position.set(this.position.x ?? 0, this.position.y ?? 0, this.position.z ?? 0);
+    copy.scale.set(this.scale.x ?? 1, this.scale.y ?? 1, this.scale.z ?? 1);
     copy.quaternion.set(...this.quaternion.values);
     if (recursive)
       for (const child of this.children) copy.add(child.clone(true));
@@ -97,6 +99,9 @@ test("historical object replay clones the live mesh and suppresses the present-d
         qy: Math.SQRT1_2,
         qz: 0,
         qw: Math.SQRT1_2,
+        sx: 1,
+        sy: 1,
+        sz: 1,
         geometry: 7,
         travel: 3.5,
       },
@@ -227,6 +232,9 @@ test("historical renderer refuses mismatched live geometry when no archive exist
         qy: 0,
         qz: 0,
         qw: 1,
+        sx: 1,
+        sy: 1,
+        sz: 1,
         geometry: 42,
         travel: 0,
       },
@@ -241,6 +249,9 @@ test("historical renderer refuses mismatched live geometry when no archive exist
         qy: 0,
         qz: 0,
         qw: 1,
+        sx: 1,
+        sy: 1,
+        sz: 1,
         geometry: 1,
         travel: 0,
       },
@@ -280,8 +291,11 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
     qy: 0,
     qz: 0,
     qw: 1,
+    sx: 1,
+    sy: 1.5,
+    sz: 1,
     geometry: 42,
-        travel: 0,
+    travel: 0,
   };
   const registry = [
     { id: 8, provider: "sable_ships", sourceId: "old-ship", label: "Old ship" },
@@ -329,5 +343,6 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
   assert.equal(loaded.position.x, 5);
   assert.equal(loaded.position.y, 66);
   assert.equal(loaded.position.z, 9);
+  assert.equal(loaded.scale.y, 1.5);
 });
 
