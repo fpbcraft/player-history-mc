@@ -136,6 +136,71 @@ test("historical object replay clones the live mesh and suppresses the present-d
 });
 
 
+test("historical replay suppresses present-day child topology for the whole provider", () => {
+  const root = new FakeObject();
+  const historicalSegment = new FakeObject();
+  const extraCurrentSegment = new FakeObject();
+  const unrelated = new FakeObject();
+  const suppressions: string[][] = [];
+
+  window.__bluemap3d = {
+    root,
+    setSuppressedObjects: (ids) => suppressions.push([...ids].sort()),
+    objects: {
+      "simulated_springs/world/1_2_3/segment-0": {
+        mesh: historicalSegment,
+        meshUrl: "assets/bluemap3d/meshes/spring-v5-7.bm3d",
+      },
+      "simulated_springs/world/1_2_3/segment-7": {
+        mesh: extraCurrentSegment,
+        meshUrl: "assets/bluemap3d/meshes/spring-v5-7.bm3d",
+      },
+      "create_contraptions/train/0": {
+        mesh: unrelated,
+        meshUrl: "assets/bluemap3d/meshes/train-v5-7.bm3d",
+      },
+    },
+  };
+
+  const adapter = new BlueMap3DReplayAdapter(runtime());
+  adapter.setObjects(
+    [
+      {
+        object: 11,
+        time: 1000,
+        world: 0,
+        x: 1,
+        y: 2,
+        z: 3,
+        qx: 0,
+        qy: 0,
+        qz: 0,
+        qw: 1,
+        sx: 1,
+        sy: 1,
+        sz: 1,
+        geometry: 7,
+        travel: 0,
+      },
+    ],
+    [
+      {
+        id: 11,
+        provider: "simulated_springs",
+        sourceId: "world/1_2_3/segment-0",
+        label: "Simulated Spring",
+      },
+    ],
+  );
+
+  assert.deepEqual(suppressions, [[
+    "simulated_springs/world/1_2_3/segment-0",
+    "simulated_springs/world/1_2_3/segment-7",
+  ]]);
+  assert.equal(historicalSegment.visible, false);
+  assert.equal(unrelated.visible, true);
+});
+
 test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", () => {
   const root = new FakeObject();
   const source = new FakeObject();
