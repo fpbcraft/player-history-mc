@@ -84,6 +84,9 @@ export interface ObjectHistoryPoint {
   qy: number;
   qz: number;
   qw: number;
+  sx: number;
+  sy: number;
+  sz: number;
   geometry: number;
   flags: number;
 }
@@ -117,6 +120,7 @@ export interface ObjectHistoryManifest {
   chunkRanges?: [number, number][];
   positionScale: number;
   quaternionScale: number;
+  scaleScale: number;
   geometryArchive: boolean;
   geometries?: ObjectGeometryEntry[];
   registry: ObjectHistoryRegistry;
@@ -133,6 +137,9 @@ export interface ObjectPose {
   qy: number;
   qz: number;
   qw: number;
+  sx: number;
+  sy: number;
+  sz: number;
   geometry: number;
   /** Signed object-local travel in blocks, relative to this loaded replay window. */
   travel: number;
