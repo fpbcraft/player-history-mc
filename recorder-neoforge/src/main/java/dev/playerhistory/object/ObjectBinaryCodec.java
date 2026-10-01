@@ -5,7 +5,7 @@ import java.util.*;
 import java.util.zip.CRC32;
 
 public final class ObjectBinaryCodec {
-  public static final int MAGIC = 0x50484f31, VERSION = 1, MAX_FRAME = 4 * 1024 * 1024;
+  public static final int MAGIC = 0x50484f31, VERSION = 2, MAX_FRAME = 4 * 1024 * 1024;
 
   public static void header(DataOutput out, long start, long duration) throws IOException {
     out.writeInt(MAGIC);
@@ -25,7 +25,11 @@ public final class ObjectBinaryCodec {
               point.object(),
               new ObjectPoint(
                   point.object(), start, 0, 0, 0, 0, (short) 0, (short) 0, (short) 0,
-                  (short) ObjectPoint.QUATERNION_SCALE, 0, 0));
+                  (short) ObjectPoint.QUATERNION_SCALE,
+                  (short) ObjectPoint.SCALE_SCALE,
+                  (short) ObjectPoint.SCALE_SCALE,
+                  (short) ObjectPoint.SCALE_SCALE,
+                  0, 0));
       varint(out, point.object());
       signed(out, point.time() - prior.time());
       varint(out, point.world());
@@ -36,6 +40,9 @@ public final class ObjectBinaryCodec {
       out.writeShort(point.qy());
       out.writeShort(point.qz());
       out.writeShort(point.qw());
+      out.writeShort(point.sx());
+      out.writeShort(point.sy());
+      out.writeShort(point.sz());
       out.writeLong(point.geometry());
       out.writeByte(point.flags());
       previous.put(point.object(), point);
@@ -58,8 +65,11 @@ public final class ObjectBinaryCodec {
 
   public static Read read(InputStream source) throws IOException {
     var in = new DataInputStream(new BufferedInputStream(source));
-    if (in.readInt() != MAGIC || in.readInt() != VERSION)
+    if (in.readInt() != MAGIC)
       throw new IOException("Unknown object history format");
+    int version = in.readInt();
+    if (version != 1 && version != VERSION)
+      throw new IOException("Unknown object history format version " + version);
     long start = in.readLong(), duration = in.readLong(), valid = 24;
     if (duration < 1000 || duration > 3_600_000) throw new IOException("Invalid duration");
     var points = new ArrayList<ObjectPoint>();
@@ -85,7 +95,7 @@ public final class ObjectBinaryCodec {
           partial = true;
           break;
         }
-        points.addAll(decode(data, start));
+        points.addAll(decode(data, start, version));
         valid += size + 8L;
         if (points.size() > 2_000_000) throw new IOException("Object chunk record limit exceeded");
       } catch (IOException | IllegalArgumentException | ArithmeticException ex) {
@@ -96,7 +106,7 @@ public final class ObjectBinaryCodec {
     return new Read(start, duration, List.copyOf(points), valid, partial);
   }
 
-  private static List<ObjectPoint> decode(byte[] bytes, long start) throws IOException {
+  private static List<ObjectPoint> decode(byte[] bytes, long start, int version) throws IOException {
     var in = new DataInputStream(new ByteArrayInputStream(bytes));
     var points = new ArrayList<ObjectPoint>();
     var previous = new HashMap<Integer, ObjectPoint>();
@@ -108,7 +118,11 @@ public final class ObjectBinaryCodec {
               object,
               new ObjectPoint(
                   object, start, 0, 0, 0, 0, (short) 0, (short) 0, (short) 0,
-                  (short) ObjectPoint.QUATERNION_SCALE, 0, 0));
+                  (short) ObjectPoint.QUATERNION_SCALE,
+                  (short) ObjectPoint.SCALE_SCALE,
+                  (short) ObjectPoint.SCALE_SCALE,
+                  (short) ObjectPoint.SCALE_SCALE,
+                  0, 0));
       ObjectPoint point =
           new ObjectPoint(
               object,
@@ -121,6 +135,9 @@ public final class ObjectBinaryCodec {
               in.readShort(),
               in.readShort(),
               in.readShort(),
+              version >= 2 ? in.readShort() : (short) ObjectPoint.SCALE_SCALE,
+              version >= 2 ? in.readShort() : (short) ObjectPoint.SCALE_SCALE,
+              version >= 2 ? in.readShort() : (short) ObjectPoint.SCALE_SCALE,
               in.readLong(),
               in.readUnsignedByte());
       points.add(point);
