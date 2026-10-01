@@ -186,6 +186,9 @@ export const parseObjectPoint = (value: unknown): ObjectHistoryPoint => {
     qy: numberField(value, "qy"),
     qz: numberField(value, "qz"),
     qw: numberField(value, "qw"),
+    sx: Number.isFinite(value.sx) ? (value.sx as number) : 1024,
+    sy: Number.isFinite(value.sy) ? (value.sy as number) : 1024,
+    sz: Number.isFinite(value.sz) ? (value.sz as number) : 1024,
     geometry: numberField(value, "geometry"),
     flags: numberField(value, "flags"),
   };
@@ -213,28 +216,31 @@ const parseObjectRegistry = (value: unknown): ObjectHistoryRegistry => {
 };
 
 export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
-  if (!isObject(value) || value.protocolVersion !== 1)
+  if (!isObject(value) || (value.protocolVersion !== 1 && value.protocolVersion !== 2))
     throw new Error("Unsupported object-history version");
   const earliestTimestamp = numberField(value, "earliestTimestamp");
   const latestTimestamp = numberField(value, "latestTimestamp");
   const chunkDurationMs = numberField(value, "chunkDurationMs");
   const positionScale = numberField(value, "positionScale");
   const quaternionScale = numberField(value, "quaternionScale");
+  const scaleScale = Number.isFinite(value.scaleScale) ? (value.scaleScale as number) : 1024;
   if (
     latestTimestamp < earliestTimestamp ||
     latestTimestamp <= 0 ||
     chunkDurationMs <= 0 ||
     positionScale <= 0 ||
-    quaternionScale <= 0
+    quaternionScale <= 0 ||
+    scaleScale <= 0
   )
     throw new Error("Invalid object-history manifest");
   const result: ObjectHistoryManifest = {
-    protocolVersion: 1,
+    protocolVersion: value.protocolVersion as 1 | 2,
     earliestTimestamp,
     latestTimestamp,
     chunkDurationMs,
     positionScale,
     quaternionScale,
+    scaleScale,
     geometryArchive: value.geometryArchive === true,
     registry: parseObjectRegistry(value.registry),
   };
