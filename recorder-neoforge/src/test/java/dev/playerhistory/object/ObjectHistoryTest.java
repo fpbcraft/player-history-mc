@@ -27,6 +27,9 @@ class ObjectHistoryTest {
         qy,
         0,
         qw,
+        1,
+        1,
+        1,
         geometry);
   }
 
