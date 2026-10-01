@@ -148,6 +148,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
               || state.emitted.geometry() != point.geometry()
               || moved(state.emittedSnapshot, snapshot)
               || rotated(state.emittedSnapshot, snapshot)
+              || scaled(state.emittedSnapshot, snapshot)
               || now - state.lastWritten >= options.keyframeMs()
               || breakAll;
       if (changed) {
@@ -267,6 +268,14 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     return Math.toDegrees(2 * Math.acos(dot)) >= options.minimumRotationDegrees();
   }
 
+  private boolean scaled(ObjectSnapshot a, ObjectSnapshot b) {
+    if (a == null) return true;
+    float epsilon = 1f / ObjectPoint.SCALE_SCALE;
+    return Math.abs(a.sx() - b.sx()) >= epsilon
+        || Math.abs(a.sy() - b.sy()) >= epsilon
+        || Math.abs(a.sz() - b.sz()) >= epsilon;
+  }
+
   private void run() {
     try {
       while (running || !queue.isEmpty()) {
@@ -329,8 +338,15 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
       try (var in = Files.newInputStream(existing)) {
         points.addAll(ObjectBinaryCodec.read(in).points());
       }
-      Files.copy(existing, file, StandardCopyOption.REPLACE_EXISTING);
-      channel = FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
+
+      // Always rewrite the currently-open chunk using the newest codec. Older v1
+      // chunks decode with unit scale, so upgrades are lossless for historical
+      // objects that predate scale recording.
+      channel = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+      var header = new ByteArrayOutputStream();
+      ObjectBinaryCodec.header(new DataOutputStream(header), start, options.duration());
+      write(header.toByteArray());
+      if (!points.isEmpty()) write(ObjectBinaryCodec.frame(points, start));
     } else {
       channel = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
       var header = new ByteArrayOutputStream();
@@ -401,7 +417,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private Map<String, Object> publicManifest() {
     var result = new LinkedHashMap<String, Object>();
     result.put("formatVersion", 1);
-    result.put("protocolVersion", 1);
+    result.put("protocolVersion", 2);
     result.put("generatedAt", System.currentTimeMillis());
     result.put("earliestTimestamp", earliest);
     result.put("latestTimestamp", latest);
@@ -409,6 +425,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     result.put("chunkRanges", publishedChunkRanges());
     result.put("positionScale", ObjectPoint.POSITION_SCALE);
     result.put("quaternionScale", ObjectPoint.QUATERNION_SCALE);
+    result.put("scaleScale", ObjectPoint.SCALE_SCALE);
     result.put("registry", registry.snapshot());
     result.put("geometryArchive", true);
     result.put("geometries", geometryArchive.entries());
