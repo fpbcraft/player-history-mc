@@ -78,19 +78,23 @@ export class BlueMap3DReplayAdapter {
     this.ensureRoot(diagnostics.root);
     const identities = new Map(registry.map((entry) => [entry.id, entry]));
 
-    // Historical replay represents a provider's COMPLETE state at the selected time.
-    // Suppressing only ids that have a historical pose is insufficient for providers with
-    // dynamic child topology (ropes/springs) and for objects created after the replay time:
-    // extra present-day children remain visible and overlap the replay geometry.
-    //
-    // Hide every currently-live object belonging to a provider represented by this
-    // history registry, then add back only the historical poses below. This is generic and
-    // also makes "object did not exist yet" render correctly for all providers.
-    const replayProviders = new Set(registry.map((entry) => entry.provider));
-    const suppressed = Object.keys(diagnostics.objects).filter((id) => {
-      const slash = id.indexOf("/");
-      return slash > 0 && replayProviders.has(id.slice(0, slash));
-    });
+    // Hide exact objects known to history. Providers with variable child topology
+    // additionally suppress the whole logical child family so present-day extra
+    // segments/knots cannot leak through a historical pose. Do NOT suppress an entire
+    // provider: one recorded Create contraption must never hide an unrelated live cable car.
+    const exactSuppressed = new Set(
+      registry.map((entry) => `${entry.provider}/${entry.sourceId}`),
+    );
+    const familyPrefixes = new Set(
+      registry
+        .map((entry) => replayFamilyPrefix(entry.provider, entry.sourceId))
+        .filter((value): value is string => value !== null),
+    );
+    const suppressed = Object.keys(diagnostics.objects).filter(
+      (id) =>
+        exactSuppressed.has(id) ||
+        [...familyPrefixes].some((prefix) => id.startsWith(prefix)),
+    );
 
     // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
     // the one-frame flash that occurred whenever its polling loop re-applied map visibility
@@ -341,6 +345,13 @@ const applyPose = (mesh: Object3D, pose: ObjectPose): void => {
 const prepareClone = (clone: Object3D, label: string, object: number): void => {
   clone.name = `history:${label}`;
   clone.userData.playerHistoryObject = object;
+};
+
+const replayFamilyPrefix = (provider: string, sourceId: string): string | null => {
+  if (provider !== "simulated_ropes" && provider !== "simulated_springs") return null;
+  const slash = sourceId.lastIndexOf("/");
+  if (slash <= 0) return null;
+  return `${provider}/${sourceId.slice(0, slash + 1)}`;
 };
 
 const geometryKey = (provider: string, sourceId: string, version: number): string =>
