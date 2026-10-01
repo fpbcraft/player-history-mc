@@ -136,11 +136,12 @@ test("historical object replay clones the live mesh and suppresses the present-d
 });
 
 
-test("historical replay suppresses present-day child topology for the whole provider", () => {
+test("historical replay suppresses dynamic families without hiding unrelated provider objects", () => {
   const root = new FakeObject();
   const historicalSegment = new FakeObject();
   const extraCurrentSegment = new FakeObject();
-  const unrelated = new FakeObject();
+  const oldTrain = new FakeObject();
+  const cableCar = new FakeObject();
   const suppressions: string[][] = [];
 
   window.__bluemap3d = {
@@ -156,8 +157,12 @@ test("historical replay suppresses present-day child topology for the whole prov
         meshUrl: "assets/bluemap3d/meshes/spring-v5-7.bm3d",
       },
       "create_contraptions/train/0": {
-        mesh: unrelated,
+        mesh: oldTrain,
         meshUrl: "assets/bluemap3d/meshes/train-v5-7.bm3d",
+      },
+      "create_contraptions/cable-car/current": {
+        mesh: cableCar,
+        meshUrl: "assets/bluemap3d/meshes/cable_car-v5-7.bm3d",
       },
     },
   };
@@ -190,15 +195,22 @@ test("historical replay suppresses present-day child topology for the whole prov
         sourceId: "world/1_2_3/segment-0",
         label: "Simulated Spring",
       },
+      {
+        id: 12,
+        provider: "create_contraptions",
+        sourceId: "train/0",
+        label: "Old train",
+      },
     ],
   );
 
   assert.deepEqual(suppressions, [[
+    "create_contraptions/train/0",
     "simulated_springs/world/1_2_3/segment-0",
     "simulated_springs/world/1_2_3/segment-7",
   ]]);
   assert.equal(historicalSegment.visible, false);
-  assert.equal(unrelated.visible, true);
+  assert.equal(cableCar.visible, true);
 });
 
 test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", () => {
