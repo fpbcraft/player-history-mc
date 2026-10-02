@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: Semantic version increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      version:
+        description: Explicit semantic version when increment=custom (for example 1.0.0-beta.1)
+        required: false
+        type: string
+
+concurrency:
+  group: player-history-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: bluemap-addon/package-lock.json
+
+      - name: Resolve semantic release version
+        id: version
+        shell: bash
+        env:
+          RELEASE_INCREMENT: ${{ inputs.increment }}
+          RELEASE_CUSTOM_VERSION: ${{ inputs.version }}
+        run: |
+          BASE="$(sed -n 's/^modVersion=//p' gradle.properties)"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            python3 .github/scripts/release_version.py next \
+              --increment "${RELEASE_INCREMENT}" \
+              --custom "${RELEASE_CUSTOM_VERSION}" \
+              --fallback "${BASE}" \
+              --github-output "${GITHUB_OUTPUT}"
+          else
+            python3 .github/scripts/release_version.py validate \
+              --tag "${GITHUB_REF_NAME}" \
+              --github-output "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Verify release commit is on main
+        shell: bash
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main || {
+            echo "Release commits must be reachable from main." >&2
+            exit 1
+          }
+
+      - name: Create immutable release tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+
+      - name: Refuse an existing release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${TAG} already exists; releases are immutable." >&2
+            exit 1
+          fi
+
+      - name: Export exact release version
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: echo "PLAYER_HISTORY_VERSION=${VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Install viewer dependencies
+        working-directory: bluemap-addon
+        run: npm ci
+
+      - name: Check viewer
+        working-directory: bluemap-addon
+        run: npm run check
+
+      - name: Build and test release
+        run: |
+          chmod +x gradlew
+          ./gradlew clean test build --no-daemon
+
+      - name: Collect immutable release artifacts
+        shell: bash
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          find recorder-neoforge/build/libs bluemap-neoforge/build/libs \
+            -maxdepth 1 -type f -name '*.jar' \
+            ! -name '*-sources.jar' ! -name '*-javadoc.jar' \
+            -exec cp {} dist/ \;
+          test "$(find dist -maxdepth 1 -type f -name '*.jar' | wc -l)" -ge 2
+          (
+            cd dist
+            sha256sum *.jar > SHA256SUMS
+          )
+          ls -lah dist
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          args=(release create "${TAG}" dist/* --verify-tag --generate-notes --title "${TAG}")
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
