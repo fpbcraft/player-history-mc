@@ -33,6 +33,16 @@ jobs:
           VERSION="${BASE}-dev.${SHORT_SHA}"
           echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "PLAYER_HISTORY_VERSION=${VERSION}" >> "$GITHUB_ENV"
+      - name: Validate release tooling
+        shell: bash
+        run: |
+          python3 -m py_compile .github/scripts/release_version.py
+          BASE="$(sed -n 's/^modVersion=//p' gradle.properties)"
+          python3 .github/scripts/release_version.py next \
+            --increment patch \
+            --fallback "${BASE}" \
+            --github-output /tmp/player-history-release-version
+
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
