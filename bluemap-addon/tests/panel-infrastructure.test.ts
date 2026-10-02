@@ -61,6 +61,19 @@ describe("request coordinator", () => {
 });
 
 describe("status coordinator", () => {
+  it("keeps configuration warnings across transient context status", () => {
+    const element = document.createElement("output");
+    const status = new StatusCoordinator(element);
+
+    status.show("configuration", "Pose tracking is disabled");
+    status.show("context", "Heatmap loaded");
+    expect(element.textContent).toBe("Pose tracking is disabled");
+    status.show("loading", "Loading trails…");
+    expect(element.textContent).toBe("Loading trails…");
+    status.clear("loading");
+    expect(element.textContent).toBe("Pose tracking is disabled");
+  });
+
   it("keeps a loading message from hiding a more important error", () => {
     const element = document.createElement("output");
     const status = new StatusCoordinator(element);

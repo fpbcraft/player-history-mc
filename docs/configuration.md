@@ -84,6 +84,8 @@ checkpoint-interval-minutes = 10
 | item-damage / item-enchantments / item-custom-name | Optional stack metadata across enabled item categories |
 | track-deaths / track-teleports / track-dimension-changes | Original event annotation switches, retained at top level |
 
+Existing NeoForge config files keep their previously written values when defaults change. Builds before the 3D-pose work generated `tracking.posture = false`; if that value is still present, crouch, sprint, swim, elytra and sleep poses cannot be reconstructed. Set it to `true` (or remove the old entry and let NeoForge regenerate it). The viewer reports this condition from `manifest.json` instead of silently showing rigid avatars.
+
 State is sampled at the configured sample interval, but only changes/checkpoints enter the queue. Each chunk starts with a checkpoint, even if the periodic interval is longer. Rejoins/respawns reset checkpoints. Inventory shares that interval and encodes only changed slots between checkpoints. The snapshot reports slot state, not a reason for an inventory change.
 
 Items use integer registry IDs. Custom names are capped at 256 characters and enchantments at 32 entries. No full component/NBT, book text, shulker contents or block-entity data is captured. Typed records limit nesting to 8, collections to 256 entries, strings to 8192 characters and frames to 256 KiB. State chunks are bounded to 100,000 records; exceeding storage limits stops the writer with an error instead of growing memory without a bound. Sparse event payloads are limited to 2048 characters; oversized details become an explicit `detailsTruncated` marker.

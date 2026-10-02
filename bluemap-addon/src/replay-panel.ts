@@ -821,6 +821,14 @@ export class ReplayPanel extends HTMLElement {
         previous.latestTimestamp !== m.latestTimestamp ||
         previous.earliestTimestamp !== m.earliestTimestamp;
       this.manifest = m;
+      if (m.trackingEnabled.posture === false) {
+        this.statusCoordinator.show(
+          "configuration",
+          "Player pose animations are disabled: set tracking.posture = true in config/playerhistory-common.toml.",
+        );
+      } else {
+        this.statusCoordinator.clear("configuration");
+      }
       this.telemetryCache?.chunks.clear();
       for (const [control, cap] of [
         ["trails", "movement"],

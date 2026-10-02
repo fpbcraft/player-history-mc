@@ -1,9 +1,15 @@
-export type ReplayStatusChannel = "context" | "error" | "loading" | "range";
+export type ReplayStatusChannel =
+  | "configuration"
+  | "context"
+  | "error"
+  | "loading"
+  | "range";
 
 const PRIORITY: Record<ReplayStatusChannel, number> = {
-  error: 4,
-  range: 3,
-  loading: 2,
+  error: 5,
+  range: 4,
+  loading: 3,
+  configuration: 2,
   context: 1,
 };
 

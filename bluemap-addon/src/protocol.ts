@@ -107,6 +107,7 @@ export const parseManifest = (value: unknown): HistoryManifest => {
     chunkDurationMs,
     cellSize: Number.isFinite(value.cellSize) ? (value.cellSize as number) : 1,
     capabilities: parseCapabilities(value.capabilities),
+    trackingEnabled: parseCapabilities(value.trackingEnabled),
     registry: parseRegistry(value.registry),
   };
   if (value.chunkRanges !== undefined) {
