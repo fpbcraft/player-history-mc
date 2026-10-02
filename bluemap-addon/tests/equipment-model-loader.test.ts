@@ -260,3 +260,71 @@ test("equipment loader rejects unsafe armor texture paths", async () => {
 
   assert.equal(await loader.armor("minecraft:diamond_leggings"), null);
 });
+
+
+test("equipment loader loads generic custom armor geometry", async () => {
+  textureUrls.length = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 1,
+        item: "example:mage_robe_chest",
+        kind: "custom",
+        texture: "textures/example/armor/mage_robe.png",
+        parts: [
+          {
+            parent: "torso",
+            slot: "chest",
+            positions: [
+              0, 0, 0, 1, 0, 0, 1, 1, 0,
+              0, 0, 0, 1, 1, 0, 0, 1, 0,
+            ],
+            uvs: [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1],
+          },
+        ],
+      }),
+    }),
+  );
+
+  const armor = await loader.armor("example:mage_robe_chest");
+  assert.ok(armor);
+  assert.equal(armor.kind, "custom");
+  assert.equal(armor.parts.length, 1);
+  assert.equal(armor.parts[0]?.parent, "torso");
+  assert.equal(armor.parts[0]?.slot, "chest");
+  assert.deepEqual(textureUrls, [
+    "https://map.example/player-history/equipment/textures/example/armor/mage_robe.png",
+  ]);
+});
+
+test("equipment loader rejects invalid custom armor body parts", async () => {
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 1,
+        item: "example:mage_robe_chest",
+        kind: "custom",
+        texture: "textures/example/armor/mage_robe.png",
+        parts: [
+          {
+            parent: "cape",
+            slot: "chest",
+            positions: [
+              0, 0, 0, 1, 0, 0, 1, 1, 0,
+              0, 0, 0, 1, 1, 0, 0, 1, 0,
+            ],
+            uvs: [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1],
+          },
+        ],
+      }),
+    }),
+  );
+
+  assert.equal(await loader.armor("example:mage_robe_chest"), null);
+});
