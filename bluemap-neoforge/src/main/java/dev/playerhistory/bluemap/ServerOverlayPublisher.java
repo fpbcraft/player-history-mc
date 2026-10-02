@@ -38,7 +38,7 @@ final class ServerOverlayPublisher {
       List<ClaimsOverlaySource.ClaimCell> claims) {}
   record Snapshot(int version, long generatedAt, Map<String, DimensionData> dimensions) {}
 
-  private final Consumer<String> log;  private final Consumer<String> log;
+  private final Consumer<String> log;
   private final ClaimsOverlaySource claims;
   private volatile MinecraftServer server;
   private volatile Path output;
