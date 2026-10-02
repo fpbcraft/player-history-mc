@@ -2,10 +2,10 @@
   "formatVersion": 1,
   "protocolVersion": 2,
   "generatedAt": 0,
-  "earliestTimestamp": 100,
-  "latestTimestamp": 150,
-  "chunkDurationMs": 100,
-  "chunkRanges": [[100, 200]],
+  "earliestTimestamp": 0,
+  "latestTimestamp": 100,
+  "chunkDurationMs": 60000,
+  "chunkRanges": [[0, 60000]],
   "registry": {
     "players": [
       {
