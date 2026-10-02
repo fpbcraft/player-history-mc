@@ -129,14 +129,14 @@ interface ArmorFallbackSpec {
 }
 
 const ARMOR_PARTS: Record<ArmorSlot, readonly ArmorPartSpec[]> = {
-  head: [{ parent: "head", uv: SKIN.head, position: [0, 0, 0], scale: 1.14, name: "helmet" }],
+  head: [{ parent: "head", uv: SKIN.head, position: [0, 0.25, 0], scale: 1.14, name: "helmet" }],
   chest: [
-    { parent: "torso", uv: SKIN.body, position: [0, 0, 0], scale: 1.08, name: "chestplate" },
+    { parent: "torso", uv: SKIN.body, position: [0, -0.375, 0], scale: 1.08, name: "chestplate" },
     { parent: "rightArm", uv: SKIN.rightArm, position: [0, -0.375, 0], scale: 1.08, name: "right-arm-armor" },
     { parent: "leftArm", uv: SKIN.rightArm, position: [0, -0.375, 0], scale: 1.08, name: "left-arm-armor" },
   ],
   legs: [
-    { parent: "torso", uv: SKIN.body, position: [0, 0, 0], scale: 1.04, name: "leggings-waist" },
+    { parent: "torso", uv: SKIN.body, position: [0, -0.375, 0], scale: 1.04, name: "leggings-waist" },
     { parent: "rightLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.08, name: "right-leg-armor" },
     { parent: "leftLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.08, name: "left-leg-armor" },
   ],
@@ -147,8 +147,8 @@ const ARMOR_PARTS: Record<ArmorSlot, readonly ArmorPartSpec[]> = {
 };
 
 const ARMOR_FALLBACKS: Record<ArmorSlot, readonly ArmorFallbackSpec[]> = {
-  head: [{ parent: "head", size: [0.59, 0.59, 0.59], position: [0, 0, 0], name: "helmet" }],
-  chest: [{ parent: "torso", size: [0.59, 0.82, 0.32], position: [0, 0, 0], name: "chestplate" }],
+  head: [{ parent: "head", size: [0.59, 0.59, 0.59], position: [0, 0.25, 0], name: "helmet" }],
+  chest: [{ parent: "torso", size: [0.59, 0.82, 0.32], position: [0, -0.375, 0], name: "chestplate" }],
   legs: [
     { parent: "rightLeg", size: [0.29, 0.43, 0.29], position: [0, -0.25, 0], name: "right-leg-armor" },
     { parent: "leftLeg", size: [0.29, 0.43, 0.29], position: [0, -0.25, 0], name: "left-leg-armor" },
