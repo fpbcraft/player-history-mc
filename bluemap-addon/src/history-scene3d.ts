@@ -66,6 +66,7 @@ interface PlayerAvatar {
   phase: number;
   walking: number;
   recordedYaw: number | undefined;
+  recordedBodyYaw: number | undefined;
   recordedPitch: number | undefined;
   state: PlayerState;
   equipmentSignature: string;
@@ -260,6 +261,10 @@ export class HistoryScene3D {
     avatar.recordedYaw =
       typeof state.yaw === "number" && Number.isFinite(state.yaw)
         ? (-state.yaw * Math.PI) / 180
+        : undefined;
+    avatar.recordedBodyYaw =
+      typeof state.bodyYaw === "number" && Number.isFinite(state.bodyYaw)
+        ? (-state.bodyYaw * Math.PI) / 180
         : undefined;
     avatar.recordedPitch =
       typeof state.pitch === "number" && Number.isFinite(state.pitch)
@@ -477,17 +482,20 @@ export class HistoryScene3D {
       return mesh;
     };
 
+    // Minecraft's HumanoidModel rotates the head from the neck and the torso
+    // from the shoulders. Keep the cuboids offset below those pivots rather
+    // than rotating them around their geometric centers.
     const head = new T.Group();
-    head.position.set(0, 1.75, 0);
+    head.position.set(0, 1.5, 0);
     model.add(head);
-    addMesh(head, this.geometry("head", 0.5, 0.5, 0.5, SKIN.head), innerMaterial, 0, 0, 0, "head");
-    addMesh(head, this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat), outerMaterial, 0, 0, 0, "hat");
+    addMesh(head, this.geometry("head", 0.5, 0.5, 0.5, SKIN.head), innerMaterial, 0, 0.25, 0, "head");
+    addMesh(head, this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat), outerMaterial, 0, 0.25, 0, "hat");
 
     const torso = new T.Group();
-    torso.position.set(0, 1.125, 0);
+    torso.position.set(0, 1.5, 0);
     model.add(torso);
-    addMesh(torso, this.geometry("body", 0.5, 0.75, 0.25, SKIN.body), innerMaterial, 0, 0, 0, "body");
-    addMesh(torso, this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket), outerMaterial, 0, 0, 0, "jacket");
+    addMesh(torso, this.geometry("body", 0.5, 0.75, 0.25, SKIN.body), innerMaterial, 0, -0.375, 0, "body");
+    addMesh(torso, this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket), outerMaterial, 0, -0.375, 0, "jacket");
 
     const limb = (
       key: string,
@@ -546,6 +554,7 @@ export class HistoryScene3D {
       phase: 0,
       walking: 0,
       recordedYaw: undefined,
+      recordedBodyYaw: undefined,
       recordedPitch: undefined,
       state: {},
       equipmentSignature: "",
@@ -595,12 +604,27 @@ export class HistoryScene3D {
     const sleeping = state.sleeping === true;
     const airborne = state.onGround === false && !swimming && !elytra && !sleeping;
 
-    const yaw = avatar.recordedYaw ?? avatar.yaw;
-    avatar.root.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2));
+    const viewYaw = avatar.recordedYaw ?? avatar.yaw;
+    const bodyYaw = avatar.recordedBodyYaw ?? viewYaw;
+    avatar.root.quaternion.set(
+      0,
+      Math.sin(bodyYaw / 2),
+      0,
+      Math.cos(bodyYaw / 2),
+    );
+
+    const headYaw =
+      avatar.recordedBodyYaw !== undefined && avatar.recordedYaw !== undefined
+        ? this.wrapRadians(avatar.recordedYaw - avatar.recordedBodyYaw)
+        : 0;
+    let headPitch = Math.max(
+      -Math.PI / 2,
+      Math.min(Math.PI / 2, avatar.recordedPitch ?? 0),
+    );
 
     let modelY = 0;
     let modelPitch = 0;
-    let torsoPitch = sprinting ? 0.18 : 0;
+    let torsoPitch = 0;
     let rightArm = Math.sin(avatar.phase) * avatar.walking * (sprinting ? 1.35 : 1);
     let leftArm = -rightArm;
     let rightLeg = -rightArm;
@@ -608,24 +632,40 @@ export class HistoryScene3D {
     let rightArmZ = 0;
     let leftArmZ = 0;
 
+    // Standing HumanoidModel pivots, in our world-space scale.
+    avatar.head.position.set(0, 1.5, 0);
+    avatar.torso.position.set(0, 1.5, 0);
+    avatar.rightArm.group.position.set(-0.375, 1.5, 0);
+    avatar.leftArm.group.position.set(0.375, 1.5, 0);
+    avatar.rightLeg.group.position.set(-0.125, 0.75, 0);
+    avatar.leftLeg.group.position.set(0.125, 0.75, 0);
+
     if (airborne) {
       rightArm = -0.25;
       leftArm = -0.25;
       rightLeg = 0.15;
       leftLeg = -0.15;
     }
+
     if (sneaking) {
-      modelY = -0.12;
-      torsoPitch = 0.45;
-      rightArm *= 0.6;
-      leftArm *= 0.6;
-      rightLeg = -0.18 + rightLeg * 0.45;
-      leftLeg = -0.18 + leftLeg * 0.45;
+      // Vanilla HumanoidModel crouch: body.xRot=.5; arms +=.4; head/body/
+      // arms move down 4.2/3.2 px; legs move down .2 px and back 4 px.
+      torsoPitch = 0.5;
+      rightArm += 0.4;
+      leftArm += 0.4;
+      avatar.head.position.set(0, 1.5 - 4.2 / 16, 0);
+      avatar.torso.position.set(0, 1.5 - 3.2 / 16, 0);
+      avatar.rightArm.group.position.set(-0.375, 1.5 - 3.2 / 16, 0);
+      avatar.leftArm.group.position.set(0.375, 1.5 - 3.2 / 16, 0);
+      avatar.rightLeg.group.position.set(-0.125, 0.75 - 0.2 / 16, 4 / 16);
+      avatar.leftLeg.group.position.set(0.125, 0.75 - 0.2 / 16, 4 / 16);
     }
+
     if (swimming) {
       modelY = 0.45;
       modelPitch = Math.PI / 2;
       torsoPitch = 0;
+      headPitch = -Math.PI / 4;
       const stroke = Math.sin(avatar.phase * 0.8);
       rightArm = -1.35 + stroke * 0.45;
       leftArm = -1.35 - stroke * 0.45;
@@ -635,6 +675,7 @@ export class HistoryScene3D {
       modelY = 0.45;
       modelPitch = Math.PI / 2;
       torsoPitch = 0;
+      headPitch = -Math.PI / 4;
       rightArm = 0.35;
       leftArm = 0.35;
       rightArmZ = -0.35;
@@ -645,6 +686,7 @@ export class HistoryScene3D {
       modelY = 0.35;
       modelPitch = Math.PI / 2;
       torsoPitch = 0;
+      headPitch = 0;
       rightArm = 0;
       leftArm = 0;
       rightLeg = 0;
@@ -654,11 +696,15 @@ export class HistoryScene3D {
     avatar.model.position.set(0, modelY, 0);
     this.setEuler(avatar.model, modelPitch, 0, 0);
     this.setEuler(avatar.torso, torsoPitch, 0, 0);
-    this.setEuler(avatar.head, (avatar.recordedPitch ?? 0) - torsoPitch * 0.25, 0, 0);
+    this.setEuler(avatar.head, headPitch, headYaw, 0);
     this.setEuler(avatar.rightArm.group, rightArm, 0, rightArmZ);
     this.setEuler(avatar.leftArm.group, leftArm, 0, leftArmZ);
     this.setEuler(avatar.rightLeg.group, rightLeg, 0, 0);
     this.setEuler(avatar.leftLeg.group, leftLeg, 0, 0);
+  }
+
+  private wrapRadians(value: number): number {
+    return Math.atan2(Math.sin(value), Math.cos(value));
   }
 
   private updateEquipment(
