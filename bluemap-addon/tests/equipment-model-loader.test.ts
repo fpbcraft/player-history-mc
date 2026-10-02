@@ -231,9 +231,12 @@ test("equipment loader loads armor base and overlay textures", async () => {
 
   const armor = await loader.armor("minecraft:leather_helmet");
   assert.ok(armor);
+  assert.equal(armor.kind, "layer");
+  if (armor.kind !== "layer") throw new Error("expected layered armor");
   assert.equal(armor.layer, 1);
-  assert.ok(armor.texture);
-  assert.ok(armor.overlayTexture);
+  assert.equal(armor.layers.length, 2);
+  assert.equal(armor.layers[0]?.dyeable, true);
+  assert.equal(armor.layers[1]?.dyeable, false);
   assert.deepEqual(requested, [
     "https://map.example/player-history/equipment/armor/minecraft/leather_helmet.json",
   ]);
@@ -241,6 +244,41 @@ test("equipment loader loads armor base and overlay textures", async () => {
     "https://map.example/player-history/equipment/textures/minecraft/models/armor/leather_layer_1.png",
     "https://map.example/player-history/equipment/textures/minecraft/models/armor/leather_layer_1_overlay.png",
   ]);
+});
+
+test("equipment loader loads declared armor material layers", async () => {
+  textureUrls.length = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 1,
+        item: "example:layered_chest",
+        kind: "layer",
+        layer: 1,
+        layers: [
+          {
+            texture: "textures/example/models/armor/layered_layer_1.png",
+            dyeable: true,
+          },
+          {
+            texture: "textures/example/models/armor/layered_layer_1_overlay.png",
+            dyeable: false,
+          },
+        ],
+      }),
+    }),
+  );
+
+  const armor = await loader.armor("example:layered_chest");
+  assert.ok(armor);
+  assert.equal(armor.kind, "layer");
+  if (armor.kind !== "layer") throw new Error("expected layered armor");
+  assert.equal(armor.layers.length, 2);
+  assert.equal(armor.layers[0]?.dyeable, true);
+  assert.equal(armor.layers[1]?.dyeable, false);
 });
 
 test("equipment loader rejects unsafe armor texture paths", async () => {
