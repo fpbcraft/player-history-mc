@@ -111,11 +111,11 @@ final class CustomArmorAssetResolverTest {
     var part = model.parts().getFirst();
 
     // The source cube sits on negative Bedrock X. Gecko/Minecraft mirrors X,
-    // and the 90-degree Z bone rotation moves that asymmetry into Y.
-    float minY = axisMin(part.positions(), 1);
-    float maxY = axisMax(part.positions(), 1);
-    assertTrue(minY < -0.2f);
-    assertTrue(maxY <= 0.001f);
+    // then the +90-degree Z rotation moves that positive-X offset upward.
+    assertEquals(-0.125f, axisMin(part.positions(), 0), 0.0001f);
+    assertEquals(0.125f, axisMax(part.positions(), 0), 0.0001f);
+    assertEquals(0.5f, axisMin(part.positions(), 1), 0.0001f);
+    assertEquals(0.625f, axisMax(part.positions(), 1), 0.0001f);
   }
 
   private static void assertRange(
