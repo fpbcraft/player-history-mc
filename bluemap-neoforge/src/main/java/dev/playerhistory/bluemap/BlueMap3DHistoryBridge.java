@@ -22,9 +22,13 @@ import org.joml.Quaternionf;
  * objects. This bridge samples that abstraction instead of depending on Create/Sable.
  */
 final class BlueMap3DHistoryBridge {
+  private static final Set<String> LEGACY_DEFAULT_PROVIDERS =
+      Set.of("create_contraptions", "sable_ships");
+
   private final Consumer<String> log;
   private boolean resolutionAttempted;
   private boolean connectedLogged;
+  private boolean legacyProviderMigrationLogged;
   private long nextSample;
   private volatile Path webRoot;
   private Object meshListener;
@@ -59,6 +63,21 @@ final class BlueMap3DHistoryBridge {
     if (!resolve()) return;
 
     Set<String> allow = new HashSet<>(enabledProviders);
+
+    // Before generic scene history, this exact pair was written into generated configs as
+    // the default. NeoForge keeps that value across upgrades, so merely changing the code
+    // default to an empty list does not opt existing installations into ropes, springs or
+    // future recordable providers. Treat only the exact legacy default as the old implicit
+    // default; any other non-empty list remains an intentional explicit allow-list.
+    boolean migratedLegacyDefault = allow.equals(LEGACY_DEFAULT_PROVIDERS);
+    if (migratedLegacyDefault) {
+      allow.clear();
+      if (!legacyProviderMigrationLogged) {
+        legacyProviderMigrationLogged = true;
+        log.accept(
+            "Migrated legacy BlueMap3D history provider default to all recordable providers.");
+      }
+    }
     boolean explicitProviderList = !allow.isEmpty();
     try {
       Collection<?> providers = (Collection<?>) providersMethod.invoke(null);
