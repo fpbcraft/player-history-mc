@@ -258,6 +258,7 @@ export class EquipmentModelLoader {
     private readonly api: BlueMapRuntime,
     private readonly base: string,
     private readonly fetcher: ModelFetcher = (input) => fetch(input),
+    private readonly build = "",
   ) {
     this.textureLoader = new api.Three.TextureLoader();
   }
@@ -359,7 +360,9 @@ export class EquipmentModelLoader {
         .map(encodeURIComponent)
         .join("/") +
       ".json";
-    const promise = this.fetcher(new URL(relative, this.base))
+    const url = new URL(relative, this.base);
+    if (this.build) url.searchParams.set("v", this.build);
+    const promise = this.fetcher(url)
       .then(async (response) =>
         response.ok ? parseArmorModel(await response.json(), item) : null,
       )
@@ -387,7 +390,9 @@ export class EquipmentModelLoader {
         .map(encodeURIComponent)
         .join("/") +
       ".json";
-    const promise = this.fetcher(new URL(relative, this.base))
+    const url = new URL(relative, this.base);
+    if (this.build) url.searchParams.set("v", this.build);
+    const promise = this.fetcher(url)
       .then(async (response) =>
         response.ok ? parseModel(await response.json(), item) : null,
       )
@@ -401,7 +406,9 @@ export class EquipmentModelLoader {
   }
 
   private loadTexture(relative: string): Promise<Texture | null> {
-    const url = new URL(relative, this.base).href;
+    const parsed = new URL(relative, this.base);
+    if (this.build) parsed.searchParams.set("v", this.build);
+    const url = parsed.href;
     const cached = this.textures.get(url);
     if (cached) return cached;
 
