@@ -136,10 +136,13 @@ test("historical object replay clones the live mesh and suppresses the present-d
 });
 
 
-test("historical replay suppresses dynamic families without hiding unrelated provider objects", () => {
+test("historical replay owns all live rope/spring objects without hiding rigid siblings", () => {
   const root = new FakeObject();
   const historicalSegment = new FakeObject();
-  const extraCurrentSegment = new FakeObject();
+  historicalSegment.position.set(90, 90, 90);
+  const sameFamilyExtra = new FakeObject();
+  const differentCurrentSpring = new FakeObject();
+  const currentRope = new FakeObject();
   const oldTrain = new FakeObject();
   const cableCar = new FakeObject();
   const suppressions: string[][] = [];
@@ -153,8 +156,18 @@ test("historical replay suppresses dynamic families without hiding unrelated pro
         meshUrl: "assets/bluemap3d/meshes/spring-v5-7.bm3d",
       },
       "simulated_springs/world/1_2_3/segment-7": {
-        mesh: extraCurrentSegment,
+        mesh: sameFamilyExtra,
         meshUrl: "assets/bluemap3d/meshes/spring-v5-7.bm3d",
+      },
+      // A completely different present-day spring still must not leak into history.
+      "simulated_springs/world/99_99_99/segment-0": {
+        mesh: differentCurrentSpring,
+        meshUrl: "assets/bluemap3d/meshes/spring-v5-7.bm3d",
+      },
+      // Same rule for ropes even when the selected historical window has no rope pose.
+      "simulated_ropes/current-rope/segment-0": {
+        mesh: currentRope,
+        meshUrl: "assets/bluemap3d/meshes/rope-v5-7.bm3d",
       },
       "create_contraptions/train/0": {
         mesh: oldTrain,
@@ -206,11 +219,24 @@ test("historical replay suppresses dynamic families without hiding unrelated pro
 
   assert.deepEqual(suppressions, [[
     "create_contraptions/train/0",
+    "simulated_ropes/current-rope/segment-0",
     "simulated_springs/world/1_2_3/segment-0",
     "simulated_springs/world/1_2_3/segment-7",
+    "simulated_springs/world/99_99_99/segment-0",
   ]]);
+
   assert.equal(historicalSegment.visible, false);
+  assert.equal(sameFamilyExtra.visible, true); // BlueMap3D owns visibility via suppression API.
+  assert.equal(differentCurrentSpring.visible, true);
+  assert.equal(currentRope.visible, true);
   assert.equal(cableCar.visible, true);
+
+  // Historical clone uses the recorded transform, not the source mesh's current transform.
+  const historyRoot = root.children[0] as FakeObject;
+  const clone = historyRoot.children[0] as FakeObject;
+  assert.equal(clone.position.x, 1);
+  assert.equal(clone.position.y, 2);
+  assert.equal(clone.position.z, 3);
 });
 
 test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", () => {
