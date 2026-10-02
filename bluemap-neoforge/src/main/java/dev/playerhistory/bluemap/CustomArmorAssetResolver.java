@@ -69,7 +69,7 @@ final class CustomArmorAssetResolver {
       JsonObject root =
           JsonFiles.GSON.fromJson(
               new String(geometryBytes, StandardCharsets.UTF_8), JsonObject.class);
-      Model model = parse(root, textureId(texturePath));
+      Model model = parseGeometry(root, textureId(texturePath));
       if (model == null || model.parts().isEmpty()) {
         missing.add(key);
         return null;
@@ -261,7 +261,7 @@ final class CustomArmorAssetResolver {
     return namespace + ":" + texture;
   }
 
-  private static Model parse(JsonObject root, String texture) {
+  static Model parseGeometry(JsonObject root, String texture) {
     JsonArray geometries = root == null ? null : root.getAsJsonArray("minecraft:geometry");
     if (geometries == null) return null;
 
