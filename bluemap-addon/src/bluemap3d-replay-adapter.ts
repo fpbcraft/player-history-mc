@@ -78,23 +78,25 @@ export class BlueMap3DReplayAdapter {
     this.ensureRoot(diagnostics.root);
     const identities = new Map(registry.map((entry) => [entry.id, entry]));
 
-    // Hide exact objects known to history. Providers with variable child topology
-    // additionally suppress the whole logical child family so present-day extra
-    // segments/knots cannot leak through a historical pose. Do NOT suppress an entire
-    // provider: one recorded Create contraption must never hide an unrelated live cable car.
+    // Historical replay owns the complete live surface of providers whose topology is
+    // itself dynamic. A current rope/spring can have a different family id or child count
+    // from the selected timestamp, so deriving suppression only from recorded source ids
+    // leaks present-day segments into historical playback. Suppress every live object for
+    // those providers and reconstruct only the historical objects below.
+    //
+    // Normal rigid providers remain exact-id only: replaying one Create contraption must
+    // never hide an unrelated present-day train/cable car.
     const exactSuppressed = new Set(
       registry.map((entry) => `${entry.provider}/${entry.sourceId}`),
     );
-    const familyPrefixes = new Set(
-      registry
-        .map((entry) => replayFamilyPrefix(entry.provider, entry.sourceId))
-        .filter((value): value is string => value !== null),
-    );
-    const suppressed = Object.keys(diagnostics.objects).filter(
-      (id) =>
+    const suppressed = Object.keys(diagnostics.objects).filter((id) => {
+      const slash = id.indexOf("/");
+      const provider = slash < 0 ? id : id.slice(0, slash);
+      return (
         exactSuppressed.has(id) ||
-        [...familyPrefixes].some((prefix) => id.startsWith(prefix)),
-    );
+        REPLAY_OWNED_DYNAMIC_PROVIDERS.has(provider)
+      );
+    });
 
     // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
     // the one-frame flash that occurred whenever its polling loop re-applied map visibility
@@ -347,12 +349,10 @@ const prepareClone = (clone: Object3D, label: string, object: number): void => {
   clone.userData.playerHistoryObject = object;
 };
 
-const replayFamilyPrefix = (provider: string, sourceId: string): string | null => {
-  if (provider !== "simulated_ropes" && provider !== "simulated_springs") return null;
-  const slash = sourceId.lastIndexOf("/");
-  if (slash <= 0) return null;
-  return `${provider}/${sourceId.slice(0, slash + 1)}`;
-};
+const REPLAY_OWNED_DYNAMIC_PROVIDERS = new Set([
+  "simulated_ropes",
+  "simulated_springs",
+]);
 
 const geometryKey = (provider: string, sourceId: string, version: number): string =>
   `${provider}\u0000${sourceId}\u0000${version}`;
