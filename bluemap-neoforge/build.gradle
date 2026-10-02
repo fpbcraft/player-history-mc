@@ -20,3 +20,8 @@ tasks.named('processResources') {
 base { archivesName = 'player-history-bluemap' }
 
 neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); programArgument 'nogui' } }
+
+
+dependencies {
+  implementation project(':recorder-neoforge')
+}

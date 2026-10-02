@@ -16,6 +16,7 @@ import {
   playerColor,
 } from "./event-presentation.js";
 import { createVitals, meterLevels, renderVitals } from "./player-vitals.js";
+import { HistoryScene3D } from "./history-scene3d.js";
 import { eventDetails, trailPoint } from "./telemetry.js";
 import type {
   HistoryEvent,
@@ -54,6 +55,7 @@ export class BlueMapAdapter {
   readonly tooltip: HTMLDivElement;
   readonly hoverListeners: AbortController;
   readonly raycaster: Raycaster;
+  readonly scene3d: HistoryScene3D;
   readonly eventMarkers = new Map<string, HtmlMarker>();
   nextEventId = 0;
   hoverActive = false;
@@ -64,6 +66,9 @@ export class BlueMapAdapter {
   expandedGroup: HtmlMarker | null = null;
   heat: Mesh | null = null;
   stateDetails?: (player: number, time: number) => Promise<string>;
+  private playerIconMode = false;
+  private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
+  private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
 
   constructor(app: BlueMapApp, api: BlueMapRuntime) {
     this.app = app;
@@ -81,7 +86,11 @@ export class BlueMapAdapter {
     this.hoverDot.anchor.set(7, 7);
     this.hoverDot.element.className = "history-trail-dot";
     this.hoverDot.element.hidden = true;
-    this.root.add(this.players, this.trails, this.events, this.hoverDot);
+    this.scene3d = new HistoryScene3D(
+      api,
+      new URL("player-history/skins/", document.baseURI).href,
+    );
+    this.root.add(this.players, this.trails, this.events, this.hoverDot, this.scene3d.root);
     app.popupMarkerSet.add(this.root);
     this.tooltip = document.createElement("div");
     this.tooltip.className = "history-map-tooltip";
@@ -92,6 +101,7 @@ export class BlueMapAdapter {
     this.hoverListeners = new AbortController();
     this.raycaster = new api.Three.Raycaster();
     this.raycaster.params.Line2 = { threshold: 6 };
+    if (this.raycaster.params.Line) this.raycaster.params.Line.threshold = 0.2;
     document.addEventListener(
       "click",
       (event) => {
@@ -179,23 +189,41 @@ export class BlueMapAdapter {
         (-(event.clientY - bounds.top) / bounds.height) * 2 + 1,
       );
       this.raycaster.setFromCamera(position, viewer.camera);
-      const hit = this.raycaster.intersectObjects(
+
+      // Trails/events are intentionally overlays again. Preserve the original LineMarker
+      // trail hit-testing so hovering still resolves an interpolated timestamp.
+      const trailHit = this.raycaster.intersectObjects(
         this.trails.children.flatMap((marker) => (marker.line ? [marker.line] : [])),
         false,
       )[0];
-      if (hit) {
-        const data = hit.object.userData;
+      if (trailHit) {
+        const data = trailHit.object.userData;
+        const points = Array.isArray(data.historyPoints)
+          ? (data.historyPoints as HistoryPoint[])
+          : [];
         const point = trailPoint(
-          data.historyPoints ?? [],
-          hit.faceIndex,
-          hit.pointOnLine ?? hit.point,
+          points,
+          trailHit.faceIndex ?? -1,
+          trailHit.pointOnLine ?? trailHit.point,
         );
         if (point) {
           this.hoverDot.position.set(point.x / 32, point.y / 32, point.z / 32);
           this.hoverDot.element.style.background = playerColor(point.player);
           this.hoverDot.element.hidden = false;
-          text = `${data.historyName} · Trail\n${formatTimestamp(point.time)}\nPosition: ${formatCoordinates(point)}`;
+          text = `${String(data.historyName ?? point.player)} · Trail\n${formatTimestamp(point.time)}\nPosition: ${formatCoordinates(point)}`;
           this.hoverState = [point.player, point.time];
+        }
+      }
+
+      // Players remain real 3D models, so only player avatars are ray-tested here.
+      if (!text) {
+        const hit = this.raycaster.intersectObjects(this.scene3d.raycastObjects(), true)[0];
+        if (hit?.object.userData.historyKind === "player") {
+          const data = hit.object.userData;
+          text = typeof data.historyTooltip === "string" ? data.historyTooltip : undefined;
+          const player = Number(data.historyPlayer);
+          const time = Number(data.historyTime);
+          if (Number.isFinite(player) && Number.isFinite(time)) this.hoverState = [player, time];
         }
       }
     }
@@ -275,6 +303,28 @@ export class BlueMapAdapter {
     names: Map<number, string>,
     players: HistoryRegistry["players"] = [],
   ): void {
+    this.scene3d.setPlayers(positions, names, players);
+
+    const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
+    if (
+      !this.playerIconMode &&
+      distance >= BlueMapAdapter.PLAYER_ICON_ENTER_DISTANCE
+    ) {
+      this.playerIconMode = true;
+    } else if (
+      this.playerIconMode &&
+      distance <= BlueMapAdapter.PLAYER_ICON_EXIT_DISTANCE
+    ) {
+      this.playerIconMode = false;
+    }
+
+    this.scene3d.setPlayersVisible(!this.playerIconMode);
+
+    if (!this.playerIconMode) {
+      this.clear(this.players);
+      return;
+    }
+
     const keep = new Set<string>();
     for (const p of positions) {
       const id = `p${p.player}`;
@@ -284,35 +334,45 @@ export class BlueMapAdapter {
         marker = new this.api.HtmlMarker(id);
         marker.anchor.set(14, 14);
         marker.element.className = "history-player";
+
         const head = document.createElement("img");
         head.alt = "Player skin head";
         head.draggable = false;
         const uuid = players.find((player) => player.id === p.player)?.uuid;
         const root = this.app.mapViewer.map?.data?.mapDataRoot;
-        head.src = uuid && root ? `${root}/assets/playerheads/${uuid}.png` : FALLBACK_HEAD;
+        head.src = uuid && root
+          ? `${root}/assets/playerheads/${uuid}.png`
+          : FALLBACK_HEAD;
         head.onerror = () => {
           head.onerror = null;
           head.src = FALLBACK_HEAD;
         };
+
         marker.element.append(createVitals(), head);
         marker.element.dataset.historyHead = head.src;
         marker.element.tabIndex = 0;
         this.focusTooltip(marker.element);
         this.players.add(marker);
       }
-      marker.element.dataset.historyTooltip = `♟ ${names.get(p.player) || p.player}\n◷ ${formatTimestamp(p.time)}\n⌖ ${formatCoordinates(p)}`;
+
+      marker.element.dataset.historyTooltip =
+        `♟ ${names.get(p.player) || p.player}\n◷ ${formatTimestamp(p.time)}\n⌖ ${formatCoordinates(p)}`;
       marker.element.dataset.player = String(p.player);
       marker.element.dataset.time = String(p.time);
-      marker.element.setAttribute("aria-label", marker.element.dataset.historyTooltip);
+      marker.element.setAttribute(
+        "aria-label",
+        marker.element.dataset.historyTooltip,
+      );
       marker.element.style.borderColor = playerColor(p.player);
       marker.position.set(p.x / 32, p.y / 32, p.z / 32);
     }
-    for (const [id, m] of this.players.markers)
-      if (!keep.has(id)) {
-        this.players.remove(m);
-      }
+
+    for (const [id, marker] of this.players.markers) {
+      if (!keep.has(id)) this.players.remove(marker);
+    }
   }
   setPlayerVitals(player: number, state: PlayerState = {}): void {
+    this.scene3d.setPlayerVitals(player, state);
     const element = this.players.markers.get(`p${player}`)?.element;
     renderVitals(element?.querySelector(".history-player-vitals"), state);
   }
@@ -542,6 +602,7 @@ export class BlueMapAdapter {
     if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
     this.tooltip.remove();
     this.clearHeatmap();
+    this.scene3d.dispose();
     this.clear(this.players);
     this.clear(this.trails);
     this.clear(this.events);

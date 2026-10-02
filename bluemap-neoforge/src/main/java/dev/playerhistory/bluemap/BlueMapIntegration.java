@@ -17,10 +17,22 @@ import org.slf4j.LoggerFactory;
 public final class BlueMapIntegration {
   private static final ModConfigSpec SPEC;
   private static final ModConfigSpec.ConfigValue<String> PUBLIC_DIRECTORY;
+  private static final ModConfigSpec.BooleanValue OBJECT_HISTORY;
+  private static final ModConfigSpec.IntValue OBJECT_SAMPLE_INTERVAL;
+  private static final ModConfigSpec.ConfigValue<List<? extends String>> OBJECT_PROVIDERS;
 
   static {
     var b = new ModConfigSpec.Builder();
     PUBLIC_DIRECTORY = b.define("public-directory", "player-history/public");
+    OBJECT_HISTORY = b.define("object-history.enabled", true);
+    OBJECT_SAMPLE_INTERVAL =
+        b.defineInRange("object-history.sample-interval-ms", 500, 50, 60_000);
+    OBJECT_PROVIDERS =
+        b.defineListAllowEmpty(
+            "object-history.providers",
+            List.of(),
+            () -> "",
+            value -> value instanceof String);
     SPEC = b.build();
   }
 
@@ -29,12 +41,15 @@ public final class BlueMapIntegration {
   private volatile Path worldRoot;
   private final Map<String, Object> levels = new HashMap<>();
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
+  private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
+  private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
     container.registerConfig(ModConfig.Type.COMMON, SPEC);
     NeoForge.EVENT_BUS.addListener(this::start);
     NeoForge.EVENT_BUS.addListener(this::stop);
+    NeoForge.EVENT_BUS.addListener(this::tick);
     try {
       var type = Class.forName("de.bluecolored.bluemap.api.BlueMapAPI");
       type.getMethod("onEnable", Consumer.class)
@@ -51,6 +66,8 @@ public final class BlueMapIntegration {
               (Consumer<Object>)
                   a -> {
                     api = null;
+                    objectHistory.webRoot(null);
+                    skins.disable();
                   });
     } catch (Exception ex) {
       log.accept("Cannot connect to BlueMap API: " + ex);
@@ -67,8 +84,15 @@ public final class BlueMapIntegration {
   }
 
   private void stop(ServerStoppingEvent event) {
+    objectHistory.reset();
     worldRoot = null;
     levels.clear();
+  }
+
+  private void tick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+    objectHistory.tick(
+        event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
+    skins.tick(event.getServer(), worldRoot);
   }
 
   private static Object call(
@@ -79,12 +103,63 @@ public final class BlueMapIntegration {
         .invoke(target, args);
   }
 
+  @SuppressWarnings("unchecked")
+  private void removeLegacyRegistrations(Object web, Path assetRoot) {
+    String currentScript = "player-history/player-history-" + version + ".js";
+    String currentStyle = "player-history/player-history-" + version + ".css";
+    try {
+      var serviceField = web.getClass().getDeclaredField("blueMapService");
+      serviceField.setAccessible(true);
+      Object service = serviceField.get(web);
+      Object manager = service.getClass().getMethod("getWebFilesManager").invoke(service);
+
+      Set<String> scripts =
+          (Set<String>) manager.getClass().getMethod("getScripts").invoke(manager);
+      Set<String> styles =
+          (Set<String>) manager.getClass().getMethod("getStyles").invoke(manager);
+
+      scripts.removeIf(
+          url ->
+              url.startsWith("player-history/player-history-")
+                  && url.endsWith(".js")
+                  && !url.equals(currentScript));
+      styles.removeIf(
+          url ->
+              url.startsWith("player-history/player-history-")
+                  && url.endsWith(".css")
+                  && !url.equals(currentStyle));
+
+      manager.getClass().getMethod("saveSettings").invoke(manager);
+
+      try (var files = Files.list(assetRoot)) {
+        for (Path file : files.toList()) {
+          String name = file.getFileName().toString();
+          if ((name.startsWith("player-history-") && name.endsWith(".js")
+                  && !name.equals("player-history-" + version + ".js"))
+              || (name.startsWith("player-history-") && name.endsWith(".css")
+                  && !name.equals("player-history-" + version + ".css"))) {
+            Files.deleteIfExists(file);
+          }
+        }
+      }
+    } catch (ReflectiveOperationException | java.io.IOException error) {
+      // BlueMap has no public unregister API. Failure here is non-fatal, but keeping
+      // stale versioned URLs can cause an older cached custom element to win at startup.
+      log.accept("Could not remove stale Player History web registrations: " + error);
+    }
+  }
+
   private synchronized void install() {
     if (api == null || worldRoot == null) return;
     try {
       Object web = call(api, "BlueMapAPI", "getWebApp", new Class<?>[0]);
-      Path root =
-          ((Path) call(web, "WebApp", "getWebRoot", new Class<?>[0])).resolve("player-history");
+      Path webRoot =
+          ((Path) call(web, "WebApp", "getWebRoot", new Class<?>[0]))
+              .toAbsolutePath()
+              .normalize();
+      objectHistory.webRoot(webRoot);
+      skins.configure(api, webRoot);
+      Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
@@ -126,6 +201,7 @@ public final class BlueMapIntegration {
       }
       Files.writeString(
           root.resolve("integration.json"), new Gson().toJson(Map.of("mapWorlds", mapping)));
+      removeLegacyRegistrations(web, root);
       call(
           web,
           "WebApp",

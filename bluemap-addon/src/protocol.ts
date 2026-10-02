@@ -9,6 +9,9 @@ import type {
   IntegrationMapping,
   JsonObject,
   LiveSnapshot,
+  ObjectHistoryManifest,
+  ObjectHistoryPoint,
+  ObjectHistoryRegistry,
   StateRecord,
 } from "./types.js";
 
@@ -168,6 +171,117 @@ export const parseLiveSnapshot = (value: unknown): LiveSnapshot => {
     points: Array.isArray(value.points) ? value.points.slice(-20_000).map(parsePoint) : [],
     events: Array.isArray(value.events) ? value.events.slice(-1_000).map(parseEvent) : [],
   };
+};
+
+export const parseObjectPoint = (value: unknown): ObjectHistoryPoint => {
+  if (!isObject(value)) throw new Error("Invalid object-history point");
+  return {
+    object: numberField(value, "object"),
+    time: numberField(value, "time"),
+    world: numberField(value, "world"),
+    x: numberField(value, "x"),
+    y: numberField(value, "y"),
+    z: numberField(value, "z"),
+    qx: numberField(value, "qx"),
+    qy: numberField(value, "qy"),
+    qz: numberField(value, "qz"),
+    qw: numberField(value, "qw"),
+    sx: Number.isFinite(value.sx) ? (value.sx as number) : 1024,
+    sy: Number.isFinite(value.sy) ? (value.sy as number) : 1024,
+    sz: Number.isFinite(value.sz) ? (value.sz as number) : 1024,
+    geometry: numberField(value, "geometry"),
+    flags: numberField(value, "flags"),
+  };
+};
+
+const parseObjectRegistry = (value: unknown): ObjectHistoryRegistry => {
+  if (!isObject(value)) throw new Error("Invalid object-history registry");
+  const objects = Array.isArray(value.objects) ? value.objects : [];
+  const worlds = Array.isArray(value.worlds) ? value.worlds : [];
+  return {
+    objects: objects.map((entry) => {
+      if (!isObject(entry)) throw new Error("Invalid object registry entry");
+      return {
+        id: numberField(entry, "id"),
+        provider: stringField(entry, "provider"),
+        sourceId: stringField(entry, "sourceId"),
+        label: stringField(entry, "label"),
+      };
+    }),
+    worlds: worlds.map((world) => {
+      if (typeof world !== "string") throw new Error("Invalid object-history world");
+      return world;
+    }),
+  };
+};
+
+export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
+  if (!isObject(value) || (value.protocolVersion !== 1 && value.protocolVersion !== 2))
+    throw new Error("Unsupported object-history version");
+  const earliestTimestamp = numberField(value, "earliestTimestamp");
+  const latestTimestamp = numberField(value, "latestTimestamp");
+  const chunkDurationMs = numberField(value, "chunkDurationMs");
+  const positionScale = numberField(value, "positionScale");
+  const quaternionScale = numberField(value, "quaternionScale");
+  const scaleScale = Number.isFinite(value.scaleScale) ? (value.scaleScale as number) : 1024;
+  if (
+    latestTimestamp < earliestTimestamp ||
+    latestTimestamp <= 0 ||
+    chunkDurationMs <= 0 ||
+    positionScale <= 0 ||
+    quaternionScale <= 0 ||
+    scaleScale <= 0
+  )
+    throw new Error("Invalid object-history manifest");
+  const result: ObjectHistoryManifest = {
+    protocolVersion: value.protocolVersion as 1 | 2,
+    earliestTimestamp,
+    latestTimestamp,
+    chunkDurationMs,
+    positionScale,
+    quaternionScale,
+    scaleScale,
+    geometryArchive: value.geometryArchive === true,
+    registry: parseObjectRegistry(value.registry),
+  };
+  if (value.geometries !== undefined) {
+    if (!Array.isArray(value.geometries) || value.geometries.length > 100_000)
+      throw new Error("Invalid object-history geometry catalog");
+    result.geometries = value.geometries.map((entry) => {
+      if (!isObject(entry)) throw new Error("Invalid object-history geometry");
+      return {
+        provider: stringField(entry, "provider"),
+        sourceId: stringField(entry, "sourceId"),
+        version: numberField(entry, "version"),
+        mesh: stringField(entry, "mesh"),
+        atlas: stringField(entry, "atlas"),
+        lastReferencedAt: numberField(entry, "lastReferencedAt"),
+      };
+    });
+  }
+  if (value.chunkRanges !== undefined) {
+    if (!Array.isArray(value.chunkRanges) || value.chunkRanges.length > 100_000)
+      throw new Error("Invalid object-history chunk index");
+    result.chunkRanges = value.chunkRanges.map((range): [number, number] => {
+      if (
+        !Array.isArray(range) ||
+        range.length !== 2 ||
+        !range.every(Number.isFinite) ||
+        range[0] >= range[1] ||
+        range[0] % chunkDurationMs !== 0 ||
+        range[1] % chunkDurationMs !== 0
+      )
+        throw new Error("Invalid object-history chunk range");
+      return [range[0], range[1]];
+    });
+  }
+  return result;
+};
+
+export const parseObjectChunk = (value: unknown): ObjectHistoryPoint[] => {
+  if (!Array.isArray(value) || value.length > 1_000_000)
+    throw new Error("Invalid object-history chunk");
+  return value.map(parseObjectPoint);
 };
 
 export const parseIntegration = (value: unknown): IntegrationMapping => {

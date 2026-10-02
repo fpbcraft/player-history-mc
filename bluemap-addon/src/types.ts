@@ -73,6 +73,78 @@ export interface LiveSnapshot {
   events: HistoryEvent[];
 }
 
+export interface ObjectHistoryPoint {
+  object: number;
+  time: number;
+  world: number;
+  x: number;
+  y: number;
+  z: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  geometry: number;
+  flags: number;
+}
+
+export interface ObjectRegistryEntry {
+  id: number;
+  provider: string;
+  sourceId: string;
+  label: string;
+}
+
+export interface ObjectHistoryRegistry {
+  objects: ObjectRegistryEntry[];
+  worlds: string[];
+}
+
+export interface ObjectGeometryEntry {
+  provider: string;
+  sourceId: string;
+  version: number;
+  mesh: string;
+  atlas: string;
+  lastReferencedAt: number;
+}
+
+export interface ObjectHistoryManifest {
+  protocolVersion: 1 | 2;
+  earliestTimestamp: number;
+  latestTimestamp: number;
+  chunkDurationMs: number;
+  chunkRanges?: [number, number][];
+  positionScale: number;
+  quaternionScale: number;
+  scaleScale: number;
+  geometryArchive: boolean;
+  geometries?: ObjectGeometryEntry[];
+  registry: ObjectHistoryRegistry;
+}
+
+export interface ObjectPose {
+  object: number;
+  time: number;
+  world: number;
+  x: number;
+  y: number;
+  z: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  geometry: number;
+  /** Signed object-local travel in blocks, relative to this loaded replay window. */
+  travel: number;
+}
+
 export interface IntegrationMapping {
   mapWorlds: Record<string, string>;
 }
