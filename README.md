@@ -25,9 +25,20 @@ For live UI development against an already-running BlueMap instance:
 npm run dev -- --target http://127.0.0.1:8100
 ```
 
+### Releases
+
+`.github/workflows/release.yml` publishes immutable GitHub Releases. Pushing a
+`vMAJOR.MINOR.PATCH` (or SemVer prerelease) tag builds both mods at that exact version and
+publishes the JARs. The workflow can also be run manually from the default branch: choose a
+patch/minor/major bump, or provide an exact SemVer. Manual releases build successfully before
+the workflow creates the tag and release, and refuse to reuse an existing tag/version.
+
+Non-release CI/local builds use `<baseline>-dev.<short-sha>`, so artifacts from different
+commits cannot accidentally share a version.
+
 The local proxy rebuilds TypeScript and CSS and refreshes the browser without rebuilding a JAR or restarting Minecraft. See [BlueMap installation and live frontend development](docs/bluemap-addon.md) for hosted targets, phone testing and options.
 
-The Gradle `modVersion` property is the release version source; the private npm package is intentionally not independently versioned. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
+The Gradle `modVersion` property is the baseline semantic version; the private npm package is intentionally not independently versioned. Normal builds append the short Git commit, for example `0.8.27-dev.a1b2c3d4`, and the embedded viewer receives the same version. Published releases use the exact release tag version. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
 
 ## Documentation
 
