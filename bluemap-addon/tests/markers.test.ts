@@ -175,6 +175,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     };
     const adapter = new BlueMapAdapter(app, api);
     app.mapViewer.controlsManager = {
+      distance: 300,
       position: new Vector(),
       updateCamera() {
         this.updated = true;
