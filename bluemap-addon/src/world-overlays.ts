@@ -283,7 +283,7 @@ class WorldOverlayController {
       `${entityCount} entities · ${data.claims?.length ?? 0} claimed · ${age}s old`;
   }
 
-  private renderClaimLegend(rows: ClaimCell[]): void {  private renderClaimLegend(rows: ClaimCell[]): void {
+  private renderClaimLegend(rows: ClaimCell[]): void {
     const owners = new Map<string, number>();
     for (const row of rows) owners.set(row.owner, row.color);
     this.legend.replaceChildren();
