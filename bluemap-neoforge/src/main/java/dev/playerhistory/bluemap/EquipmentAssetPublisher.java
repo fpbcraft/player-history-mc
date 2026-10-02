@@ -16,6 +16,7 @@ import javax.imageio.ImageIO;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.ArmorItem;
 
 /**
  * Publishes resolved resource models only for item ids that have actually appeared in
@@ -36,6 +37,7 @@ final class EquipmentAssetPublisher {
   private volatile Path root;
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
+  private volatile CustomArmorAssetResolver customArmor;
   private volatile CustomArmorAssetResolver customArmor;
   private volatile long nextScan;
 
@@ -65,6 +67,7 @@ final class EquipmentAssetPublisher {
     processed.clear();
     BlueMap3DItemModelBridge current = bridge;
     bridge = null;
+    customArmor = null;
     customArmor = null;
     if (current != null) current.close();
   }
@@ -97,6 +100,7 @@ final class EquipmentAssetPublisher {
         currentBridge =
             BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
         bridge = currentBridge;
+        customArmor = new CustomArmorAssetResolver(currentBridge, log);
         customArmor = new CustomArmorAssetResolver(currentBridge, log);
       } catch (ClassNotFoundException error) {
         log.accept("BlueMap3D is unavailable; Player History will keep simple equipment models");
@@ -193,135 +197,92 @@ final class EquipmentAssetPublisher {
       String item,
       ResourceLocation id) {
     CustomArmorAssetResolver resolver = customArmor;
-    if (resolver != null) {
-      CustomArmorAssetResolver.Model custom = resolver.resolve(id);
-      if (custom != null && publishCustomArmor(currentRoot, currentBridge, item, id, custom)) {
-        return;
-      }
+    CustomArmorAssetResolver.Model custom = resolver == null ? null : resolver.resolve(id);
+    if (custom != null) {
+      publishCustomArmor(currentRoot, currentBridge, item, id, custom);
+      return;
     }
 
-    ArmorAsset armor = armorAsset(id);
-    if (armor == null) return;
+    var registered = BuiltInRegistries.ITEM.get(id);
+    if (!(registered instanceof ArmorItem armor)) return;
+    boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
+    var layers = armor.getMaterial().value().layers();
+    if (layers.isEmpty()) return;
 
     try {
-      var publishedLayers = new ArrayList<PublishedArmorLayer>();
-      for (ArmorTextureLayer layer : armor.layers()) {
-        BufferedImage image = currentBridge.texture(layer.texture());
+      var published = new ArrayList<ArmorLayer>();
+      for (var layer : layers) {
+        ResourceLocation texture = layer.texture(inner);
+        BufferedImage image = currentBridge.texture(texture.toString());
         if (image == null) continue;
-        String texturePath = texturePath(layer.texture());
-        writePng(currentRoot, texturePath, image);
-        publishedLayers.add(new PublishedArmorLayer(texturePath, layer.dyeable()));
-      }
-      if (publishedLayers.isEmpty()) return;
+        String path = texturePath(texture.toString().replaceFirst("^([^:]+):textures/", "$1:"));
+        writePng(currentRoot, path, image);
 
+        String overlayPath = null;
+        if (layer.dyeable()) {
+          ResourceLocation overlay =
+              ResourceLocation.fromNamespaceAndPath(
+                  texture.getNamespace(),
+                  texture.getPath().replace(".png", "_overlay.png"));
+          BufferedImage overlayImage =
+              currentBridge.texture(
+                  overlay.toString().replaceFirst("^([^:]+):textures/", "$1:").replace(".png", ""));
+          if (overlayImage != null) {
+            overlayPath =
+                texturePath(
+                    overlay
+                        .toString()
+                        .replaceFirst("^([^:]+):textures/", "$1:")
+                        .replace(".png", ""));
+            writePng(currentRoot, overlayPath, overlayImage);
+          }
+        }
+        published.add(new ArmorLayer(path, overlayPath, layer.dyeable()));
+      }
+      if (published.isEmpty()) return;
       writeArmorDescriptor(
           currentRoot,
           id,
-          JsonFiles.GSON.toJson(
-              new ArmorModel(FORMAT, item, "layer", armor.layer(), publishedLayers)));
+          new ArmorModel(FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
     } catch (IOException error) {
       log.accept("Could not publish armor textures for " + item + ": " + error);
       processed.remove(item);
     }
   }
 
-  private boolean publishCustomArmor(
+  private void publishCustomArmor(
       Path currentRoot,
       BlueMap3DItemModelBridge currentBridge,
       String item,
       ResourceLocation id,
       CustomArmorAssetResolver.Model custom) {
-    BufferedImage texture = currentBridge.texture(custom.texture());
-    if (texture == null) return false;
-
+    BufferedImage image = currentBridge.texture(custom.texture());
+    if (image == null) return;
     try {
       String texturePath = texturePath(custom.texture());
-      writePng(currentRoot, texturePath, texture);
+      writePng(currentRoot, texturePath, image);
       var parts = new ArrayList<CustomArmorPart>();
-      for (var part : custom.parts()) {
+      for (var part : custom.parts())
         parts.add(
-            new CustomArmorPart(
-                part.parent(), part.slot(), part.positions(), part.uvs()));
-      }
+            new CustomArmorPart(part.parent(), part.slot(), part.positions(), part.uvs()));
       writeArmorDescriptor(
           currentRoot,
           id,
-          JsonFiles.GSON.toJson(
-              new CustomArmorModel(FORMAT, item, "custom", texturePath, parts)));
-      return true;
+          new ArmorModel(FORMAT, item, "custom", null, null, texturePath, parts));
     } catch (IOException error) {
       log.accept("Could not publish custom armor geometry for " + item + ": " + error);
-      return false;
+      processed.remove(item);
     }
   }
 
-  private static void writeArmorDescriptor(Path root, ResourceLocation id, String json)
+  private static void writeArmorDescriptor(Path root, ResourceLocation id, ArmorModel model)
       throws IOException {
     Path target =
         safeResolve(root, "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
     Files.createDirectories(target.getParent());
-    writeAtomic(target, json);
+    writeAtomic(target, JsonFiles.GSON.toJson(model));
   }
 
-  private static ArmorAsset armorAsset(ResourceLocation item) {
-    var registered = BuiltInRegistries.ITEM.get(item);
-    if (registered instanceof ArmorItem armor) {
-      boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
-      var layers = new ArrayList<ArmorTextureLayer>();
-      for (var materialLayer : armor.getMaterial().value().layers()) {
-        String texture = logicalTexture(materialLayer.texture(inner));
-        if (texture != null) {
-          layers.add(new ArmorTextureLayer(texture, materialLayer.dyeable()));
-        }
-      }
-      if (!layers.isEmpty()) return new ArmorAsset(inner ? 2 : 1, List.copyOf(layers));
-    }
-
-    // Last-resort convention for equipables that emulate vanilla armor without
-    // extending ArmorItem. Equipment slot detection itself lives in the recorded
-    // state and never depends on these names.
-    String path = item.getPath();
-    String suffix;
-    int layer;
-    if (path.endsWith("_helmet") || path.endsWith("_head")) {
-      suffix = path.endsWith("_helmet") ? "_helmet" : "_head";
-      layer = 1;
-    } else if (path.endsWith("_chestplate") || path.endsWith("_chest")) {
-      suffix = path.endsWith("_chestplate") ? "_chestplate" : "_chest";
-      layer = 1;
-    } else if (path.endsWith("_leggings") || path.endsWith("_legs")) {
-      suffix = path.endsWith("_leggings") ? "_leggings" : "_legs";
-      layer = 2;
-    } else if (path.endsWith("_boots") || path.endsWith("_feet")) {
-      suffix = path.endsWith("_boots") ? "_boots" : "_feet";
-      layer = 1;
-    } else {
-      return null;
-    }
-
-    String material = path.substring(0, path.length() - suffix.length());
-    int slash = material.lastIndexOf('/');
-    String directory = slash >= 0 ? material.substring(0, slash + 1) : "";
-    String name = slash >= 0 ? material.substring(slash + 1) : material;
-    if ("golden".equals(name)) name = "gold";
-    String texture =
-        item.getNamespace()
-            + ":models/armor/"
-            + directory
-            + name
-            + "_layer_"
-            + layer;
-    return new ArmorAsset(
-        layer,
-        List.of(new ArmorTextureLayer(texture, name.contains("leather"))));
-  }
-
-  private static String logicalTexture(ResourceLocation resource) {
-    String path = resource.getPath();
-    if (path.startsWith("textures/")) path = path.substring("textures/".length());
-    if (path.endsWith(".png")) path = path.substring(0, path.length() - 4);
-    return resource.getNamespace() + ":" + path;
-  }
 
   private static String texturePath(String texture) throws IOException {
     ResourceLocation id = ResourceLocation.tryParse(texture);
