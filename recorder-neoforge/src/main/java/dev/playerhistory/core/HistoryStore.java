@@ -533,35 +533,18 @@ public final class HistoryStore implements AutoCloseable {
 
   public void retention(long now) throws IOException {
     if (retentionDays < 0) return;
-    long cutoff = Math.floorDiv(now - retentionDays * 86_400_000L, 86_400_000) * 86_400_000;
-    prune(root.resolve("tracks"), cutoff);
-    prune(root.resolve("states"), cutoff);
-    prune(root.resolve("heatmap"), cutoff);
+    long cutoff = RetentionFiles.cutoffUtcDay(now, retentionDays);
+    RetentionFiles.pruneHistoryTree(root.resolve("tracks"), cutoff);
+    RetentionFiles.pruneHistoryTree(root.resolve("states"), cutoff);
+    RetentionFiles.pruneHistoryTree(root.resolve("heatmap"), cutoff);
     if (retentionRoot != null) {
-      prune(retentionRoot.resolve("chunks"), cutoff);
-      prune(retentionRoot.resolve("states"), cutoff);
-      prune(retentionRoot.resolve("heatmap"), cutoff);
-      prune(retentionRoot.resolve("activity"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("chunks"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("states"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("heatmap"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("activity"), cutoff);
     }
     publishedChunks.removeBefore(cutoff);
     earliest = Math.max(earliest, cutoff);
-  }
-
-  static void prune(Path dir, long cutoff) throws IOException {
-    if (!Files.exists(dir)) return;
-    try (var paths = Files.walk(dir)) {
-      for (Path p : paths.filter(Files::isRegularFile).toList()) {
-        String name = p.getFileName().toString();
-        if (!(name.endsWith(".bin")
-            || name.endsWith(".json")
-            || name.endsWith(".tmp")
-            || name.endsWith(".corrupt"))) continue;
-        try {
-          if (Long.parseLong(name.substring(0, name.indexOf('.'))) < cutoff) Files.delete(p);
-        } catch (NumberFormatException ignored) {
-        }
-      }
-    }
   }
 
   @Override
