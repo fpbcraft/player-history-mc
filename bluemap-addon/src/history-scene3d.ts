@@ -1137,7 +1137,16 @@ export class HistoryScene3D {
     skin: SkinBox,
     textureHeight: number,
   ): void {
-    const uv = geometry.attributes?.uv;
+    const uv = (
+      geometry as Geometry & {
+        attributes?: {
+          uv?: {
+            set(values: Float32Array): void;
+            needsUpdate: boolean;
+          };
+        };
+      }
+    ).attributes?.uv;
     if (!uv) {
       throw new Error("BlueMap Three.js BoxGeometry has no UV attribute");
     }
