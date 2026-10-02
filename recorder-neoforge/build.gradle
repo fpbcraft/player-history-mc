@@ -7,6 +7,7 @@ dependencies {
  testImplementation 'org.junit.jupiter:junit-jupiter'
  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+sourceSets.test.resources.srcDir rootProject.file('protocol/fixtures')
 test { useJUnitPlatform() }
 tasks.named('processResources') {
  inputs.property 'version', project.version
