@@ -1,0 +1,34 @@
+{
+  "formatVersion": 1,
+  "protocolVersion": 2,
+  "generatedAt": 0,
+  "earliestTimestamp": 100,
+  "latestTimestamp": 150,
+  "chunkDurationMs": 100,
+  "chunkRanges": [[100, 200]],
+  "registry": {
+    "players": [
+      {
+        "id": 1,
+        "uuid": "00000000-0000-0000-0000-000000000001",
+        "name": "Test"
+      }
+    ],
+    "worlds": [
+      {
+        "id": 0,
+        "key": "minecraft:overworld"
+      }
+    ],
+    "items": []
+  },
+  "capabilities": {
+    "movement": true
+  },
+  "trackingEnabled": {
+    "movement": true
+  },
+  "activityBucketMs": 60000,
+  "activityReady": true,
+  "cellSize": 8
+}
