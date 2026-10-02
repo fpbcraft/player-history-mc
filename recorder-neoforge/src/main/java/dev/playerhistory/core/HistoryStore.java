@@ -383,9 +383,7 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void write(byte[] data) throws IOException {
-    var buffer = java.nio.ByteBuffer.wrap(data);
-    while (buffer.hasRemaining()) channel.write(buffer);
-    bytes.addAndGet(data.length);
+    bytes.addAndGet(ChunkChannelIO.writeFully(channel, data));
   }
 
   private void flush() throws IOException {
@@ -430,8 +428,7 @@ public final class HistoryStore implements AutoCloseable {
 
   private void finish() throws IOException {
     if (channel == null) return;
-    channel.force(false);
-    channel.close();
+    ChunkChannelIO.closeDurably(channel);
     channel = null;
     if (options.heatmap) heatmaps.flush(publicRoot, true);
     JsonFiles.move(
