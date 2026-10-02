@@ -394,7 +394,8 @@ final class CustomArmorAssetResolver {
     };
 
     float[] rawCubePivot = vec(cube.getAsJsonArray("pivot"), null);
-    float[] cubePivot = rawCubePivot == null ? bone.pivot() : modelPoint(rawCubePivot);
+    float[] cubePivot =
+        rawCubePivot == null ? new float[] {0, 0, 0} : modelPoint(rawCubePivot);
     float[] cubeRotation =
         modelRotation(vec(cube.getAsJsonArray("rotation"), new float[] {0, 0, 0}));
     rotateAll(vertices, cubePivot, cubeRotation);
@@ -617,7 +618,10 @@ final class CustomArmorAssetResolver {
       float[] uv = uvPair(face.get("uv"));
       float[] size = uvPair(face.get("uv_size"));
       if (uv == null || size == null) return;
-      int rotation = face.has("uv_rotation") ? Math.floorMod(face.get("uv_rotation").getAsInt(), 360) : 0;
+      int rotation =
+          face.has("uv_rotation")
+              ? (Math.floorMod(face.get("uv_rotation").getAsInt(), 360) / 90) * 90
+              : 0;
       float[][] coordinates =
           uvRect(
               uv[0],
