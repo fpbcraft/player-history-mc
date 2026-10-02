@@ -1,11 +1,15 @@
 package dev.playerhistory.object;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.zip.CRC32;
 
 public final class ObjectBinaryCodec {
-  public static final int MAGIC = 0x50484f31, VERSION = 2, MAX_FRAME = 4 * 1024 * 1024;
+  public static final int MAGIC = 0x50484f31, VERSION = 3, MAX_FRAME = 4 * 1024 * 1024;
+  private static final int MAX_GROUPS = 32;
+  private static final int MAX_INSTANCES_PER_GROUP = 4096;
+  private static final int MAX_GROUP_ID_BYTES = 1024;
 
   public static void header(DataOutput out, long start, long duration) throws IOException {
     out.writeInt(MAGIC);
@@ -23,13 +27,7 @@ public final class ObjectBinaryCodec {
       ObjectPoint prior =
           previous.getOrDefault(
               point.object(),
-              new ObjectPoint(
-                  point.object(), start, 0, 0, 0, 0, (short) 0, (short) 0, (short) 0,
-                  (short) ObjectPoint.QUATERNION_SCALE,
-                  (short) ObjectPoint.SCALE_SCALE,
-                  (short) ObjectPoint.SCALE_SCALE,
-                  (short) ObjectPoint.SCALE_SCALE,
-                  0, 0));
+              emptyPoint(point.object(), start));
       varint(out, point.object());
       signed(out, point.time() - prior.time());
       varint(out, point.world());
@@ -45,6 +43,7 @@ public final class ObjectBinaryCodec {
       out.writeShort(point.sz());
       out.writeLong(point.geometry());
       out.writeByte(point.flags());
+      writeGroups(out, point.groups());
       previous.put(point.object(), point);
     }
 
@@ -68,7 +67,7 @@ public final class ObjectBinaryCodec {
     if (in.readInt() != MAGIC)
       throw new IOException("Unknown object history format");
     int version = in.readInt();
-    if (version != 1 && version != VERSION)
+    if (version < 1 || version > VERSION)
       throw new IOException("Unknown object history format version " + version);
     long start = in.readLong(), duration = in.readLong(), valid = 24;
     if (duration < 1000 || duration > 3_600_000) throw new IOException("Invalid duration");
@@ -113,16 +112,7 @@ public final class ObjectBinaryCodec {
     int count = bounded(in, 100_000);
     for (int i = 0; i < count; i++) {
       int object = bounded(in, Integer.MAX_VALUE);
-      ObjectPoint prior =
-          previous.getOrDefault(
-              object,
-              new ObjectPoint(
-                  object, start, 0, 0, 0, 0, (short) 0, (short) 0, (short) 0,
-                  (short) ObjectPoint.QUATERNION_SCALE,
-                  (short) ObjectPoint.SCALE_SCALE,
-                  (short) ObjectPoint.SCALE_SCALE,
-                  (short) ObjectPoint.SCALE_SCALE,
-                  0, 0));
+      ObjectPoint prior = previous.getOrDefault(object, emptyPoint(object, start));
       ObjectPoint point =
           new ObjectPoint(
               object,
@@ -139,12 +129,110 @@ public final class ObjectBinaryCodec {
               version >= 2 ? in.readShort() : (short) ObjectPoint.SCALE_SCALE,
               version >= 2 ? in.readShort() : (short) ObjectPoint.SCALE_SCALE,
               in.readLong(),
-              in.readUnsignedByte());
+              in.readUnsignedByte(),
+              version >= 3 ? readGroups(in) : List.of());
       points.add(point);
       previous.put(object, point);
     }
     if (in.available() != 0) throw new IOException("Trailing object frame data");
     return points;
+  }
+
+  private static ObjectPoint emptyPoint(int object, long start) {
+    return new ObjectPoint(
+        object,
+        start,
+        0,
+        0,
+        0,
+        0,
+        (short) 0,
+        (short) 0,
+        (short) 0,
+        (short) ObjectPoint.QUATERNION_SCALE,
+        (short) ObjectPoint.SCALE_SCALE,
+        (short) ObjectPoint.SCALE_SCALE,
+        (short) ObjectPoint.SCALE_SCALE,
+        0,
+        0,
+        List.of());
+  }
+
+  private static void writeGroups(
+      DataOutput out, List<ObjectPoint.InstanceGroup> groups) throws IOException {
+    if (groups == null || groups.isEmpty()) {
+      varint(out, 0);
+      return;
+    }
+    if (groups.size() > MAX_GROUPS) throw new IOException("Too many instance groups");
+    varint(out, groups.size());
+
+    for (ObjectPoint.InstanceGroup group : groups) {
+      writeString(out, group.id());
+      out.writeLong(group.geometry());
+      List<ObjectPoint.Instance> instances = group.instances();
+      if (instances.size() > MAX_INSTANCES_PER_GROUP)
+        throw new IOException("Too many instances in group");
+      varint(out, instances.size());
+
+      for (ObjectPoint.Instance instance : instances) {
+        signed(out, instance.x());
+        signed(out, instance.y());
+        signed(out, instance.z());
+        out.writeShort(instance.qx());
+        out.writeShort(instance.qy());
+        out.writeShort(instance.qz());
+        out.writeShort(instance.qw());
+        out.writeShort(instance.sx());
+        out.writeShort(instance.sy());
+        out.writeShort(instance.sz());
+      }
+    }
+  }
+
+  private static List<ObjectPoint.InstanceGroup> readGroups(DataInput in) throws IOException {
+    int groupCount = bounded(in, MAX_GROUPS);
+    if (groupCount == 0) return List.of();
+
+    var groups = new ArrayList<ObjectPoint.InstanceGroup>(groupCount);
+    for (int groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+      String id = readString(in);
+      long geometry = in.readLong();
+      int instanceCount = bounded(in, MAX_INSTANCES_PER_GROUP);
+      var instances = new ArrayList<ObjectPoint.Instance>(instanceCount);
+
+      for (int i = 0; i < instanceCount; i++) {
+        instances.add(
+            new ObjectPoint.Instance(
+                Math.toIntExact(unsign(in)),
+                Math.toIntExact(unsign(in)),
+                Math.toIntExact(unsign(in)),
+                in.readShort(),
+                in.readShort(),
+                in.readShort(),
+                in.readShort(),
+                in.readShort(),
+                in.readShort(),
+                in.readShort()));
+      }
+
+      groups.add(new ObjectPoint.InstanceGroup(id, geometry, instances));
+    }
+    return List.copyOf(groups);
+  }
+
+  private static void writeString(DataOutput out, String value) throws IOException {
+    byte[] encoded = value.getBytes(StandardCharsets.UTF_8);
+    if (encoded.length > MAX_GROUP_ID_BYTES) throw new IOException("Instance group id too long");
+    varint(out, encoded.length);
+    out.write(encoded);
+  }
+
+  private static String readString(DataInput in) throws IOException {
+    int length = bounded(in, MAX_GROUP_ID_BYTES);
+    byte[] encoded = new byte[length];
+    in.readFully(encoded);
+    return new String(encoded, StandardCharsets.UTF_8);
   }
 
   private static int bounded(DataInput in, int max) throws IOException {
