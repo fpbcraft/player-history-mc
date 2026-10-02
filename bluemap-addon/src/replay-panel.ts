@@ -6,6 +6,7 @@ import { chatEventsBetween } from "./event-notifications.js";
 import { ObjectChunkCache, ObjectReplayEngine } from "./object-replay.js";
 import { mapConcurrent } from "./history-loading.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
+import { loadHeatmapRange } from "./heatmap-loader.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
 import { PanelLifecycle, type PanelTimer } from "./panel-lifecycle.js";
@@ -21,7 +22,7 @@ import {
   UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import { BREAK, ChunkCache, CONTEXT, heatmapPlan, OFFLINE, ReplayEngine } from "./replay-core.js";
+import { BREAK, ChunkCache, CONTEXT, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { clamp, ReplayClock } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
@@ -1466,30 +1467,16 @@ export class ReplayPanel extends HTMLElement {
     const manifest = this.manifest;
     const controller = this.requests.start("heatmap");
     try {
-      const plan = heatmapPlan(this.clock.from, this.clock.to, manifest.chunkDurationMs),
-        cells = new Map();
-      for (const part of plan) {
-        for (const row of await this.historyClient.heatmap(
-          part.level,
-          part.time,
-          controller.signal,
-        )) {
-          const key = row.slice(0, 4).join(":"),
-            old = cells.get(key);
-          if (old) old[4] += row[4];
-          else cells.set(key, [...row]);
-          if (cells.size > 100000) throw Error("Heatmap exceeds the browser cell limit.");
-        }
-      }
+      const result = await loadHeatmapRange({
+        from: this.clock.from,
+        to: this.clock.to,
+        chunkDurationMs: manifest.chunkDurationMs,
+        loadPart: (level, time) => this.historyClient.heatmap(level, time, controller.signal),
+      });
       if (controller.signal.aborted || !this.opened) return;
-      this.heatRows = [...cells.values()];
+      this.heatRows = result.rows;
       this.heatVersion = (this.heatVersion || 0) + 1;
-      this.statusCoordinator.show(
-        "context",
-        cells.size
-          ? "Heatmap · time spent · completed recording chunks"
-          : "No completed heatmap data in this range",
-      );
+      this.statusCoordinator.show("context", result.status);
       this.updateOverlays();
     } catch (error) {
       this.report(error);
