@@ -436,12 +436,7 @@ public final class HistoryStore implements AutoCloseable {
       JsonFiles.write(
           pub.resolve("chunks/" + start + ".json"), new BinaryCodec.Batch(points, events));
       publishedChunks.add(start);
-      ActivityIndex.publish(
-          pub,
-          start,
-          options.duration,
-          java.util.stream.Stream.concat(points.stream(), events.stream().map(HistoryEvent::point))
-              .toList());
+      ActivityIndex.publish(pub, start, options.duration, points);
       JsonFiles.write(pub.resolve("manifest.json"), publicManifest());
     }
     JsonFiles.write(
@@ -506,14 +501,7 @@ public final class HistoryStore implements AutoCloseable {
         var r = BinaryCodec.read(in);
         JsonFiles.write(pub.resolve("chunks/" + r.start() + ".json"), r.batch());
         publishedChunks.add(r.start());
-        ActivityIndex.publish(
-            pub,
-            r.start(),
-            options.duration,
-            java.util.stream.Stream.concat(
-                    r.batch().points().stream(),
-                    r.batch().events().stream().map(HistoryEvent::point))
-                .toList());
+        ActivityIndex.publish(pub, r.start(), options.duration, r.batch().points());
       } catch (IOException e) {
         log.accept("Could not publish historical chunk " + f + ": " + e);
       }
