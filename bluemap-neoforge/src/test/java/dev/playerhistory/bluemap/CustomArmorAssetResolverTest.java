@@ -200,6 +200,49 @@ final class CustomArmorAssetResolverTest {
 
 
   @Test
+  void assignsConventionalLegBonesToLeggingsSlot() {
+    var root =
+        JsonParser.parseString(
+                """
+                {
+                  "minecraft:geometry": [{
+                    "description": {"texture_width":64,"texture_height":64},
+                    "bones": [
+                      {"name":"bipedRightLeg","pivot":[-2,12,0]},
+                      {
+                        "name":"armorRightLeg",
+                        "parent":"bipedRightLeg",
+                        "pivot":[-2,12,0],
+                        "cubes":[{"origin":[-4,0,-2],"size":[4,12,4],"uv":[0,16]}]
+                      },
+                      {"name":"bipedLeftLeg","pivot":[2,12,0]},
+                      {
+                        "name":"armorLeftLeg",
+                        "parent":"bipedLeftLeg",
+                        "pivot":[2,12,0],
+                        "cubes":[{"origin":[0,0,-2],"size":[4,12,4],"uv":[16,16]}]
+                      }
+                    ]
+                  }]
+                }
+                """)
+            .getAsJsonObject();
+
+    var model = CustomArmorAssetResolver.parseGeometry(root, "example:armor/test");
+    assertNotNull(model);
+    assertEquals(2, model.parts().size());
+    assertTrue(
+        model.parts().stream()
+            .allMatch(part -> part.slot().equals("legs")));
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("rightLeg")));
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("leftLeg")));
+  }
+
+  @Test
   void keepsPositiveBedrockXOnPositivePlayerX() {
     var root =
         JsonParser.parseString(
