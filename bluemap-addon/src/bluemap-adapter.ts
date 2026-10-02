@@ -89,6 +89,7 @@ export class BlueMapAdapter {
     this.scene3d = new HistoryScene3D(
       api,
       new URL("player-history/skins/", document.baseURI).href,
+      new URL("player-history/equipment/", document.baseURI).href,
     );
     this.root.add(this.players, this.trails, this.events, this.hoverDot, this.scene3d.root);
     app.popupMarkerSet.add(this.root);
@@ -371,8 +372,12 @@ export class BlueMapAdapter {
       if (!keep.has(id)) this.players.remove(marker);
     }
   }
-  setPlayerVitals(player: number, state: PlayerState = {}): void {
-    this.scene3d.setPlayerVitals(player, state);
+  setPlayerVitals(
+    player: number,
+    state: PlayerState = {},
+    items: readonly HistoryRegistry["items"][number][] = [],
+  ): void {
+    this.scene3d.setPlayerVitals(player, state, items);
     const element = this.players.markers.get(`p${player}`)?.element;
     renderVitals(element?.querySelector(".history-player-vitals"), state);
   }

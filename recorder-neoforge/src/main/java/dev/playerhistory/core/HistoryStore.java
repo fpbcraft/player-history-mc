@@ -51,6 +51,37 @@ public final class HistoryStore implements AutoCloseable {
   private final ArrayDeque<HistoryEvent> liveEvents = new ArrayDeque<>();
   private long lastLiveFlush, lastFullLiveFlush;
   private final ArrayDeque<Point> livePoints = new ArrayDeque<>();
+  private final Map<Integer, Map<String, Object>> liveStates = new HashMap<>();
+
+  private void applyLiveState(StateRecord record) {
+    if ("unknown".equals(record.kind())) {
+      liveStates.remove(record.player());
+      return;
+    }
+    if ("checkpoint".equals(record.kind())) {
+      var state = new LinkedHashMap<String, Object>();
+      record.values().forEach((key, value) -> {
+        if (value != null) state.put(key, value);
+      });
+      liveStates.put(record.player(), state);
+      return;
+    }
+    var state = liveStates.get(record.player());
+    if (state == null) return;
+    record.values().forEach((key, value) -> {
+      if (value == null) state.remove(key);
+      else state.put(key, value);
+    });
+  }
+
+  private Map<Integer, Map<String, Object>> liveStateSnapshot() {
+    var snapshot = new LinkedHashMap<Integer, Map<String, Object>>();
+    liveStates.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
+        .forEach(entry -> snapshot.put(entry.getKey(), Map.copyOf(entry.getValue())));
+    return snapshot;
+  }
+
   private void publishLive(long now) throws IOException {
     while (!liveEvents.isEmpty()
         && (liveEvents.size() > 1000 || liveEvents.peekFirst().point().time() < now - 300000))
@@ -79,6 +110,8 @@ public final class HistoryStore implements AutoCloseable {
               presencePoints,
               "events",
               chatEvents,
+              "states",
+              liveStateSnapshot(),
               "registry",
               registry.snapshot()));
 
@@ -94,6 +127,8 @@ public final class HistoryStore implements AutoCloseable {
                 List.copyOf(livePoints),
                 "events",
                 List.copyOf(liveEvents),
+                "states",
+                liveStateSnapshot(),
                 "registry",
                 registry.snapshot()));
         lastFullLiveFlush = now;
@@ -298,6 +333,7 @@ public final class HistoryStore implements AutoCloseable {
             for (var player : statePlayers.keySet())
               states.append(new StateRecord(player, gapTime, "unknown", Map.of()));
             statePlayers.clear();
+            liveStates.clear();
             for (var p : List.copyOf(last.values())) {
               append(p.with(p.time(), Point.OFFLINE | Point.BREAK));
               broken.add(p.player());
@@ -314,6 +350,7 @@ public final class HistoryStore implements AutoCloseable {
 
             states.append(record);
             statePlayers.put(record.player(), record.time());
+            applyLiveState(record);
             stateChanges.incrementAndGet();
             inventoryDeltas.addAndGet(
                 record.values().keySet().stream().filter(k -> k.startsWith("slot:")).count());

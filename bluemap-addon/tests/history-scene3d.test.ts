@@ -200,7 +200,8 @@ test("3D history scene creates skinned articulated players", () => {
   assert.equal(avatar.position.z, 2);
   assert.equal(avatar.userData.historyKind, "player");
 
-  const headGroup = avatar.children[0] as O;
+  const model = avatar.children[0] as O;
+  const headGroup = model.children[0] as O;
   const headMesh = headGroup.children[0] as Mesh;
   const headGeometry = headMesh.geometry as G;
   const uv = headGeometry.attributes.get("uv") as
@@ -221,8 +222,44 @@ test("3D history scene creates skinned articulated players", () => {
   const hatMesh = headGroup.children[1] as Mesh;
   assert.equal((hatMesh.material as M).options.transparent, true);
 
-  scene.setPlayerVitals(1, { yaw: 90, pitch: 20 });
+  scene.setPlayerVitals(
+    1,
+    {
+      yaw: 90,
+      pitch: 20,
+      sneaking: true,
+      heldItem: { item: 1, count: 1 },
+      "equipment:head": { item: 2, count: 1 },
+    },
+    [
+      { id: 1, key: "minecraft:diamond_sword" },
+      { id: 2, key: "minecraft:diamond_helmet" },
+    ],
+  );
   assert.ok(Math.abs(avatar.quaternion.values[1] + Math.SQRT1_2) < 0.001);
+  assert.equal(model.position.y, -0.12);
+  assert.equal(headGroup.children.length, 3, "helmet is attached to the head");
+  const rightArm = model.children[2] as O;
+  assert.equal(rightArm.children.length, 3, "held item is attached to the arm");
+});
+
+test("3D player pose switches to horizontal swimming and elytra states", () => {
+  const scene = new HistoryScene3D(runtime(), "https://map.example/player-history/skins/");
+  scene.setPlayers(
+    [{ player: 1, time: 1000, world: 0, x: 0, y: 64 * 32, z: 0, flags: 0 }],
+    new Map([[1, "Alex"]]),
+    [{ id: 1, uuid: "", name: "Alex" }],
+  );
+  const playersRoot = scene.root.children?.[2] as O;
+  const avatar = playersRoot.children[0] as O;
+  const model = avatar.children[0] as O;
+
+  scene.setPlayerVitals(1, { swimming: true });
+  assert.ok(Math.abs(model.quaternion.values[0] - Math.SQRT1_2) < 0.001);
+  assert.equal(model.position.y, 0.45);
+
+  scene.setPlayerVitals(1, { elytra: true });
+  assert.ok(Math.abs(model.quaternion.values[0] - Math.SQRT1_2) < 0.001);
 });
 
 test("3D trails are depth tested and event anchors are instanced", () => {

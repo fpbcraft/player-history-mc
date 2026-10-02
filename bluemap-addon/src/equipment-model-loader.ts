@@ -1,0 +1,213 @@
+import type {
+  BlueMapRuntime,
+  Geometry,
+  Material,
+  Object3D,
+  Texture,
+} from "./bluemap-types.js";
+
+interface PublishedGroup {
+  texture?: string | null;
+  tint: number;
+  positions: number[];
+  uvs: number[];
+}
+
+interface PublishedItemModel {
+  format: 1;
+  item: string;
+  fingerprint?: string;
+  groups: PublishedGroup[];
+}
+
+export interface BuiltEquipmentModel {
+  root: Object3D;
+  parts: Object3D[];
+  geometries: Geometry[];
+  materials: Material[];
+}
+
+type JsonResponse = {
+  ok: boolean;
+  json(): Promise<unknown>;
+};
+
+type ModelFetcher = (input: RequestInfo | URL) => Promise<JsonResponse>;
+
+const resourceId = (value: string): { namespace: string; path: string } | null => {
+  const match = /^([a-z0-9_.-]+):([a-z0-9_./-]+)$/.exec(value);
+  return match ? { namespace: match[1]!, path: match[2]! } : null;
+};
+
+const isNumberArray = (value: unknown, multiple: number): value is number[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.length % multiple === 0 &&
+  value.every(Number.isFinite);
+
+const parseModel = (value: unknown, item: string): PublishedItemModel | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const model = value as Record<string, unknown>;
+  if (model.format !== 1 || model.item !== item || !Array.isArray(model.groups)) return null;
+  const groups: PublishedGroup[] = [];
+  for (const raw of model.groups) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const group = raw as Record<string, unknown>;
+    if (
+      !Number.isInteger(group.tint) ||
+      !isNumberArray(group.positions, 18) ||
+      !isNumberArray(group.uvs, 12) ||
+      group.positions.length / 3 !== group.uvs.length / 2
+    )
+      return null;
+    if (
+      group.texture != null &&
+      (typeof group.texture !== "string" ||
+        group.texture.startsWith("/") ||
+        group.texture.includes(".."))
+    )
+      return null;
+    groups.push({
+      ...(typeof group.texture === "string" ? { texture: group.texture } : {}),
+      tint: group.tint as number,
+      positions: group.positions,
+      uvs: group.uvs,
+    });
+  }
+  return {
+    format: 1,
+    item,
+    groups,
+    ...(typeof model.fingerprint === "string" ? { fingerprint: model.fingerprint } : {}),
+  };
+};
+
+/**
+ * Loads server-published BlueMap3D item geometry and turns it directly into Three.js meshes.
+ * Minecraft resource-pack semantics have already been resolved server-side by BlueMap3D.
+ */
+export class EquipmentModelLoader {
+  private readonly models = new Map<string, Promise<PublishedItemModel | null>>();
+  private readonly textures = new Map<string, Promise<Texture | null>>();
+  private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
+
+  constructor(
+    private readonly api: BlueMapRuntime,
+    private readonly base: string,
+    private readonly fetcher: ModelFetcher = (input) => fetch(input),
+  ) {
+    this.textureLoader = new api.Three.TextureLoader();
+  }
+
+  dispose(): void {
+    for (const pending of this.textures.values()) {
+      void pending.then((texture) => texture?.dispose());
+    }
+    this.textures.clear();
+    this.models.clear();
+  }
+
+  async build(item: string): Promise<BuiltEquipmentModel | null> {
+    const model = await this.model(item);
+    if (!model?.groups.length) return null;
+
+    const root = new this.api.Three.Group();
+    const parts: Object3D[] = [];
+    const geometries: Geometry[] = [];
+    const materials: Material[] = [];
+
+    try {
+      for (const group of model.groups) {
+        const geometry = new this.api.Three.BufferGeometry();
+        geometry.setAttribute(
+          "position",
+          new this.api.Three.Float32BufferAttribute(new Float32Array(group.positions), 3),
+        );
+        geometry.setAttribute(
+          "uv",
+          new this.api.Three.Float32BufferAttribute(new Float32Array(group.uvs), 2),
+        );
+
+        const texture = group.texture ? await this.loadTexture(group.texture) : null;
+        const material = new this.api.Three.MeshBasicMaterial({
+          color: group.tint,
+          ...(texture ? { map: texture } : {}),
+          transparent: true,
+          alphaTest: 0.05,
+          side: this.api.Three.DoubleSide,
+          depthTest: true,
+          depthWrite: true,
+        });
+        const mesh = new this.api.Three.Mesh(geometry, material);
+        root.add(mesh);
+        parts.push(mesh);
+        geometries.push(geometry);
+        materials.push(material);
+      }
+      if (!parts.length) return null;
+      return { root, parts, geometries, materials };
+    } catch {
+      for (const material of materials) material.dispose();
+      for (const geometry of geometries) geometry.dispose();
+      return null;
+    }
+  }
+
+  private model(item: string): Promise<PublishedItemModel | null> {
+    const id = resourceId(item);
+    if (!id) return Promise.resolve(null);
+    const cached = this.models.get(item);
+    if (cached) return cached;
+
+    const relative =
+      "models/" +
+      encodeURIComponent(id.namespace) +
+      "/" +
+      id.path
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/") +
+      ".json";
+    const url = new URL(relative, this.base);
+    const promise = this.fetcher(url)
+      .then(async (response) => (response.ok ? parseModel(await response.json(), item) : null))
+      .catch(() => null)
+      .then((model) => {
+        // A model can be requested before the publisher sees a newly registered item.
+        // Do not turn that transient 404 into a permanent browser cache entry.
+        if (!model) this.models.delete(item);
+        return model;
+      });
+    this.models.set(item, promise);
+    return promise;
+  }
+
+  private loadTexture(relative: string): Promise<Texture | null> {
+    const url = new URL(relative, this.base).href;
+    const cached = this.textures.get(url);
+    if (cached) return cached;
+
+    const promise = new Promise<Texture | null>((resolve) => {
+      this.textureLoader.load(
+        url,
+        (texture) => {
+          texture.flipY = true;
+          if (this.api.Three.NearestFilter !== undefined) {
+            texture.magFilter = this.api.Three.NearestFilter;
+            texture.minFilter = this.api.Three.NearestFilter;
+          }
+          texture.generateMipmaps = false;
+          texture.needsUpdate = true;
+          resolve(texture);
+        },
+        undefined,
+        () => {
+          this.textures.delete(url);
+          resolve(null);
+        },
+      );
+    });
+    this.textures.set(url, promise);
+    return promise;
+  }
+}

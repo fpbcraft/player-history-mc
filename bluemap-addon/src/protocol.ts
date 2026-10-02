@@ -162,6 +162,19 @@ export const parseStateRecords = (value: unknown): StateRecord[] => {
   });
 };
 
+const parseLiveStates = (value: unknown): Record<string, JsonObject> => {
+  if (value === undefined) return {};
+  if (!isObject(value)) throw new Error("Invalid live player states");
+  const states: Record<string, JsonObject> = {};
+  for (const [player, state] of Object.entries(value)) {
+    if (!/^\d+$/.test(player) || !isObject(state)) {
+      throw new Error("Invalid live player state");
+    }
+    states[player] = state as JsonObject;
+  }
+  return states;
+};
+
 export const parseLiveSnapshot = (value: unknown): LiveSnapshot => {
   if (!isObject(value) || value.protocolVersion !== 2) throw new Error("Invalid live snapshot");
   return {
@@ -170,6 +183,7 @@ export const parseLiveSnapshot = (value: unknown): LiveSnapshot => {
     registry: parseRegistry(value.registry),
     points: Array.isArray(value.points) ? value.points.slice(-20_000).map(parsePoint) : [],
     events: Array.isArray(value.events) ? value.events.slice(-1_000).map(parseEvent) : [],
+    states: parseLiveStates(value.states),
   };
 };
 

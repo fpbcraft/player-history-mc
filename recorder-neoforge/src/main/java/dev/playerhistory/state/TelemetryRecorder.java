@@ -153,6 +153,7 @@ public final class TelemetryRecorder {
       values.put("swimming", p.isSwimming());
       values.put("elytra", p.isFallFlying());
       values.put("sleeping", p.isSleeping());
+      values.put("onGround", p.onGround());
       values.put("onFire", p.isOnFire());
       values.put("frozen", p.getTicksFrozen());
     }
