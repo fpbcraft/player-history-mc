@@ -601,7 +601,6 @@ export class HistoryScene3D {
 
   private applyPose(avatar: PlayerAvatar): void {
     const state = avatar.state;
-    const sprinting = state.sprinting === true;
     const sneaking = state.sneaking === true;
     const swimming = state.swimming === true;
     const elytra = state.elytra === true;
@@ -627,7 +626,10 @@ export class HistoryScene3D {
     let modelY = 0;
     let modelPitch = 0;
     let torsoPitch = 0;
-    let rightArm = Math.sin(avatar.phase) * avatar.walking * (sprinting ? 1.35 : 1);
+    let rightArm =
+      Math.sin(avatar.phase) *
+      avatar.walking *
+      (state.sprinting === true ? 1.35 : 1);
     let leftArm = -rightArm;
     let rightLeg = -rightArm;
     let leftLeg = rightArm;
