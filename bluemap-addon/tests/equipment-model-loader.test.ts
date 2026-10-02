@@ -349,3 +349,41 @@ test("equipment loader rejects unsafe or invalid armor descriptors", async () =>
   assert.equal(await loader.armor("example:bad"), null);
   assert.equal(await loader.armor("example:bad"), null);
 });
+
+
+test("equipment loader cache-busts descriptors and textures by build", async () => {
+  textureUrls.length = 0;
+  const requested: string[] = [];
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async (input) => {
+      requested.push(String(input));
+      return {
+        ok: true,
+        json: async () => ({
+          format: 2,
+          item: "example:armor_chest",
+          kind: "layers",
+          layer: 1,
+          layers: [
+            {
+              texture: "textures/example/models/armor/test_layer_1.png",
+              dyeable: false,
+            },
+          ],
+        }),
+      };
+    },
+    "1.0.0-dev.deadbeef",
+  );
+
+  const armor = await loader.armor("example:armor_chest");
+  assert.ok(armor);
+  assert.deepEqual(requested, [
+    "https://map.example/player-history/equipment/armor/example/armor_chest.json?v=1.0.0-dev.deadbeef",
+  ]);
+  assert.deepEqual(textureUrls, [
+    "https://map.example/player-history/equipment/textures/example/models/armor/test_layer_1.png?v=1.0.0-dev.deadbeef",
+  ]);
+});
