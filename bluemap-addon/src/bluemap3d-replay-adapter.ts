@@ -5,16 +5,28 @@ import type {
   ObjectRegistryEntry,
 } from "./types.js";
 
+interface BlueMap3DLiveInstanceGroup {
+  mesh?: Object3D | null;
+  meshUrl?: string | null;
+}
+
 interface BlueMap3DLiveEntry {
   mesh: Object3D | null;
   meshUrl?: string | null;
   dimension?: string;
+  instanceGroups?: Record<string, BlueMap3DLiveInstanceGroup>;
 }
 
 interface BlueMap3DDiagnostics {
   objects: Record<string, BlueMap3DLiveEntry>;
   root: Object3D;
   createReplayMesh?: (url: string, label?: string) => Promise<Object3D>;
+  createReplayInstanceGroup?: (
+    url: string,
+    count: number,
+    label?: string,
+  ) => Promise<Object3D>;
+  setReplayInstances?: (mesh: Object3D, instances: readonly number[][]) => void;
   setReplayAnimation?: (mesh: Object3D, travel: number, timeSeconds: number) => void;
   setSuppressedObjects?: (ids: readonly string[]) => void;
 }
@@ -29,6 +41,7 @@ interface HistoricalMesh {
   key: string;
   source?: Object3D;
   clone: Object3D;
+  instanceGroups?: Map<string, Object3D>;
 }
 
 export interface ObjectReplayRenderStats {
@@ -137,6 +150,64 @@ export class BlueMap3DReplayAdapter {
 
       if (source && liveVersion !== null && liveVersion !== pose.geometry)
         geometryMismatch++;
+
+      if (pose.groups.length) {
+        const resolved = resolveInstanceGeometry(
+          identity,
+          pose,
+          live,
+          archivedByKey,
+          archiveBase,
+        );
+        if (
+          resolved &&
+          diagnostics.createReplayInstanceGroup &&
+          diagnostics.setReplayInstances
+        ) {
+          const key =
+            "instances:"
+            + resolved
+                .map(
+                  (group) =>
+                    `${group.id}=${group.url}#${group.count}`,
+                )
+                .join("|");
+          this.desired.set(pose.object, key);
+
+          const historical = this.meshes.get(pose.object);
+          if (
+            historical?.key === key &&
+            historical.instanceGroups
+          ) {
+            applyPose(historical.clone, pose);
+            for (const group of pose.groups) {
+              const mesh = historical.instanceGroups.get(group.id);
+              if (mesh) diagnostics.setReplayInstances(mesh, group.instances);
+            }
+            rendered++;
+          } else {
+            if (historical) {
+              this.root?.remove(historical.clone);
+              this.meshes.delete(pose.object);
+            }
+            this.loadArchivedInstances(
+              diagnostics,
+              pose.object,
+              key,
+              resolved,
+              identity.label,
+              pose,
+            );
+            unavailable++;
+          }
+          archived++;
+          continue;
+        }
+
+        this.desired.delete(pose.object);
+        unavailable++;
+        continue;
+      }
 
       if (liveMatches && source) {
         const key = `live:${live?.meshUrl ?? identity.provider + "/" + identity.sourceId}`;
@@ -284,6 +355,75 @@ export class BlueMap3DReplayAdapter {
     this.fallbackFrame = undefined;
   }
 
+  private loadArchivedInstances(
+    diagnostics: BlueMap3DDiagnostics,
+    object: number,
+    key: string,
+    groups: readonly ResolvedInstanceGeometry[],
+    label: string,
+    pose: ObjectPose,
+  ): void {
+    if (
+      this.pending.get(object) === key ||
+      !diagnostics.createReplayInstanceGroup ||
+      !diagnostics.setReplayInstances
+    )
+      return;
+
+    this.pending.set(object, key);
+    const generation = this.generation;
+
+    Promise.all(
+      groups.map(async (group) => ({
+        id: group.id,
+        mesh: await diagnostics.createReplayInstanceGroup?.(
+          group.url,
+          group.count,
+          `${label}:${group.id}`,
+        ),
+      })),
+    )
+      .then((loaded) => {
+        if (
+          generation !== this.generation ||
+          this.pending.get(object) !== key ||
+          this.desired.get(object) !== key ||
+          !this.root
+        )
+          return;
+
+        const root = new this.api.Three.Group();
+        const instanceGroups = new Map<string, Object3D>();
+        for (const group of loaded) {
+          if (!group.mesh) continue;
+          root.add(group.mesh);
+          instanceGroups.set(group.id, group.mesh);
+        }
+
+        prepareClone(root, label, object);
+        applyPose(root, pose);
+        for (const group of pose.groups) {
+          const mesh = instanceGroups.get(group.id);
+          if (mesh) diagnostics.setReplayInstances?.(mesh, group.instances);
+        }
+
+        this.pending.delete(object);
+        this.root.add(root);
+        this.meshes.set(object, {
+          key,
+          clone: root,
+          instanceGroups,
+        });
+      })
+      .catch((error: unknown) => {
+        if (this.pending.get(object) === key) this.pending.delete(object);
+        console.warn(
+          "[Player History] Could not load archived BlueMap3D instance geometry",
+          error,
+        );
+      });
+  }
+
   private loadArchived(
     diagnostics: BlueMap3DDiagnostics,
     object: number,
@@ -347,8 +487,60 @@ const prepareClone = (clone: Object3D, label: string, object: number): void => {
   clone.userData.playerHistoryObject = object;
 };
 
+interface ResolvedInstanceGeometry {
+  id: string;
+  url: string;
+  count: number;
+}
+
+const resolveInstanceGeometry = (
+  identity: ObjectRegistryEntry,
+  pose: ObjectPose,
+  live: BlueMap3DLiveEntry | undefined,
+  archivedByKey: ReadonlyMap<string, ObjectGeometryEntry>,
+  archiveBase: string | undefined,
+): ResolvedInstanceGeometry[] | null => {
+  const result: ResolvedInstanceGeometry[] = [];
+
+  for (const group of pose.groups) {
+    const sourceId = `${identity.sourceId}/@group/${group.id}`;
+    const archived = archivedByKey.get(
+      geometryKey(identity.provider, sourceId, group.geometry),
+    );
+
+    if (archived && archiveBase) {
+      result.push({
+        id: group.id,
+        url: new URL(archived.mesh, archiveBase).href,
+        count: group.instances.length,
+      });
+      continue;
+    }
+
+    const liveGroup = live?.instanceGroups?.[group.id];
+    if (
+      liveGroup?.meshUrl &&
+      geometryVersion(liveGroup.meshUrl) === group.geometry
+    ) {
+      result.push({
+        id: group.id,
+        url: liveGroup.meshUrl,
+        count: group.instances.length,
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  return result;
+};
+
 const replayFamilyPrefix = (provider: string, sourceId: string): string | null => {
   if (provider !== "simulated_ropes" && provider !== "simulated_springs") return null;
+  // Legacy pre-instancing history used child ids such as UUID/segment-4. New 1.2+
+  // history has one logical rope/spring id and must not suppress neighboring objects.
+  if (!/\/(?:segment|knot)-\d+$/.test(sourceId)) return null;
   const slash = sourceId.lastIndexOf("/");
   if (slash <= 0) return null;
   return `${provider}/${sourceId.slice(0, slash + 1)}`;
