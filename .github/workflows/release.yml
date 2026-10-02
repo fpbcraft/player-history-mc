@@ -51,6 +51,9 @@ jobs:
           cache: npm
           cache-dependency-path: bluemap-addon/package-lock.json
 
+      - name: Check release version tooling
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
       - name: Resolve release version
         id: release
         env:
