@@ -32,6 +32,9 @@ jobs:
           version="$(python3 scripts/release_version.py dev --base "$base" --sha "$SOURCE_SHA")"
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
           echo "PLAYER_HISTORY_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Check release version tooling
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
