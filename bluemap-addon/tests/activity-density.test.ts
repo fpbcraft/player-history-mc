@@ -26,7 +26,7 @@ test("activity density loads daily rows and aggregates accessible summary", asyn
   const starts: number[] = [];
   const result = await loadActivityDensity({
     from: 0,
-    to: DAY,
+    to: DAY + 60_000,
     count: 12,
     concurrency: 2,
     activityReady: true,
