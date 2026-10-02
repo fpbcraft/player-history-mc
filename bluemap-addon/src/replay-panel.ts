@@ -3,7 +3,7 @@ import { BlueMapAdapter } from "./bluemap-adapter.js";
 import { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { chatEventsBetween } from "./event-notifications.js";
-import { ObjectChunkCache, ObjectReplayEngine } from "./object-replay.js";
+import { ObjectReplaySession } from "./object-replay-session.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { LiveFeedState } from "./live-feed-state.js";
 import { loadHeatmapRange } from "./heatmap-loader.js";
@@ -37,7 +37,6 @@ import type {
   HistoryManifest,
   HistoryPoint,
   IntegrationMapping,
-  ObjectHistoryManifest,
 } from "./types.js";
 import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
 import { type ChatNotification, renderChatNotifications } from "./ui/chat-notification-view.js";
@@ -75,10 +74,7 @@ export class ReplayPanel extends HTMLElement {
   private telemetryCache: TelemetryCache | undefined;
   private adapter: BlueMapAdapter | undefined;
   private objectAdapter: BlueMap3DReplayAdapter | undefined;
-  private objectManifest: ObjectHistoryManifest | undefined;
-  private objectCache: ObjectChunkCache | undefined;
-  private objectEngine = new ObjectReplayEngine(32, 32767);
-  private objectLoadedBucket: number | undefined;
+  private objectReplay = new ObjectReplaySession(new URL("data/objects", BASE_URL).href);
   private fullTrails: ReplayEngine | null = null;
   private heatRows: HeatmapRow[] | null = null;
   private statusCoordinator!: StatusCoordinator;
@@ -256,8 +252,7 @@ export class ReplayPanel extends HTMLElement {
     this.liveFeed.reset();
     this.mobileQuery = matchMedia("(max-width: 600px)");
     this.engine = new ReplayEngine();
-    this.objectEngine = new ObjectReplayEngine(32, 32767);
-    this.objectLoadedBucket = undefined;
+    this.objectReplay.clear();
     this.names = new Map();
     this.selection = new Set();
     try {
@@ -835,34 +830,8 @@ export class ReplayPanel extends HTMLElement {
 
       if (this.opened) {
         const objectManifest = await this.historyClient.objectManifest(controller.signal);
-        this.objectManifest = objectManifest ?? undefined;
-        if (objectManifest) {
-          if (
-            !this.objectCache ||
-            this.objectCache.duration !== objectManifest.chunkDurationMs
-          ) {
-            this.objectCache?.clear();
-            this.objectCache = new ObjectChunkCache(
-              new URL("data/objects", BASE_URL).href,
-              objectManifest.chunkDurationMs,
-              undefined,
-              objectManifest.chunkRanges,
-            );
-            this.objectEngine = new ObjectReplayEngine(
-              objectManifest.positionScale,
-              objectManifest.quaternionScale,
-              objectManifest.scaleScale,
-            );
-            this.objectLoadedBucket = undefined;
-          }
-          this.objectCache.setAvailableRanges(objectManifest.chunkRanges);
-        } else {
-          this.objectCache?.clear();
-          this.objectCache = undefined;
-          this.objectLoadedBucket = undefined;
-          this.objectEngine.setPoints([]);
-          this.objectAdapter?.clear();
-        }
+        this.objectReplay.configure(objectManifest ?? undefined);
+        if (!objectManifest) this.objectAdapter?.clear();
       }
       if (!this.cache || this.cache.duration !== m.chunkDurationMs) {
         this.cache?.clear();
@@ -988,9 +957,7 @@ export class ReplayPanel extends HTMLElement {
     else this.requests.abort("activity");
     if (!this.cache) return;
     this.cache.clear();
-    this.objectCache?.clear();
-    this.objectEngine.setPoints([]);
-    this.objectLoadedBucket = undefined;
+    this.objectReplay.resetWindow();
     this.objectAdapter?.clear();
     this.windowState.reset();
     this.fullTrails = null;
@@ -1097,19 +1064,13 @@ export class ReplayPanel extends HTMLElement {
     const objectTime = this.clock.time;
     const request = this.windowState.begin(objectTime, this.cache.duration);
     try {
-      const [data, objectPoints] = await Promise.all([
+      const [data, objectWindow] = await Promise.all([
         this.cache.window(objectTime),
-        this.objectCache?.window(objectTime) ?? Promise.resolve([]),
+        this.objectReplay.window(objectTime),
       ]);
       if (!this.windowState.accept(request, this.clock.time, this.cache.duration)) return;
       this.engine.setPoints(data.points);
-      if (this.objectCache) {
-        this.objectEngine.setPoints(objectPoints);
-        this.objectLoadedBucket = Math.floor(objectTime / this.objectCache.duration);
-      } else {
-        this.objectEngine.setPoints([]);
-        this.objectLoadedBucket = undefined;
-      }
+      this.objectReplay.applyWindow(objectWindow);
       this.events = data.events;
       this.eventRevision++;
       this.windowState.markLoaded(request);
@@ -1164,12 +1125,6 @@ export class ReplayPanel extends HTMLElement {
     const key = this.worldKey();
     return this.manifest.registry.worlds.find((world) => world.key === key)?.id;
   }
-  private objectWorld(): number | undefined {
-    const key = this.worldKey();
-    if (!key || !this.objectManifest) return undefined;
-    const index = this.objectManifest.registry.worlds.indexOf(key);
-    return index >= 0 ? index : undefined;
-  }
   render() {
     if (!this.manifest || !this.cache) return;
     try {
@@ -1206,18 +1161,18 @@ export class ReplayPanel extends HTMLElement {
       }
       this.adapter.setPlayers(positions, this.names, this.manifest.registry.players);
 
-      if (this.objectAdapter && this.objectManifest && this.objectCache && !this.isLive) {
-        const objectWorld = this.objectWorld();
-        const objectReady =
-          Math.floor(this.clock.time / this.objectCache.duration) === this.objectLoadedBucket;
-        this.objectAdapter.setObjects(
-          objectReady && objectWorld !== undefined
-            ? this.objectEngine.poses(this.clock.time, objectWorld)
-            : [],
-          this.objectManifest.registry.objects,
-          this.objectManifest.geometries ?? [],
-          new URL("data/objects/", BASE_URL).href,
-        );
+      if (this.objectAdapter && !this.isLive) {
+        const objectFrame = this.objectReplay.frame(this.clock.time, this.worldKey());
+        if (objectFrame) {
+          this.objectAdapter.setObjects(
+            objectFrame.poses,
+            objectFrame.objects,
+            objectFrame.geometries,
+            new URL("data/objects/", BASE_URL).href,
+          );
+        } else {
+          this.objectAdapter.clear();
+        }
       } else {
         this.objectAdapter?.clear();
       }
@@ -1467,16 +1422,13 @@ export class ReplayPanel extends HTMLElement {
     this.lifecycle.dispose();
     this.requests.abortAll();
     this.cache?.clear();
-    this.objectCache?.clear();
+    this.objectReplay.clear();
     this.objectAdapter?.dispose();
     this.objectAdapter = undefined;
     this.adapter?.dispose();
     this.adapter = undefined;
     this.telemetryCache = undefined;
     this.cache = undefined;
-    this.objectCache = undefined;
-    this.objectManifest = undefined;
-    this.objectLoadedBucket = undefined;
     unmountReplayPanelView(this);
   }
 }
