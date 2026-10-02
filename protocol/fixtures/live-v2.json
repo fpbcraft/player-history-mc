@@ -12,6 +12,8 @@
   "states": {
     "1": {
       "yaw": 90,
+      "headYaw": 90,
+      "bodyYaw": 65,
       "pitch": 5,
       "sprinting": true,
       "onGround": true,
