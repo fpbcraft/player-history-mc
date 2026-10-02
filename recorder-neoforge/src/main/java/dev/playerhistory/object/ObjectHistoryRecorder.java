@@ -2,6 +2,7 @@ package dev.playerhistory.object;
 
 import dev.playerhistory.core.JsonFiles;
 import dev.playerhistory.core.PublishedChunkIndex;
+import dev.playerhistory.core.RetentionFiles;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
@@ -525,29 +526,13 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
   public void retention(long now) throws IOException {
     if (retentionDays < 0) return;
-    long cutoff =
-        Math.floorDiv(now - retentionDays * 86_400_000L, 86_400_000) * 86_400_000;
-    prune(root.resolve("tracks"), cutoff);
+    long cutoff = RetentionFiles.cutoffUtcDay(now, retentionDays);
+    RetentionFiles.pruneFlatDirectory(root.resolve("tracks"), cutoff);
     Path pub = publicRoot;
-    if (pub != null) prune(pub.resolve("chunks"), cutoff);
+    if (pub != null) RetentionFiles.pruneFlatDirectory(pub.resolve("chunks"), cutoff);
     geometryArchive.prune(cutoff);
     publishedChunks.removeBefore(cutoff);
     earliest = Math.max(earliest, cutoff);
-  }
-
-  private static void prune(Path dir, long cutoff) throws IOException {
-    if (!Files.exists(dir)) return;
-    try (var paths = Files.list(dir)) {
-      for (Path path : paths.filter(Files::isRegularFile).toList()) {
-        String name = path.getFileName().toString();
-        int dot = name.indexOf('.');
-        if (dot <= 0) continue;
-        try {
-          if (Long.parseLong(name.substring(0, dot)) < cutoff) Files.deleteIfExists(path);
-        } catch (NumberFormatException ignored) {
-        }
-      }
-    }
   }
 
   @Override
