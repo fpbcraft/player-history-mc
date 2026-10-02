@@ -28,8 +28,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          base="$(sed -n 's/^modVersion=//p' gradle.properties)"
-          version="$(python3 scripts/release_version.py dev --base "$base" --sha "$SOURCE_SHA")"
+          version="$(python3 scripts/release_version.py dev --sha "$SOURCE_SHA")"
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
           echo "PLAYER_HISTORY_VERSION=$version" >> "$GITHUB_ENV"
       - name: Check release version tooling
