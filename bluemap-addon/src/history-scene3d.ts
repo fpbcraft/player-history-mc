@@ -807,19 +807,15 @@ export class HistoryScene3D {
     slot: ArmorSlot,
     armor: Extract<LoadedArmorModel, { kind: "layer" }>,
   ): void {
-    const base = this.armorMaterial(
-      avatar,
-      armor.texture,
-      item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff),
-    );
-    this.addArmorParts(avatar, slot, base, 0);
-    if (armor.overlayTexture)
+    for (const [index, layer] of armor.layers.entries()) {
+      const color = layer.dyeable ? (item.color ?? 0xa06540) : 0xffffff;
       this.addArmorParts(
         avatar,
         slot,
-        this.armorMaterial(avatar, armor.overlayTexture, 0xffffff),
-        0.008,
+        this.armorMaterial(avatar, layer.texture, color),
+        index * 0.008,
       );
+    }
   }
 
   private addCustomArmor(
