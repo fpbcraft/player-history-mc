@@ -218,16 +218,7 @@ final class EquipmentAssetPublisher {
         String path = texturePath(texture);
         writePng(currentRoot, path, image);
 
-        String overlayPath = null;
-        if (layer.dyeable()) {
-          String overlay = texture + "_overlay";
-          BufferedImage overlayImage = currentBridge.texture(overlay);
-          if (overlayImage != null) {
-            overlayPath = texturePath(overlay);
-            writePng(currentRoot, overlayPath, overlayImage);
-          }
-        }
-        published.add(new ArmorLayer(path, overlayPath, layer.dyeable()));
+        published.add(new ArmorLayer(path, null, layer.dyeable()));
       }
       if (published.isEmpty()) return;
       writeArmorDescriptor(
