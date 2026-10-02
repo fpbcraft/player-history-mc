@@ -20,44 +20,43 @@ interface PublishedItemModel {
   groups: PublishedGroup[];
 }
 
-interface PublishedArmorTextureLayer {
-  texture: string;
-  dyeable: boolean;
-}
-
-interface PublishedLayerArmorModel {
-  format: 1;
-  item: string;
-  kind: "layer";
-  layer: 1 | 2;
-  layers: PublishedArmorTextureLayer[];
-}
-
-type ArmorParent =
+export type ArmorParent =
   | "head"
   | "torso"
   | "rightArm"
   | "leftArm"
   | "rightLeg"
   | "leftLeg";
-type ArmorSlot = "head" | "chest" | "legs" | "feet";
+export type ArmorSlot = "head" | "chest" | "legs" | "feet";
 
-interface PublishedCustomArmorPart {
+interface PublishedArmorLayer {
+  texture: string;
+  overlayTexture?: string | null;
+  dyeable?: boolean;
+}
+
+export interface PublishedArmorPart {
   parent: ArmorParent;
   slot: ArmorSlot;
   positions: number[];
   uvs: number[];
 }
 
-interface PublishedCustomArmorModel {
-  format: 1;
-  item: string;
-  kind: "custom";
-  texture: string;
-  parts: PublishedCustomArmorPart[];
-}
-
-type PublishedArmorModel = PublishedLayerArmorModel | PublishedCustomArmorModel;
+type PublishedArmorModel =
+  | {
+      format: 1 | 2;
+      item: string;
+      kind: "layers";
+      layer: 1 | 2;
+      layers: PublishedArmorLayer[];
+    }
+  | {
+      format: 2;
+      item: string;
+      kind: "custom";
+      texture: string;
+      parts: PublishedArmorPart[];
+    };
 
 export interface BuiltEquipmentModel {
   root: Object3D;
@@ -68,14 +67,18 @@ export interface BuiltEquipmentModel {
 
 export type LoadedArmorModel =
   | {
-      kind: "layer";
+      kind: "layers";
       layer: 1 | 2;
-      layers: { texture: Texture; dyeable: boolean }[];
+      layers: {
+        texture: Texture;
+        overlayTexture?: Texture;
+        dyeable: boolean;
+      }[];
     }
   | {
       kind: "custom";
       texture: Texture;
-      parts: PublishedCustomArmorPart[];
+      parts: PublishedArmorPart[];
     };
 
 type JsonResponse = {
@@ -102,16 +105,6 @@ const safeRelativePath = (value: unknown): value is string =>
   typeof value === "string" &&
   !value.startsWith("/") &&
   !value.includes("..");
-
-const armorParents = new Set([
-  "head",
-  "torso",
-  "rightArm",
-  "leftArm",
-  "rightLeg",
-  "leftLeg",
-]);
-const armorSlots = new Set(["head", "chest", "legs", "feet"]);
 
 const ARMOR_PARENTS = new Set<ArmorParent>([
   "head",
@@ -145,9 +138,10 @@ const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | nu
   const model = value as Record<string, unknown>;
   if (model.item !== item) return null;
 
-  // Backward compatibility for descriptors published by #42.
+  // #42 published one base texture and optional overlay directly.
   if (
     model.format === 1 &&
+    model.kind === undefined &&
     (model.layer === 1 || model.layer === 2) &&
     safeRelativePath(model.texture) &&
     (model.overlayTexture == null || safeRelativePath(model.overlayTexture))
@@ -183,6 +177,7 @@ const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | nu
       layers: layers as PublishedArmorLayer[],
     };
   }
+
   if (model.kind === "custom") {
     if (!safeRelativePath(model.texture) || !Array.isArray(model.parts)) return null;
     const parts: PublishedArmorPart[] = [];
@@ -233,11 +228,7 @@ const parseModel = (value: unknown, item: string): PublishedItemModel | null => 
       group.positions.length / 3 !== group.uvs.length / 2
     )
       return null;
-    if (
-      group.texture != null &&
-      !safeRelativePath(group.texture)
-    )
-      return null;
+    if (group.texture != null && !safeRelativePath(group.texture)) return null;
     groups.push({
       ...(typeof group.texture === "string" ? { texture: group.texture } : {}),
       tint: group.tint as number,
@@ -254,8 +245,8 @@ const parseModel = (value: unknown, item: string): PublishedItemModel | null => 
 };
 
 /**
- * Loads server-published BlueMap3D item geometry and turns it directly into Three.js meshes.
- * Minecraft resource-pack semantics have already been resolved server-side by BlueMap3D.
+ * Loads server-published equipment geometry. Minecraft/resource-pack semantics and
+ * custom-equipment discovery are resolved server-side; the browser only builds meshes.
  */
 export class EquipmentModelLoader {
   private readonly models = new Map<string, Promise<PublishedItemModel | null>>();
@@ -283,14 +274,13 @@ export class EquipmentModelLoader {
   async armor(item: string): Promise<LoadedArmorModel | null> {
     const model = await this.armorModel(item);
     if (!model) return null;
+
     if (model.kind === "custom") {
       const texture = await this.loadTexture(model.texture);
-      return texture
-        ? { kind: "custom", texture, parts: model.parts }
-        : null;
+      return texture ? { kind: "custom", texture, parts: model.parts } : null;
     }
 
-    const layers = [];
+    const layers: Extract<LoadedArmorModel, { kind: "layers" }>["layers"] = [];
     for (const layer of model.layers) {
       const texture = await this.loadTexture(layer.texture);
       if (!texture) continue;
@@ -397,13 +387,12 @@ export class EquipmentModelLoader {
         .map(encodeURIComponent)
         .join("/") +
       ".json";
-    const url = new URL(relative, this.base);
-    const promise = this.fetcher(url)
-      .then(async (response) => (response.ok ? parseModel(await response.json(), item) : null))
+    const promise = this.fetcher(new URL(relative, this.base))
+      .then(async (response) =>
+        response.ok ? parseModel(await response.json(), item) : null,
+      )
       .catch(() => null)
       .then((model) => {
-        // A model can be requested before the publisher sees a newly registered item.
-        // Do not turn that transient 404 into a permanent browser cache entry.
         if (!model) this.models.delete(item);
         return model;
       });
