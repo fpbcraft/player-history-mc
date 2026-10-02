@@ -27,6 +27,9 @@ class ObjectHistoryTest {
         qy,
         0,
         qw,
+        1,
+        1,
+        1,
         geometry);
   }
 
@@ -53,8 +56,8 @@ class ObjectHistoryTest {
 
   @Test
   void samplesMovementRotationGeometryAndDeparture() throws Exception {
-    long now = System.currentTimeMillis();
-    long start = Math.floorDiv(now, 60_000) * 60_000;
+    long start = 1_800_000_000_000L;
+    long now = start + 10_000;
     var options = new ObjectHistoryRecorder.Options(60_000, -1, 64, .25, 1, 30_000);
 
     try (var recorder =

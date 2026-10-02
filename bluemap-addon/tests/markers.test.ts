@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import { BlueMapAdapter, eventColor, meterLevels, playerColor } from "../src/bluemap-adapter.js";
+
+vi.mock("../src/history-scene3d.js", () => ({
+  HistoryScene3D: class {
+    root = { children: [], userData: {}, visible: true };
+
+    raycastObjects() {
+      return [];
+    }
+
+    setPlayers() {}
+
+    setPlayersVisible() {}
+
+    setPlayerVitals() {}
+
+    dispose() {}
+  },
+}));
+
 
 class Element {
   constructor() {
@@ -122,6 +141,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       createElementNS: () => new Element(),
       body: new Element(),
       addEventListener() {},
+      baseURI: "https://map.example/",
     };
     globalThis.window = { addEventListener() {} };
     globalThis.innerWidth = 800;
@@ -155,6 +175,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     };
     const adapter = new BlueMapAdapter(app, api);
     app.mapViewer.controlsManager = {
+      distance: 300,
       position: new Vector(),
       updateCamera() {
         this.updated = true;

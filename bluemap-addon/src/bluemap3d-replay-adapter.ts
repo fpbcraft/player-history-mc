@@ -46,12 +46,14 @@ export interface ObjectReplayRenderStats {
  * durable .bm3d copy from the object geometry archive.
  */
 export class BlueMap3DReplayAdapter {
-  private root?: Object3D;
-  private parentRoot?: Object3D;
+  private root: Object3D | undefined;
+  private parentRoot: Object3D | undefined;
   private readonly meshes = new Map<number, HistoricalMesh>();
   private readonly pending = new Map<number, string>();
   private readonly desired = new Map<number, string>();
   private hiddenSources = new Set<Object3D>();
+  private suppressedIds = new Set<string>();
+  private fallbackFrame: number | undefined;
   private generation = 0;
 
   constructor(private readonly api: BlueMapRuntime) {}
@@ -75,14 +77,31 @@ export class BlueMap3DReplayAdapter {
 
     this.ensureRoot(diagnostics.root);
     const identities = new Map(registry.map((entry) => [entry.id, entry]));
-    const suppressed = poses.flatMap((pose) => {
-      const identity = identities.get(pose.object);
-      return identity ? [`${identity.provider}/${identity.sourceId}`] : [];
+
+    // Historical replay owns the complete live surface of providers whose topology is
+    // itself dynamic. A current rope/spring can have a different family id or child count
+    // from the selected timestamp, so deriving suppression only from recorded source ids
+    // leaks present-day segments into historical playback. Suppress every live object for
+    // those providers and reconstruct only the historical objects below.
+    //
+    // Normal rigid providers remain exact-id only: replaying one Create contraption must
+    // never hide an unrelated present-day train/cable car.
+    const exactSuppressed = new Set(
+      registry.map((entry) => `${entry.provider}/${entry.sourceId}`),
+    );
+    const suppressed = Object.keys(diagnostics.objects).filter((id) => {
+      const slash = id.indexOf("/");
+      const provider = slash < 0 ? id : id.slice(0, slash);
+      return (
+        exactSuppressed.has(id) ||
+        REPLAY_OWNED_DYNAMIC_PROVIDERS.has(provider)
+      );
     });
+
     // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
     // the one-frame flash that occurred whenever its polling loop re-applied map visibility
     // after Player History hid a mesh.
-    diagnostics.setSuppressedObjects?.(suppressed);
+    this.syncLiveSuppression(diagnostics, suppressed);
 
     const archivedByKey = new Map(
       geometries.map((entry) => [
@@ -122,7 +141,7 @@ export class BlueMap3DReplayAdapter {
         geometryMismatch++;
 
       if (liveMatches && source) {
-        const key = `live:${live?.meshUrl ?? identity.provider + "/" + identity.sourceId}`;
+        const key = `live:${live?.meshUrl ?? `${identity.provider}/${identity.sourceId}`}`;
         this.desired.set(pose.object, key);
         let historical = this.meshes.get(pose.object);
         if (!historical || historical.key !== key || historical.source !== source) {
@@ -195,7 +214,7 @@ export class BlueMap3DReplayAdapter {
   }
 
   clear(): void {
-    window.__bluemap3d?.setSuppressedObjects?.([]);
+    this.syncLiveSuppression(window.__bluemap3d, []);
     this.generation++;
     for (const historical of this.meshes.values()) this.root?.remove(historical.clone);
     this.meshes.clear();
@@ -210,6 +229,61 @@ export class BlueMap3DReplayAdapter {
     if (this.root && this.parentRoot) this.parentRoot.remove(this.root);
     this.root = undefined;
     this.parentRoot = undefined;
+  }
+
+  private syncLiveSuppression(
+    diagnostics: BlueMap3DDiagnostics | undefined,
+    ids: readonly string[],
+  ): void {
+    this.suppressedIds = new Set(ids);
+
+    if (diagnostics?.setSuppressedObjects) {
+      diagnostics.setSuppressedObjects(ids);
+      this.stopFallbackSuppression();
+      return;
+    }
+
+    // Older BlueMap3D builds do not own replay suppression. Their feed poll can set a
+    // live mesh visible again while Player History is paused between replay updates, so
+    // keep the current live copies hidden from the render loop as a compatibility fallback.
+    if (this.suppressedIds.size > 0) this.ensureFallbackSuppression();
+    else this.stopFallbackSuppression();
+  }
+
+  private ensureFallbackSuppression(): void {
+    if (
+      this.fallbackFrame !== undefined ||
+      typeof window.requestAnimationFrame !== "function"
+    )
+      return;
+
+    const enforce = () => {
+      this.fallbackFrame = undefined;
+      if (this.suppressedIds.size === 0) return;
+
+      const diagnostics = window.__bluemap3d;
+      if (diagnostics?.objects) {
+        for (const id of this.suppressedIds) {
+          const mesh = diagnostics.objects[id]?.mesh;
+          if (mesh) mesh.visible = false;
+        }
+      }
+
+      if (
+        this.suppressedIds.size > 0 &&
+        typeof window.requestAnimationFrame === "function"
+      )
+        this.fallbackFrame = window.requestAnimationFrame(enforce);
+    };
+
+    this.fallbackFrame = window.requestAnimationFrame(enforce);
+  }
+
+  private stopFallbackSuppression(): void {
+    if (this.fallbackFrame === undefined) return;
+    if (typeof window.cancelAnimationFrame === "function")
+      window.cancelAnimationFrame(this.fallbackFrame);
+    this.fallbackFrame = undefined;
   }
 
   private loadArchived(
@@ -267,12 +341,18 @@ const applyPose = (mesh: Object3D, pose: ObjectPose): void => {
   mesh.visible = true;
   mesh.position.set(pose.x, pose.y, pose.z);
   mesh.quaternion.set(pose.qx, pose.qy, pose.qz, pose.qw);
+  mesh.scale.set(pose.sx, pose.sy, pose.sz);
 };
 
 const prepareClone = (clone: Object3D, label: string, object: number): void => {
   clone.name = `history:${label}`;
   clone.userData.playerHistoryObject = object;
 };
+
+const REPLAY_OWNED_DYNAMIC_PROVIDERS = new Set([
+  "simulated_ropes",
+  "simulated_springs",
+]);
 
 const geometryKey = (provider: string, sourceId: string, version: number): string =>
   `${provider}\u0000${sourceId}\u0000${version}`;

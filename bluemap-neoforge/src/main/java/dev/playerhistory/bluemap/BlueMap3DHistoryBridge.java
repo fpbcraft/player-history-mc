@@ -22,9 +22,13 @@ import org.joml.Quaternionf;
  * objects. This bridge samples that abstraction instead of depending on Create/Sable.
  */
 final class BlueMap3DHistoryBridge {
+  private static final Set<String> LEGACY_DEFAULT_PROVIDERS =
+      Set.of("create_contraptions", "sable_ships");
+
   private final Consumer<String> log;
   private boolean resolutionAttempted;
   private boolean connectedLogged;
+  private boolean legacyProviderMigrationLogged;
   private long nextSample;
   private volatile Path webRoot;
   private Object meshListener;
@@ -32,12 +36,15 @@ final class BlueMap3DHistoryBridge {
   private Method providersMethod;
   private Method providerIdMethod;
   private Method providerObjectsMethod;
+  private Method providerLifecycleMethod;
+  private Method lifecycleRecordHistoryMethod;
   private Method objectIdMethod;
   private Method objectLabelMethod;
   private Method objectDimensionMethod;
   private Method objectGeometryVersionMethod;
   private Method objectPositionMethod;
   private Method objectRotationMethod;
+  private Method objectScaleMethod;
 
   BlueMap3DHistoryBridge(Consumer<String> log) {
     this.log = log;
@@ -56,11 +63,31 @@ final class BlueMap3DHistoryBridge {
     if (!resolve()) return;
 
     Set<String> allow = new HashSet<>(enabledProviders);
+
+    // Before generic scene history, this exact pair was written into generated configs as
+    // the default. NeoForge keeps that value across upgrades, so merely changing the code
+    // default to an empty list does not opt existing installations into ropes, springs or
+    // future recordable providers. Treat only the exact legacy default as the old implicit
+    // default; any other non-empty list remains an intentional explicit allow-list.
+    boolean migratedLegacyDefault = allow.equals(LEGACY_DEFAULT_PROVIDERS);
+    if (migratedLegacyDefault) {
+      allow.clear();
+      if (!legacyProviderMigrationLogged) {
+        legacyProviderMigrationLogged = true;
+        log.accept(
+            "Migrated legacy BlueMap3D history provider default to all recordable providers.");
+      }
+    }
+    boolean explicitProviderList = !allow.isEmpty();
     try {
       Collection<?> providers = (Collection<?>) providersMethod.invoke(null);
       for (Object provider : providers) {
         String providerId = (String) providerIdMethod.invoke(provider);
-        if (!allow.contains(providerId)) continue;
+        if (explicitProviderList) {
+          if (!allow.contains(providerId)) continue;
+        } else if (!recordsHistory(provider)) {
+          continue;
+        }
 
         List<ObjectSnapshot> snapshots = new ArrayList<>();
         boolean complete = true;
@@ -86,7 +113,10 @@ final class BlueMap3DHistoryBridge {
 
       if (!connectedLogged) {
         connectedLogged = true;
-        log.accept("BlueMap3D object-history bridge active for providers " + allow);
+        log.accept(
+            explicitProviderList
+                ? "BlueMap3D object-history bridge active for configured providers " + allow
+                : "BlueMap3D object-history bridge active for all recordable providers");
       }
     } catch (ReflectiveOperationException | RuntimeException error) {
       log.accept("Cannot sample BlueMap3D object history: " + rootCause(error));
@@ -110,6 +140,10 @@ final class BlueMap3DHistoryBridge {
     long geometryVersion = ((Number) objectGeometryVersionMethod.invoke(object)).longValue();
     Vec3 position = (Vec3) objectPositionMethod.invoke(object);
     Quaternionf rotation = (Quaternionf) objectRotationMethod.invoke(object);
+    org.joml.Vector3f scale =
+        objectScaleMethod == null
+            ? new org.joml.Vector3f(1f, 1f, 1f)
+            : (org.joml.Vector3f) objectScaleMethod.invoke(object);
 
     return new ObjectSnapshot(
         sourceId,
@@ -122,6 +156,9 @@ final class BlueMap3DHistoryBridge {
         rotation.y,
         rotation.z,
         rotation.w,
+        scale.x,
+        scale.y,
+        scale.z,
         geometryVersion);
   }
 
@@ -137,17 +174,41 @@ final class BlueMap3DHistoryBridge {
       providersMethod = api.getMethod("providers");
       providerIdMethod = provider.getMethod("id");
       providerObjectsMethod = provider.getMethod("objects", ServerLevel.class);
+      try {
+        providerLifecycleMethod = provider.getMethod("lifecycle");
+        Class<?> lifecycle = Class.forName("dev.duzo.bluemap3d.api.SceneObjectLifecycle");
+        lifecycleRecordHistoryMethod = lifecycle.getMethod("recordHistory");
+      } catch (ReflectiveOperationException ignored) {
+        providerLifecycleMethod = null;
+        lifecycleRecordHistoryMethod = null;
+      }
       objectIdMethod = object.getMethod("id");
       objectLabelMethod = object.getMethod("label");
       objectDimensionMethod = object.getMethod("dimension");
       objectGeometryVersionMethod = object.getMethod("geometryVersion");
       objectPositionMethod = object.getMethod("position");
       objectRotationMethod = object.getMethod("rotation");
+      try {
+        objectScaleMethod = object.getMethod("scale");
+      } catch (NoSuchMethodException ignored) {
+        objectScaleMethod = null;
+      }
       installMeshListener(api);
       return true;
     } catch (ReflectiveOperationException error) {
       log.accept("BlueMap3D is not available; vehicle/object history is inactive.");
       return false;
+    }
+  }
+
+  private boolean recordsHistory(Object provider) {
+    if (providerLifecycleMethod == null || lifecycleRecordHistoryMethod == null) return true;
+    try {
+      Object lifecycle = providerLifecycleMethod.invoke(provider);
+      return lifecycle != null && Boolean.TRUE.equals(lifecycleRecordHistoryMethod.invoke(lifecycle));
+    } catch (ReflectiveOperationException | RuntimeException error) {
+      log.accept("Could not read BlueMap3D provider lifecycle; recording it by default: " + rootCause(error));
+      return true;
     }
   }
 

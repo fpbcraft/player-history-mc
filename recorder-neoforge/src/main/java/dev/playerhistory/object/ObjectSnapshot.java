@@ -11,6 +11,9 @@ public record ObjectSnapshot(
     float qy,
     float qz,
     float qw,
+    float sx,
+    float sy,
+    float sz,
     long geometryVersion) {
   public ObjectSnapshot {
     if (sourceId == null || sourceId.isBlank()) throw new IllegalArgumentException("sourceId");
@@ -21,6 +24,8 @@ public record ObjectSnapshot(
         || !Float.isFinite(qy)
         || !Float.isFinite(qz)
         || !Float.isFinite(qw)) throw new IllegalArgumentException("rotation");
+    if (!Float.isFinite(sx) || !Float.isFinite(sy) || !Float.isFinite(sz)
+        || sx < 0 || sy < 0 || sz < 0) throw new IllegalArgumentException("scale");
     label = label == null || label.isBlank() ? sourceId : label;
   }
 }

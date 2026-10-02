@@ -1,3 +1,4 @@
+import { activityRangeTooLarge, loadActivityDensity } from "./activity-density.js";
 import { BlueMapAdapter } from "./bluemap-adapter.js";
 import { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
@@ -5,6 +6,7 @@ import { chatEventsBetween } from "./event-notifications.js";
 import { ObjectChunkCache, ObjectReplayEngine } from "./object-replay.js";
 import { mapConcurrent } from "./history-loading.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
+import { loadHeatmapRange } from "./heatmap-loader.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
 import { PanelLifecycle, type PanelTimer } from "./panel-lifecycle.js";
@@ -20,9 +22,10 @@ import {
   UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import { BREAK, ChunkCache, CONTEXT, heatmapPlan, OFFLINE, ReplayEngine } from "./replay-core.js";
+import { BREAK, ChunkCache, CONTEXT, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
-import { addActivityBins, clamp, ReplayClock } from "./replay-state.js";
+import { clamp, ReplayClock } from "./replay-state.js";
+import { loadRangeEvents } from "./range-events-loader.js";
 import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
 import { describeState, eventDetails, TelemetryCache } from "./telemetry.js";
@@ -562,6 +565,7 @@ export class ReplayPanel extends HTMLElement {
       if (this.opened || this.heatEnabled) void this.refresh();
     }, 45000);
   }
+
   private async setHeatmapOverlay(enabled: boolean): Promise<void> {
     this.heatEnabled = enabled;
     preferences.saveHeatmap(enabled);
@@ -656,6 +660,10 @@ export class ReplayPanel extends HTMLElement {
   }
   close() {
     this.closeChoices();
+    // Closing history always returns the 3D scene to its live state. Do this directly
+    // instead of waiting for another render frame, otherwise provider suppression can
+    // outlive the panel and make live contraptions appear missing.
+    this.objectAdapter?.clear();
     this.opened = false;
     preferences.saveHistoryOpen(false);
     this.lifecycle.clearInterval(this.chatTimer);
@@ -743,6 +751,9 @@ export class ReplayPanel extends HTMLElement {
   }
   goNow() {
     this.isLive = true;
+    // Clear replay suppression immediately. render() normally does this too, but it can
+    // return early while manifests/windows are reloading.
+    this.objectAdapter?.clear();
     this.clock.isPlaying = false;
     if (this.clock.customRange) {
       this.clock.customRange = null;
@@ -842,6 +853,7 @@ export class ReplayPanel extends HTMLElement {
             this.objectEngine = new ObjectReplayEngine(
               objectManifest.positionScale,
               objectManifest.quaternionScale,
+              objectManifest.scaleScale,
             );
             this.objectLoadedBucket = undefined;
           }
@@ -912,6 +924,7 @@ export class ReplayPanel extends HTMLElement {
       this.clock.customRange = null;
       this.isLive = true;
     }
+    if (this.isLive) this.objectAdapter?.clear();
     if (!calendar && choice !== "dates")
       this.clock.rangeDuration =
         choice === "all"
@@ -939,11 +952,7 @@ export class ReplayPanel extends HTMLElement {
       return;
     }
     const count = Math.max(12, Math.min(96, Math.floor((chart.clientWidth || 720) / 10)));
-    const bins = Array(count).fill(0),
-      day = 86400000;
-    const first = Math.floor(from / day) * day,
-      last = Math.floor(to / day) * day;
-    if ((last - first) / day > 2000) {
+    if (activityRangeTooLarge(from, to)) {
       chart.replaceChildren();
       caption.textContent = "Choose a range of up to 2,000 days to show recording density";
       this.requests.finish("activity", controller);
@@ -951,34 +960,24 @@ export class ReplayPanel extends HTMLElement {
     }
     caption.textContent = "Loading recording density…";
     try {
-      const starts = Array.from(
-        { length: Math.floor((last - first) / day) + 1 },
-        (_, index) => first + index * day,
-      );
-      const days = await mapConcurrent(starts, this.loadingConcurrency(), (start) =>
-        this.historyClient.activity(start, controller.signal),
-      );
-      for (const rows of days) {
-        addActivityBins(bins, rows, from, to);
-      }
+      const result = await loadActivityDensity({
+        from,
+        to,
+        count,
+        concurrency: this.loadingConcurrency(),
+        activityReady: this.manifest.activityReady,
+        loadDay: (day) => this.historyClient.activity(day, controller.signal),
+      });
+      if (result.kind !== "ready") return;
       if (!this.requests.current("activity", controller) || !this.opened) return;
-      const max = Math.max(0, ...bins);
-      renderActivityHistogram(chart, { bins, from, to, formatTime: formatDate });
-      const total = Math.round(bins.reduce((a, b) => a + b, 0));
-      caption.textContent =
-        this.manifest.activityReady === false
-          ? "Recording density · history is still being indexed"
-          : max
-            ? "Recording density · all players · minute-level counts"
-            : "No recorded samples in this range";
-      chart.setAttribute(
-        "aria-label",
-        "Recording density: approximately " +
-          total.toLocaleString() +
-          " samples across " +
-          count +
-          " intervals. Taller bars mean more recorded samples.",
-      );
+      renderActivityHistogram(chart, {
+        bins: result.density.bins,
+        from,
+        to,
+        formatTime: formatDate,
+      });
+      caption.textContent = result.density.status;
+      chart.setAttribute("aria-label", result.density.ariaLabel);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
         caption.textContent = errorMessage(error);
@@ -1003,13 +1002,13 @@ export class ReplayPanel extends HTMLElement {
     this.requests.abort("heatmap");
     this.heatRows = null;
     this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
+    this.updateOverlays();
     if (this.opened) {
       this.loadRangeEvents();
       await this.loadWindow();
     } else {
       this.rangeEvents = [];
     }
-    this.updateOverlays();
     if (this.heatEnabled) void this.loadHeat();
   }
   sync() {
@@ -1388,27 +1387,25 @@ export class ReplayPanel extends HTMLElement {
     if (!this.cache || !this.manifest) return;
     const cache = this.cache;
     const controller = this.requests.start("range-events");
-    const starts = cache.chunkStarts(this.clock.from, this.clock.to, 5000);
-    if (starts.length > 5000) {
-      this.rangeEvents = [];
-      this.eventRevision++;
-      this.statusCoordinator.show(
-        "range",
-        "Event and chat history needs a range under 5,000 chunks",
-      );
-      return;
-    }
-    const events = [];
     try {
-      const chunks = await mapConcurrent(starts, this.loadingConcurrency(), (time) =>
-        cache.read(time, controller.signal),
-      );
-      for (const data of chunks) {
-        events.push(...data.events);
-        if (events.length > 100000) throw Error("Too many events in this range");
+      const result = await loadRangeEvents({
+        from: this.clock.from,
+        to: this.clock.to,
+        concurrency: this.loadingConcurrency(),
+        chunkStarts: (from, to, limit) => cache.chunkStarts(from, to, limit),
+        readChunk: (time) => cache.read(time, controller.signal),
+      });
+      if (result.kind === "too-large") {
+        this.rangeEvents = [];
+        this.eventRevision++;
+        this.statusCoordinator.show(
+          "range",
+          "Event and chat history needs a range under 5,000 chunks",
+        );
+        return;
       }
       if (controller.signal.aborted) return;
-      this.rangeEvents = events.sort((a, b) => a.point.time - b.point.time);
+      this.rangeEvents = result.events;
       this.eventRevision++;
       this.overlayKeys.timeline = null;
       this.overlayKeys.event = null;
@@ -1513,30 +1510,16 @@ export class ReplayPanel extends HTMLElement {
     const manifest = this.manifest;
     const controller = this.requests.start("heatmap");
     try {
-      const plan = heatmapPlan(this.clock.from, this.clock.to, manifest.chunkDurationMs),
-        cells = new Map();
-      for (const part of plan) {
-        for (const row of await this.historyClient.heatmap(
-          part.level,
-          part.time,
-          controller.signal,
-        )) {
-          const key = row.slice(0, 4).join(":"),
-            old = cells.get(key);
-          if (old) old[4] += row[4];
-          else cells.set(key, [...row]);
-          if (cells.size > 100000) throw Error("Heatmap exceeds the browser cell limit.");
-        }
-      }
+      const result = await loadHeatmapRange({
+        from: this.clock.from,
+        to: this.clock.to,
+        chunkDurationMs: manifest.chunkDurationMs,
+        loadPart: (level, time) => this.historyClient.heatmap(level, time, controller.signal),
+      });
       if (controller.signal.aborted) return;
-      this.heatRows = [...cells.values()];
+      this.heatRows = result.rows;
       this.heatVersion = (this.heatVersion || 0) + 1;
-      this.statusCoordinator.show(
-        "context",
-        cells.size
-          ? "Heatmap · time spent · completed recording chunks"
-          : "No completed heatmap data in this range",
-      );
+      this.statusCoordinator.show("context", result.status);
       this.updateOverlays();
     } catch (error) {
       this.report(error);

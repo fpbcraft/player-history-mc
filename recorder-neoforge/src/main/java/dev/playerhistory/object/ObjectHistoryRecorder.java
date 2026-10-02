@@ -1,6 +1,10 @@
 package dev.playerhistory.object;
 
+import dev.playerhistory.core.ChunkChannelIO;
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.PublishedChunkIndex;
+import dev.playerhistory.core.RetentionFiles;
+import dev.playerhistory.core.TemporaryChunkFiles;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
@@ -65,7 +69,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private final ArrayList<ObjectPoint> points = new ArrayList<>();
   private final ArrayList<ObjectPoint> pending = new ArrayList<>();
   private final ArrayDeque<ObjectPoint> live = new ArrayDeque<>();
-  private final NavigableSet<Long> publishedChunks = new TreeSet<>();
+  private final PublishedChunkIndex publishedChunks;
   private final ArrayDeque<Path> backfill = new ArrayDeque<>();
 
   private volatile boolean running = true;
@@ -88,6 +92,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     this.options = options;
     this.log = log;
     this.retentionDays = options.retentionDays();
+    this.publishedChunks = new PublishedChunkIndex(options.duration());
     this.queue = new ArrayBlockingQueue<>(options.queueCapacity());
 
     Files.createDirectories(root.resolve("tracks"));
@@ -148,6 +153,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
               || state.emitted.geometry() != point.geometry()
               || moved(state.emittedSnapshot, snapshot)
               || rotated(state.emittedSnapshot, snapshot)
+              || scaled(state.emittedSnapshot, snapshot)
               || now - state.lastWritten >= options.keyframeMs()
               || breakAll;
       if (changed) {
@@ -267,6 +273,14 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     return Math.toDegrees(2 * Math.acos(dot)) >= options.minimumRotationDegrees();
   }
 
+  private boolean scaled(ObjectSnapshot a, ObjectSnapshot b) {
+    if (a == null) return true;
+    float epsilon = 1f / ObjectPoint.SCALE_SCALE;
+    return Math.abs(a.sx() - b.sx()) >= epsilon
+        || Math.abs(a.sy() - b.sy()) >= epsilon
+        || Math.abs(a.sz() - b.sz()) >= epsilon;
+  }
+
   private void run() {
     try {
       while (running || !queue.isEmpty()) {
@@ -315,7 +329,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   }
 
   private void ensureChunk(long time) throws IOException {
-    long bucket = Math.floorDiv(time, options.duration()) * options.duration();
+    long bucket = TemporaryChunkFiles.bucketStart(time, options.duration());
     if (channel != null && bucket <= start) return;
 
     flush();
@@ -323,14 +337,22 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     start = bucket;
     points.clear();
 
-    Path file = root.resolve("tracks/" + start + ".tmp");
-    Path existing = root.resolve("tracks/" + start + ".bin");
+    Path tracks = root.resolve("tracks");
+    Path file = TemporaryChunkFiles.temporary(tracks, start);
+    Path existing = TemporaryChunkFiles.completed(tracks, start);
     if (Files.exists(existing)) {
       try (var in = Files.newInputStream(existing)) {
         points.addAll(ObjectBinaryCodec.read(in).points());
       }
-      Files.copy(existing, file, StandardCopyOption.REPLACE_EXISTING);
-      channel = FileChannel.open(file, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
+
+      // Always rewrite the currently-open chunk using the newest codec. Older v1
+      // chunks decode with unit scale, so upgrades are lossless for historical
+      // objects that predate scale recording.
+      channel = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+      var header = new ByteArrayOutputStream();
+      ObjectBinaryCodec.header(new DataOutputStream(header), start, options.duration());
+      write(header.toByteArray());
+      if (!points.isEmpty()) write(ObjectBinaryCodec.frame(points, start));
     } else {
       channel = FileChannel.open(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
       var header = new ByteArrayOutputStream();
@@ -401,33 +423,19 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private Map<String, Object> publicManifest() {
     var result = new LinkedHashMap<String, Object>();
     result.put("formatVersion", 1);
-    result.put("protocolVersion", 1);
+    result.put("protocolVersion", 2);
     result.put("generatedAt", System.currentTimeMillis());
     result.put("earliestTimestamp", earliest);
     result.put("latestTimestamp", latest);
     result.put("chunkDurationMs", options.duration());
-    result.put("chunkRanges", publishedChunkRanges());
+    result.put("chunkRanges", publishedChunks.ranges());
     result.put("positionScale", ObjectPoint.POSITION_SCALE);
     result.put("quaternionScale", ObjectPoint.QUATERNION_SCALE);
+    result.put("scaleScale", ObjectPoint.SCALE_SCALE);
     result.put("registry", registry.snapshot());
     result.put("geometryArchive", true);
     result.put("geometries", geometryArchive.entries());
     return result;
-  }
-
-  private List<long[]> publishedChunkRanges() {
-    var ranges = new ArrayList<long[]>();
-    long first = Long.MIN_VALUE, previous = Long.MIN_VALUE;
-    for (long chunk : publishedChunks) {
-      if (first == Long.MIN_VALUE) first = chunk;
-      else if (chunk != previous + options.duration()) {
-        ranges.add(new long[] {first, previous + options.duration()});
-        first = chunk;
-      }
-      previous = chunk;
-    }
-    if (first != Long.MIN_VALUE) ranges.add(new long[] {first, previous + options.duration()});
-    return ranges;
   }
 
   private void backfill() throws IOException {
@@ -436,19 +444,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     if (!pub.equals(backfillRoot)) {
       backfillRoot = pub;
       backfill.clear();
-      publishedChunks.clear();
-      Path chunks = pub.resolve("chunks");
-      if (Files.exists(chunks))
-        try (var files = Files.list(chunks)) {
-          for (Path file : files.filter(Files::isRegularFile).toList()) {
-            String name = file.getFileName().toString();
-            if (!name.endsWith(".json")) continue;
-            try {
-              publishedChunks.add(Long.parseLong(name.substring(0, name.length() - 5)));
-            } catch (NumberFormatException ignored) {
-            }
-          }
-        }
+      publishedChunks.indexJsonDirectory(pub.resolve("chunks"));
       try (var files = Files.list(root.resolve("tracks"))) {
         files.filter(path -> path.toString().endsWith(".bin")).sorted().forEach(backfill::add);
       }
@@ -470,37 +466,29 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
   private void finish() throws IOException {
     if (channel == null) return;
-    channel.force(false);
-    channel.close();
+    ChunkChannelIO.closeDurably(channel);
     channel = null;
-    JsonFiles.move(
-        root.resolve("tracks/" + start + ".tmp"), root.resolve("tracks/" + start + ".bin"));
+    TemporaryChunkFiles.complete(
+        TemporaryChunkFiles.temporary(root.resolve("tracks"), start), start);
   }
 
   private void write(byte[] data) throws IOException {
-    var buffer = java.nio.ByteBuffer.wrap(data);
-    while (buffer.hasRemaining()) channel.write(buffer);
-    bytes.addAndGet(data.length);
+    bytes.addAndGet(ChunkChannelIO.writeFully(channel, data));
   }
 
   private void recover() throws IOException {
-    try (var files = Files.list(root.resolve("tracks"))) {
-      for (Path file : files.filter(path -> path.toString().endsWith(".tmp")).toList()) {
-        try {
-          ObjectBinaryCodec.Read read;
-          try (var in = Files.newInputStream(file)) {
-            read = ObjectBinaryCodec.read(in);
-          }
-          try (var out = FileChannel.open(file, StandardOpenOption.WRITE)) {
-            out.truncate(read.validBytes());
-            out.force(false);
-          }
-          JsonFiles.move(file, file.resolveSibling(read.start() + ".bin"));
-          log.accept("Recovered object-history chunk " + read.start());
-        } catch (Exception error) {
-          log.accept("Quarantined corrupt object history " + file + ": " + error);
-          JsonFiles.move(file, file.resolveSibling(file.getFileName() + ".corrupt"));
+    for (Path file : TemporaryChunkFiles.list(root.resolve("tracks"))) {
+      try {
+        ObjectBinaryCodec.Read read;
+        try (var in = Files.newInputStream(file)) {
+          read = ObjectBinaryCodec.read(in);
         }
+        TemporaryChunkFiles.repair(file, read.validBytes(), channel -> {});
+        TemporaryChunkFiles.complete(file, read.start());
+        log.accept("Recovered object-history chunk " + read.start());
+      } catch (Exception error) {
+        log.accept("Quarantined corrupt object history " + file + ": " + error);
+        TemporaryChunkFiles.quarantine(file);
       }
     }
   }
@@ -533,29 +521,13 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
   public void retention(long now) throws IOException {
     if (retentionDays < 0) return;
-    long cutoff =
-        Math.floorDiv(now - retentionDays * 86_400_000L, 86_400_000) * 86_400_000;
-    prune(root.resolve("tracks"), cutoff);
+    long cutoff = RetentionFiles.cutoffUtcDay(now, retentionDays);
+    RetentionFiles.pruneFlatDirectory(root.resolve("tracks"), cutoff);
     Path pub = publicRoot;
-    if (pub != null) prune(pub.resolve("chunks"), cutoff);
+    if (pub != null) RetentionFiles.pruneFlatDirectory(pub.resolve("chunks"), cutoff);
     geometryArchive.prune(cutoff);
-    publishedChunks.removeIf(chunk -> chunk < cutoff);
+    publishedChunks.removeBefore(cutoff);
     earliest = Math.max(earliest, cutoff);
-  }
-
-  private static void prune(Path dir, long cutoff) throws IOException {
-    if (!Files.exists(dir)) return;
-    try (var paths = Files.list(dir)) {
-      for (Path path : paths.filter(Files::isRegularFile).toList()) {
-        String name = path.getFileName().toString();
-        int dot = name.indexOf('.');
-        if (dot <= 0) continue;
-        try {
-          if (Long.parseLong(name.substring(0, dot)) < cutoff) Files.deleteIfExists(path);
-        } catch (NumberFormatException ignored) {
-        }
-      }
-    }
   }
 
   @Override

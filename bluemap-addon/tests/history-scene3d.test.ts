@@ -31,6 +31,7 @@ class Q implements Quaternion3 {
 }
 class O implements Object3D {
   position = new P();
+  scale = new P();
   quaternion = new Q();
   visible = true;
   name = "";

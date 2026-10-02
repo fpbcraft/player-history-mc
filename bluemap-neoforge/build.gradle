@@ -2,12 +2,11 @@ plugins { id 'java-library'; id 'net.neoforged.moddev' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {
- exclusiveContent {
-  forRepository { maven { url = 'https://api.modrinth.com/maven' } }
-  filter { includeGroup 'maven.modrinth' }
- }
+  exclusiveContent {
+    forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+    filter { includeGroup 'maven.modrinth' }
+  }
 }
-
 neoForge { version = '21.1.248'; mods { playerhistory_bluemap { sourceSet sourceSets.main } } }
 tasks.register('buildViewer', Exec) {
  workingDir rootProject.file('bluemap-addon')
@@ -17,28 +16,21 @@ tasks.register('buildViewer', Exec) {
  inputs.file('../bluemap-addon/package-lock.json')
  inputs.file('../bluemap-addon/tsconfig.json')
  inputs.file('../bluemap-addon/build.mjs')
+ inputs.property 'playerHistoryVersion', project.version.toString()
  outputs.dir('../bluemap-addon/dist')
 }
-sourceSets.main.resources {
- srcDir('../bluemap-addon/dist')
- include '**/*.toml', '**/*.json', 'playerhistory_bluemap.mixins.json', 'player-history.js', 'player-history.css'
-}
+sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', 'player-history.js', 'player-history.css' }
 tasks.named('processResources') {
  dependsOn 'buildViewer'
  inputs.property 'version', project.version
  filesMatching('META-INF/neoforge.mods.toml') { expand version: project.version }
- doLast {
-  def mixinConfig = destinationDir.toPath().resolve('playerhistory_bluemap.mixins.json')
-  if (!java.nio.file.Files.isRegularFile(mixinConfig)) {
-   throw new GradleException("Missing packaged mixin config: " + mixinConfig)
-  }
- }
 }
 base { archivesName = 'player-history-bluemap' }
 
 neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); programArgument 'nogui' } }
 
+
 dependencies {
- implementation project(':recorder-neoforge')
- compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
+  implementation project(':recorder-neoforge')
+  compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
 }

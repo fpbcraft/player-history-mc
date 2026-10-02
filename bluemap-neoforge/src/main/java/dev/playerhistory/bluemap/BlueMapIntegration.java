@@ -31,7 +31,7 @@ public final class BlueMapIntegration {
     OBJECT_PROVIDERS =
         b.defineListAllowEmpty(
             "object-history.providers",
-            List.of("create_contraptions", "sable_ships"),
+            List.of(),
             () -> "",
             value -> value instanceof String);
     SPEC = b.build();
@@ -52,10 +52,7 @@ public final class BlueMapIntegration {
     container.registerConfig(ModConfig.Type.COMMON, SPEC);
     NeoForge.EVENT_BUS.addListener(this::start);
     NeoForge.EVENT_BUS.addListener(this::stop);
-    NeoForge.EVENT_BUS.addListener(this::tickPre);
     NeoForge.EVENT_BUS.addListener(this::tick);
-    NeoForge.EVENT_BUS.addListener(this::entityTickPre);
-    NeoForge.EVENT_BUS.addListener(this::entityTickPost);
     try {
       var type = Class.forName("de.bluecolored.bluemap.api.BlueMapAPI");
       type.getMethod("onEnable", Consumer.class)
@@ -99,24 +96,11 @@ public final class BlueMapIntegration {
     levels.clear();
   }
 
-  private void tickPre(net.neoforged.neoforge.event.tick.ServerTickEvent.Pre event) {
-    TickLoadTracker.beginServerTick();
-  }
-
   private void tick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
     objectHistory.tick(
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
     skins.tick(event.getServer(), worldRoot);
     serverOverlays.tick(event.getServer());
-    TickLoadTracker.endServerTick();
-  }
-
-  private void entityTickPre(net.neoforged.neoforge.event.tick.EntityTickEvent.Pre event) {
-    TickLoadTracker.entityPre(event.getEntity());
-  }
-
-  private void entityTickPost(net.neoforged.neoforge.event.tick.EntityTickEvent.Post event) {
-    TickLoadTracker.entityPost(event.getEntity());
   }
 
   private static Object call(

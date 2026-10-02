@@ -14,10 +14,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Consumer;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -25,70 +23,23 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.entity.BlockEntity;
 
 final class ServerOverlayPublisher {
   private static final int PUBLISH_INTERVAL_TICKS = 40;
-  private static final double LOAD_ALPHA = 0.35;
   private static final Gson GSON = new Gson();
-  private static final Set<String> CREATE_NON_MACHINE_IDS =
-      Set.of(
-          "track",
-          "track_station",
-          "track_signal",
-          "track_observer",
-          "display_board",
-          "display_link",
-          "nixie_tube",
-          "placard",
-          "seat",
-          "controls",
-          "redstone_contact",
-          "stock_link");
+
 
   record ChunkCell(int x, int z) {}
   record EntityCell(int x, int z, int total, int living, int items, int players) {}
-  record CreateMachineCell(
-      int x,
-      int z,
-      int machines,
-      int active,
-      int overstressed,
-      float averageRpm,
-      float maxRpm) {}
-  record TickLoadCell(
-      int x,
-      int z,
-      double mspt,
-      double chunkMspt,
-      double entityMspt,
-      double blockEntityMspt,
-      int entityTicks,
-      int blockEntityTicks) {}
   record DimensionData(
       List<ChunkCell> loaded,
       List<ChunkCell> pinned,
       List<EntityCell> entities,
-      List<ClaimsOverlaySource.ClaimCell> claims,
-      List<CreateMachineCell> create,
-      List<TickLoadCell> tickLoad) {}
+      List<ClaimsOverlaySource.ClaimCell> claims) {}
   record Snapshot(int version, long generatedAt, Map<String, DimensionData> dimensions) {}
 
-  private record LoadKey(String dimension, int x, int z) {}
-
-  private static final class SmoothedLoad {
-    double mspt;
-    double chunkMspt;
-    double entityMspt;
-    double blockEntityMspt;
-    int entityTicks;
-    int blockEntityTicks;
-    int missingWindows;
-  }
-
-  private final Consumer<String> log;
+  private final Consumer<String> log;  private final Consumer<String> log;
   private final ClaimsOverlaySource claims;
-  private final Map<LoadKey, SmoothedLoad> tickLoad = new HashMap<>();
   private volatile MinecraftServer server;
   private volatile Path output;
   private int ticks;
@@ -106,8 +57,6 @@ final class ServerOverlayPublisher {
     if (previous != server) {
       claims.stop();
       claims.start(server);
-      tickLoad.clear();
-      TickLoadTracker.drain();
     }
     publish();
   }
@@ -121,8 +70,6 @@ final class ServerOverlayPublisher {
     server = null;
     output = null;
     ticks = 0;
-    tickLoad.clear();
-    TickLoadTracker.drain();
   }
 
   void tick(MinecraftServer current) {
@@ -141,27 +88,7 @@ final class ServerOverlayPublisher {
       for (var claim : claims.snapshot())
         claimByDimension.computeIfAbsent(claim.dimension(), ignored -> new ArrayList<>()).add(claim);
 
-      TickLoadTracker.Window loadWindow = TickLoadTracker.drain();
-      updateTickLoad(loadWindow.samples());
-      var loadByDimension = new HashMap<String, List<TickLoadCell>>();
-      tickLoad.forEach(
-          (key, value) -> {
-            if (value.mspt < 0.0001) return;
-            loadByDimension
-                .computeIfAbsent(key.dimension(), ignored -> new ArrayList<>())
-                .add(
-                    new TickLoadCell(
-                        key.x(),
-                        key.z(),
-                        value.mspt,
-                        value.chunkMspt,
-                        value.entityMspt,
-                        value.blockEntityMspt,
-                        value.entityTicks,
-                        value.blockEntityTicks));
-          });
-
-      Map<String, DimensionData> dimensions = new TreeMap<>();
+      Map<String, DimensionData> dimensions = new TreeMap<>();      Map<String, DimensionData> dimensions = new TreeMap<>();
       for (ServerLevel level : current.getAllLevels()) {
         String key = level.dimension().location().toString();
         List<ClaimsOverlaySource.ClaimCell> dimensionClaims =
@@ -173,9 +100,7 @@ final class ServerOverlayPublisher {
                 loaded,
                 pinnedChunks(level, dimensionClaims),
                 entityDensity(level),
-                dimensionClaims,
-                createMachines(level, loaded),
-                List.copyOf(loadByDimension.getOrDefault(key, List.of()))));
+                dimensionClaims));
       }
       atomicWrite(
           destination,
@@ -185,41 +110,7 @@ final class ServerOverlayPublisher {
     }
   }
 
-  private void updateTickLoad(List<TickLoadTracker.Sample> samples) {
-    for (SmoothedLoad value : tickLoad.values()) value.missingWindows++;
-
-    for (TickLoadTracker.Sample sample : samples) {
-      LoadKey key = new LoadKey(sample.dimension(), sample.x(), sample.z());
-      SmoothedLoad value = tickLoad.computeIfAbsent(key, ignored -> new SmoothedLoad());
-      boolean hasPrevious = value.mspt > 0;
-      value.mspt = blend(value.mspt, sample.mspt(), hasPrevious);
-      value.chunkMspt = blend(value.chunkMspt, sample.chunkMspt(), hasPrevious);
-      value.entityMspt = blend(value.entityMspt, sample.entityMspt(), hasPrevious);
-      value.blockEntityMspt = blend(value.blockEntityMspt, sample.blockEntityMspt(), hasPrevious);
-      value.entityTicks = sample.entityTicks();
-      value.blockEntityTicks = sample.blockEntityTicks();
-      value.missingWindows = 0;
-    }
-
-    tickLoad.entrySet().removeIf(
-        entry -> {
-          SmoothedLoad value = entry.getValue();
-          if (value.missingWindows == 0) return false;
-          value.mspt *= 1.0 - LOAD_ALPHA;
-          value.chunkMspt *= 1.0 - LOAD_ALPHA;
-          value.entityMspt *= 1.0 - LOAD_ALPHA;
-          value.blockEntityMspt *= 1.0 - LOAD_ALPHA;
-          value.entityTicks = 0;
-          value.blockEntityTicks = 0;
-          return value.missingWindows > 5 || value.mspt < 0.0001;
-        });
-  }
-
-  private static double blend(double previous, double current, boolean hasPrevious) {
-    return hasPrevious ? previous * (1.0 - LOAD_ALPHA) + current * LOAD_ALPHA : current;
-  }
-
-  private static List<ChunkCell> pinnedChunks(
+  private static List<ChunkCell> pinnedChunks(  private static List<ChunkCell> pinnedChunks(
       ServerLevel level, List<ClaimsOverlaySource.ClaimCell> claims) {
     var positions = new HashSet<Long>();
     for (long packed : level.getForcedChunks()) positions.add(packed);
@@ -256,103 +147,7 @@ final class ServerOverlayPublisher {
     return result;
   }
 
-  private static List<CreateMachineCell> createMachines(
-      ServerLevel level, List<ChunkCell> loadedChunks) {
-    var result = new ArrayList<CreateMachineCell>();
-    for (ChunkCell cell : loadedChunks) {
-      var chunk = level.getChunkSource().getChunkNow(cell.x(), cell.z());
-      if (chunk == null) continue;
-
-      int machines = 0;
-      int active = 0;
-      int overstressed = 0;
-      float rpmTotal = 0;
-      float maxRpm = 0;
-      int rpmSamples = 0;
-
-      for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-        if (!isCreateMachine(blockEntity)) continue;
-
-        machines++;
-        Float rpm = reflectedFloat(blockEntity, "getSpeed");
-        if (rpm != null) {
-          float absoluteRpm = Math.abs(rpm);
-          if (absoluteRpm > 0.01f) active++;
-          rpmTotal += absoluteRpm;
-          maxRpm = Math.max(maxRpm, absoluteRpm);
-          rpmSamples++;
-        } else if (reflectedAnyBoolean(blockEntity, "isRunning", "isActive", "isProcessing")) {
-          active++;
-        }
-
-        if (reflectedBoolean(blockEntity, "isOverStressed")) overstressed++;
-      }
-
-      if (machines > 0)
-        result.add(
-            new CreateMachineCell(
-                cell.x(),
-                cell.z(),
-                machines,
-                active,
-                overstressed,
-                rpmSamples == 0 ? 0 : rpmTotal / rpmSamples,
-                maxRpm));
-    }
-    return result;
-  }
-
-  private static boolean isCreateMachine(BlockEntity blockEntity) {
-    var blockId = BuiltInRegistries.BLOCK.getKey(blockEntity.getBlockState().getBlock());
-    String path = blockId.getPath();
-    if ("create".equals(blockId.getNamespace()) && !isCreateInfrastructure(path)) return true;
-
-    for (Class<?> type = blockEntity.getClass(); type != null; type = type.getSuperclass()) {
-      String name = type.getName();
-      if (name.startsWith("com.simibubi.create.") && !isCreateInfrastructure(path)) return true;
-    }
-
-    return findOptionalMethod(blockEntity.getClass(), "getSpeed") != null
-        && !isCreateInfrastructure(path);
-  }
-
-  private static boolean isCreateInfrastructure(String path) {
-    if (CREATE_NON_MACHINE_IDS.contains(path)) return true;
-    return path.startsWith("track_")
-        || path.endsWith("_track")
-        || path.contains("signal")
-        || path.contains("station")
-        || path.contains("display");
-  }
-
-  private static Float reflectedFloat(Object target, String name) {
-    Method method = findOptionalMethod(target.getClass(), name);
-    if (method == null) return null;
-    try {
-      Object value = method.invoke(target);
-      return value instanceof Number number ? number.floatValue() : null;
-    } catch (ReflectiveOperationException ignored) {
-      return null;
-    }
-  }
-
-  private static boolean reflectedBoolean(Object target, String name) {
-    Method method = findOptionalMethod(target.getClass(), name);
-    if (method == null) return false;
-    try {
-      Object value = method.invoke(target);
-      return value instanceof Boolean flag && flag;
-    } catch (ReflectiveOperationException ignored) {
-      return false;
-    }
-  }
-
-  private static boolean reflectedAnyBoolean(Object target, String... names) {
-    for (String name : names) if (reflectedBoolean(target, name)) return true;
-    return false;
-  }
-
-  private static List<ChunkCell> loadedChunks(ServerLevel level) {
+  private static List<ChunkCell> loadedChunks(  private static List<ChunkCell> loadedChunks(ServerLevel level) {
     var result = new ArrayList<ChunkCell>();
     try {
       Object source = level.getChunkSource();

@@ -51,7 +51,6 @@ public final class HistoryStore implements AutoCloseable {
   private final ArrayDeque<HistoryEvent> liveEvents = new ArrayDeque<>();
   private long lastLiveFlush, lastFullLiveFlush;
   private final ArrayDeque<Point> livePoints = new ArrayDeque<>();
-
   private void publishLive(long now) throws IOException {
     while (!liveEvents.isEmpty()
         && (liveEvents.size() > 1000 || liveEvents.peekFirst().point().time() < now - 300000))
@@ -108,7 +107,7 @@ public final class HistoryStore implements AutoCloseable {
       inventoryDeltas = new AtomicLong();
   private final Map<Integer, Long> statePlayers = new HashMap<>();
   private final ArrayDeque<Path> stateBackfill = new ArrayDeque<>();
-  private final NavigableSet<Long> publishedChunks = new TreeSet<>();
+  private final PublishedChunkIndex publishedChunks;
   private final Map<String, Boolean> capabilities = new java.util.concurrent.ConcurrentHashMap<>();
   private volatile Map<String, Boolean> trackingEnabled = Map.of();
 
@@ -125,7 +124,7 @@ public final class HistoryStore implements AutoCloseable {
     result.put("earliestTimestamp", earliest);
     result.put("latestTimestamp", latest);
     result.put("chunkDurationMs", options.duration);
-    result.put("chunkRanges", publishedChunkRanges());
+    result.put("chunkRanges", publishedChunks.ranges());
     result.put("registry", registry.snapshot());
     result.put("capabilities", Map.copyOf(capabilities));
     result.put("trackingEnabled", trackingEnabled);
@@ -133,37 +132,6 @@ public final class HistoryStore implements AutoCloseable {
     result.put("activityReady", backfill.isEmpty());
     result.put("cellSize", options.cellSize);
     return result;
-  }
-
-  private List<long[]> publishedChunkRanges() {
-    var ranges = new ArrayList<long[]>();
-    long first = Long.MIN_VALUE, previous = Long.MIN_VALUE;
-    for (long chunk : publishedChunks) {
-      if (first == Long.MIN_VALUE) first = chunk;
-      else if (chunk != previous + options.duration) {
-        ranges.add(new long[] {first, previous + options.duration});
-        first = chunk;
-      }
-      previous = chunk;
-    }
-    if (first != Long.MIN_VALUE) ranges.add(new long[] {first, previous + options.duration});
-    return ranges;
-  }
-
-  private void indexPublishedChunks(Path publication) throws IOException {
-    publishedChunks.clear();
-    Path chunks = publication.resolve("chunks");
-    if (!Files.exists(chunks)) return;
-    try (var files = Files.list(chunks)) {
-      for (Path file : files.filter(Files::isRegularFile).toList()) {
-        String name = file.getFileName().toString();
-        if (!name.endsWith(".json")) continue;
-        try {
-          publishedChunks.add(Long.parseLong(name.substring(0, name.length() - 5)));
-        } catch (NumberFormatException ignored) {
-        }
-      }
-    }
   }
 
   private FileChannel channel;
@@ -187,6 +155,7 @@ public final class HistoryStore implements AutoCloseable {
     this.registry = registry;
     this.options = options;
     this.log = log;
+    publishedChunks = new PublishedChunkIndex(options.duration);
     queue = new ArrayBlockingQueue<>(options.queueCapacity);
     heatmaps = new HeatmapStore(root, options.duration, options.cellSize);
     Files.createDirectories(root.resolve("tracks"));
@@ -393,15 +362,16 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void ensureChunk(long time) throws IOException {
-    long bucket = Math.floorDiv(time, options.duration) * options.duration;
+    long bucket = TemporaryChunkFiles.bucketStart(time, options.duration);
     if (channel == null || start < 0 || bucket > start) {
       flush();
       finish();
       start = bucket;
       points.clear();
       events.clear();
-      Path file = root.resolve("tracks/" + start + ".tmp");
-      Path existing = root.resolve("tracks/" + start + ".bin");
+      Path tracks = root.resolve("tracks");
+      Path file = TemporaryChunkFiles.temporary(tracks, start);
+      Path existing = TemporaryChunkFiles.completed(tracks, start);
       if (Files.exists(existing)) {
         try (var in = Files.newInputStream(existing)) {
           var data = BinaryCodec.read(in);
@@ -444,9 +414,7 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void write(byte[] data) throws IOException {
-    var buffer = java.nio.ByteBuffer.wrap(data);
-    while (buffer.hasRemaining()) channel.write(buffer);
-    bytes.addAndGet(data.length);
+    bytes.addAndGet(ChunkChannelIO.writeFully(channel, data));
   }
 
   private void flush() throws IOException {
@@ -491,12 +459,11 @@ public final class HistoryStore implements AutoCloseable {
 
   private void finish() throws IOException {
     if (channel == null) return;
-    channel.force(false);
-    channel.close();
+    ChunkChannelIO.closeDurably(channel);
     channel = null;
     if (options.heatmap) heatmaps.flush(publicRoot, true);
-    JsonFiles.move(
-        root.resolve("tracks/" + start + ".tmp"), root.resolve("tracks/" + start + ".bin"));
+    TemporaryChunkFiles.complete(
+        TemporaryChunkFiles.temporary(root.resolve("tracks"), start), start);
   }
 
   private void backfill() throws IOException {
@@ -511,7 +478,7 @@ public final class HistoryStore implements AutoCloseable {
       }
       JsonFiles.write(root.resolve("publication.json"), pub.toAbsolutePath().toString());
       retention(System.currentTimeMillis());
-      indexPublishedChunks(pub);
+      publishedChunks.indexJsonDirectory(pub.resolve("chunks"));
       try (var files = Files.list(root.resolve("tracks"))) {
         files.filter(p -> p.toString().endsWith(".bin")).sorted().forEach(backfill::add);
       }
@@ -556,73 +523,54 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void recover() throws IOException {
-    try (var files = Files.list(root.resolve("tracks"))) {
-      for (Path f : files.filter(p -> p.toString().endsWith(".tmp")).toList()) {
-        try {
-          BinaryCodec.Read r;
-          try (var in = Files.newInputStream(f)) {
-            r = BinaryCodec.read(in);
-          }
-          try (var ch = FileChannel.open(f, StandardOpenOption.WRITE)) {
-            ch.truncate(r.validBytes());
-            ch.position(r.validBytes());
-            var tail = new HashMap<Integer, Point>();
-            for (var p : r.batch().points()) tail.put(p.player(), p);
-            var closed =
-                tail.values().stream()
-                    .filter(Point::online)
-                    .map(p -> p.with(p.time(), Point.OFFLINE | Point.BREAK))
-                    .toList();
-            var data =
-                java.nio.ByteBuffer.wrap(
-                    BinaryCodec.frame(new BinaryCodec.Batch(closed, List.of()), r.start()));
-            while (data.hasRemaining()) ch.write(data);
-            ch.force(false);
-          }
-          JsonFiles.move(f, f.resolveSibling(r.start() + ".bin"));
-          log.accept(
-              "Recovered history chunk "
-                  + r.start()
-                  + "; unfinished sessions closed at last durable sample");
-        } catch (Exception e) {
-          log.accept("Quarantined corrupt history " + f + ": " + e);
-          JsonFiles.move(f, f.resolveSibling(f.getFileName() + ".corrupt"));
+    for (Path file : TemporaryChunkFiles.list(root.resolve("tracks"))) {
+      try {
+        BinaryCodec.Read read;
+        try (var in = Files.newInputStream(file)) {
+          read = BinaryCodec.read(in);
         }
+        TemporaryChunkFiles.repair(
+            file,
+            read.validBytes(),
+            channel -> {
+              var tail = new HashMap<Integer, Point>();
+              for (var point : read.batch().points()) tail.put(point.player(), point);
+              var closed =
+                  tail.values().stream()
+                      .filter(Point::online)
+                      .map(point -> point.with(point.time(), Point.OFFLINE | Point.BREAK))
+                      .toList();
+              var data =
+                  java.nio.ByteBuffer.wrap(
+                      BinaryCodec.frame(new BinaryCodec.Batch(closed, List.of()), read.start()));
+              while (data.hasRemaining()) channel.write(data);
+            });
+        TemporaryChunkFiles.complete(file, read.start());
+        log.accept(
+            "Recovered history chunk "
+                + read.start()
+                + "; unfinished sessions closed at last durable sample");
+      } catch (Exception error) {
+        log.accept("Quarantined corrupt history " + file + ": " + error);
+        TemporaryChunkFiles.quarantine(file);
       }
     }
   }
 
   public void retention(long now) throws IOException {
     if (retentionDays < 0) return;
-    long cutoff = Math.floorDiv(now - retentionDays * 86_400_000L, 86_400_000) * 86_400_000;
-    prune(root.resolve("tracks"), cutoff);
-    prune(root.resolve("states"), cutoff);
-    prune(root.resolve("heatmap"), cutoff);
+    long cutoff = RetentionFiles.cutoffUtcDay(now, retentionDays);
+    RetentionFiles.pruneHistoryTree(root.resolve("tracks"), cutoff);
+    RetentionFiles.pruneHistoryTree(root.resolve("states"), cutoff);
+    RetentionFiles.pruneHistoryTree(root.resolve("heatmap"), cutoff);
     if (retentionRoot != null) {
-      prune(retentionRoot.resolve("chunks"), cutoff);
-      prune(retentionRoot.resolve("states"), cutoff);
-      prune(retentionRoot.resolve("heatmap"), cutoff);
-      prune(retentionRoot.resolve("activity"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("chunks"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("states"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("heatmap"), cutoff);
+      RetentionFiles.pruneHistoryTree(retentionRoot.resolve("activity"), cutoff);
     }
-    publishedChunks.removeIf(chunk -> chunk < cutoff);
+    publishedChunks.removeBefore(cutoff);
     earliest = Math.max(earliest, cutoff);
-  }
-
-  static void prune(Path dir, long cutoff) throws IOException {
-    if (!Files.exists(dir)) return;
-    try (var paths = Files.walk(dir)) {
-      for (Path p : paths.filter(Files::isRegularFile).toList()) {
-        String name = p.getFileName().toString();
-        if (!(name.endsWith(".bin")
-            || name.endsWith(".json")
-            || name.endsWith(".tmp")
-            || name.endsWith(".corrupt"))) continue;
-        try {
-          if (Long.parseLong(name.substring(0, name.indexOf('.'))) < cutoff) Files.delete(p);
-        } catch (NumberFormatException ignored) {
-        }
-      }
-    }
   }
 
   @Override

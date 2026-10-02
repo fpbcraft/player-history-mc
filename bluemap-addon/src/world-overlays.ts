@@ -1,7 +1,7 @@
 import type { BlueMapApp, BlueMapRuntime, MarkerSet, Object3D } from "./bluemap-types.js";
 import { preferences } from "./preferences.js";
 
-type OverlayKey = "heatmap" | "loaded" | "claims" | "entities" | "create" | "tick";
+type OverlayKey = "heatmap" | "loaded" | "claims" | "entities";
 type ServerOverlayKey = Exclude<OverlayKey, "heatmap">;
 
 interface ChunkCell { x: number; z: number }
@@ -17,29 +17,12 @@ interface ClaimCell extends ChunkCell {
   color: number;
   forceLoadMarked?: boolean;
 }
-interface CreateMachineCell extends ChunkCell {
-  machines: number;
-  active: number;
-  overstressed: number;
-  averageRpm: number;
-  maxRpm: number;
-}
-interface TickLoadCell extends ChunkCell {
-  mspt: number;
-  chunkMspt: number;
-  entityMspt: number;
-  blockEntityMspt: number;
-  entityTicks: number;
-  blockEntityTicks: number;
-}
 interface DimensionData {
   loaded?: ChunkCell[];
   pinned?: ChunkCell[];
   forced?: ChunkCell[];
   entities?: EntityCell[];
   claims?: ClaimCell[];
-  create?: CreateMachineCell[];
-  tickLoad?: TickLoadCell[];
 }
 interface ServerOverlaySnapshot {
   version: number;
@@ -50,7 +33,7 @@ interface Integration {
   mapWorlds?: Record<string, string>;
 }
 
-const SERVER_KEYS: ServerOverlayKey[] = ["loaded", "claims", "entities", "create", "tick"];
+const SERVER_KEYS: ServerOverlayKey[] = ["loaded", "claims", "entities"];
 const storageKey = (key: ServerOverlayKey) => `fpbcraft-map-overlay-${key}`;
 
 class WorldOverlayController {
@@ -77,8 +60,6 @@ class WorldOverlayController {
       loaded: localStorage.getItem(storageKey("loaded")) === "true",
       claims: localStorage.getItem(storageKey("claims")) === "true",
       entities: localStorage.getItem(storageKey("entities")) === "true",
-      create: localStorage.getItem(storageKey("create")) === "true",
-      tick: localStorage.getItem(storageKey("tick")) === "true",
     };
     this.root = new api.MarkerSet("fpbcraft-world-overlays", {
       label: "World overlays",
@@ -123,8 +104,6 @@ class WorldOverlayController {
       ["loaded", "Loaded chunks", "Currently loaded chunks · force-load marks outlined in gold"],
       ["claims", "OPAC regions", "Open Parties and Claims ownership"],
       ["entities", "Entity density", "Live entity count by chunk"],
-      ["create", "Create machinery", "Live Create/Create-addon machinery in loaded chunks · running / idle / overstressed"],
-      ["tick", "Tick load", "Measured chunk contribution to MSPT · chunk + entity + block-entity ticking"],
     ];
     for (const [key, label, description] of options) {
       const row = document.createElement("label");
@@ -297,68 +276,14 @@ class WorldOverlayController {
     } else {
       this.legend.replaceChildren();
     }
-    if (this.enabled.create) {
-      const rows = data.create ?? [];
-      this.setArea(
-        "create",
-        rows,
-        (row) => this.createColor(row as CreateMachineCell),
-        0.54,
-        118,
-        (row) => this.createOutlineColor(row as CreateMachineCell),
-      );
-    }
-    if (this.enabled.tick) {
-      const rows = data.tickLoad ?? [];
-      const values = rows.map((row) => row.mspt).sort((a, b) => a - b);
-      const p95 = values.length
-        ? values[Math.min(values.length - 1, Math.floor(values.length * 0.95))]!
-        : 1;
-      const scale = Math.max(0.01, p95);
-      this.setArea(
-        "tick",
-        rows,
-        (row) => this.tickLoadColor(row as TickLoadCell, scale, false),
-        0.58,
-        120,
-        (row) => this.tickLoadColor(row as TickLoadCell, scale, true),
-      );
-    }
-
     const entityCount = (data.entities ?? []).reduce((sum, row) => sum + row.total, 0);
-    const createRows = data.create ?? [];
-    const machineCount = createRows.reduce((sum, row) => sum + row.machines, 0);
-    const activeMachines = createRows.reduce((sum, row) => sum + row.active, 0);
-    const overstressed = createRows.reduce((sum, row) => sum + row.overstressed, 0);
-    const hottestChunk = Math.max(0, ...(data.tickLoad ?? []).map((row) => row.mspt));
     const age = Math.max(0, Math.round((Date.now() - snapshot.generatedAt) / 1000));
     this.status.textContent =
       `${data.loaded?.length ?? 0} loaded · ${pinned.length} force-load marked · ` +
-      `${entityCount} entities · ${data.claims?.length ?? 0} claimed · ` +
-      `${machineCount} Create machines (${activeMachines} running, ${overstressed} overstressed) · ` +
-      `hottest ${hottestChunk.toFixed(2)} mspt · ${age}s old`;
+      `${entityCount} entities · ${data.claims?.length ?? 0} claimed · ${age}s old`;
   }
 
-  private tickLoadColor(row: TickLoadCell, scale: number, outline: boolean) {
-    const normalized = Math.min(1, Math.log1p(row.mspt * 20) / Math.log1p(scale * 20));
-    const color = new this.api.Three.Color();
-    color.setHSL((1 - normalized) * 0.66, 1, outline ? 0.68 : 0.52);
-    return color;
-  }
-
-  private createColor(row: CreateMachineCell) {
-    if (row.overstressed > 0) return this.color("#ff5c5c");
-    if (row.active > 0) return this.color("#4fd1a1");
-    return this.color("#f0b75a");
-  }
-
-  private createOutlineColor(row: CreateMachineCell) {
-    if (row.overstressed > 0) return this.color("#ffaaaa");
-    if (row.active > 0) return this.color("#a9f1d8");
-    return this.color("#ffe0a3");
-  }
-
-  private renderClaimLegend(rows: ClaimCell[]): void {
+  private renderClaimLegend(rows: ClaimCell[]): void {  private renderClaimLegend(rows: ClaimCell[]): void {
     const owners = new Map<string, number>();
     for (const row of rows) owners.set(row.owner, row.color);
     this.legend.replaceChildren();

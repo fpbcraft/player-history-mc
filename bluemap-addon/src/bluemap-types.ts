@@ -70,6 +70,7 @@ export interface Matrix4 {
 
 export interface Object3D {
   position: Position3;
+  scale: Position3;
   quaternion: Quaternion3;
   visible: boolean;
   name: string;

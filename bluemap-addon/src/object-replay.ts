@@ -87,13 +87,25 @@ const slerp = (
 export class ObjectReplayEngine {
   readonly objects = new Map<number, ObjectHistoryPoint[]>();
   private readonly travel = new Map<number, number[]>();
+  private readonly positionScale: number;
+  private readonly quaternionScale: number;
+  private readonly scaleScale: number;
 
   constructor(
-    private readonly positionScale: number,
-    private readonly quaternionScale: number,
+    positionScale: number,
+    quaternionScale: number,
+    scaleOrPoints: number | ObjectHistoryPoint[] = 1024,
     points: ObjectHistoryPoint[] = [],
   ) {
-    this.setPoints(points);
+    this.positionScale = positionScale;
+    this.quaternionScale = quaternionScale;
+    if (Array.isArray(scaleOrPoints)) {
+      this.scaleScale = 1024;
+      this.setPoints(scaleOrPoints);
+    } else {
+      this.scaleScale = scaleOrPoints;
+      this.setPoints(points);
+    }
   }
 
   setPoints(points: ObjectHistoryPoint[]): void {
@@ -110,7 +122,11 @@ export class ObjectReplayEngine {
       for (let i = 1; i < history.length; i++) {
         const from = history[i - 1];
         const to = history[i];
-        cumulative[i] = cumulative[i - 1] + segmentTravel(from, to, this.positionScale, this.quaternionScale);
+        const previousTravel = cumulative[i - 1];
+        if (!from || !to || previousTravel === undefined) continue;
+        cumulative[i] =
+          previousTravel +
+          segmentTravel(from, to, this.positionScale, this.quaternionScale);
       }
       this.travel.set(id, cumulative);
     }
@@ -145,6 +161,9 @@ export class ObjectReplayEngine {
         qy: fromQ[1],
         qz: fromQ[2],
         qw: fromQ[3],
+        sx: from.sx / this.scaleScale,
+        sy: from.sy / this.scaleScale,
+        sz: from.sz / this.scaleScale,
         geometry: from.geometry,
         travel: this.travelAt(id, low - 1),
       };
@@ -163,6 +182,9 @@ export class ObjectReplayEngine {
       qy: rotation[1],
       qz: rotation[2],
       qw: rotation[3],
+      sx: (from.sx + (to.sx - from.sx) * ratio) / this.scaleScale,
+      sy: (from.sy + (to.sy - from.sy) * ratio) / this.scaleScale,
+      sz: (from.sz + (to.sz - from.sz) * ratio) / this.scaleScale,
       geometry: from.geometry,
       travel:
         this.travelAt(id, low - 1)

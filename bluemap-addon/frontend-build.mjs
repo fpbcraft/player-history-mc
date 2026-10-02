@@ -1,10 +1,18 @@
-import { mkdir, rm, stat, watch } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, watch } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const source = join(root, "src");
+const gradleProperties = join(root, "..", "gradle.properties");
+
+async function projectVersion() {
+  const properties = await readFile(gradleProperties, "utf8");
+  const match = properties.match(/^modVersion=(.+)$/m);
+  if (!match?.[1]?.trim()) throw new Error("gradle.properties is missing modVersion");
+  return match[1].trim();
+}
 
 export const outputDirectory = join(root, "dist");
 export const scriptOutput = join(outputDirectory, "player-history.js");
@@ -34,6 +42,7 @@ export async function verifyBundleSize(file = scriptOutput) {
 
 export async function createFrontendBuild({ onResult, outfile = scriptOutput } = {}) {
   await mkdir(outputDirectory, { recursive: true });
+  const version = await projectVersion();
   return context({
     entryPoints: [join(source, "player-history.ts")],
     outfile,
@@ -44,6 +53,9 @@ export async function createFrontendBuild({ onResult, outfile = scriptOutput } =
     sourcemap: false,
     minify: false,
     logLevel: onResult ? "silent" : "warning",
+    define: {
+      __PLAYER_HISTORY_VERSION__: JSON.stringify(version),
+    },
     plugins: onResult
       ? [
           {
