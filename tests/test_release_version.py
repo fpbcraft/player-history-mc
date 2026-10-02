@@ -27,32 +27,34 @@ class ReleaseVersionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must start with 'v'"):
             version_from_tag("1.2.3")
 
-    def test_development_version_uses_short_commit_sha(self) -> None:
+    def test_development_version_uses_only_short_commit_sha(self) -> None:
         self.assertEqual(
-            "1.2.3-dev.a1b2c3d4",
-            development_version("1.2.3", "a1b2c3d4e5f67890"),
+            "dev.a1b2c3d4",
+            development_version("a1b2c3d4e5f67890"),
         )
-        with self.assertRaisesRegex(ValueError, "stable semantic version"):
-            development_version("1.2.3-rc.1", "a1b2c3d4")
         with self.assertRaisesRegex(ValueError, "invalid git SHA"):
-            development_version("1.2.3", "not-a-sha")
+            development_version("not-a-sha")
 
-    def test_patch_minor_and_major_bumps_use_highest_stable_baseline(self) -> None:
-        tags = ["v1.2.2", "v1.3.0-beta.1", "not-a-release", "v1.1.9"]
-        self.assertEqual("1.2.4", next_version(tags, "patch", "1.2.3"))
-        self.assertEqual("1.3.0", next_version(tags, "minor", "1.2.3"))
-        self.assertEqual("2.0.0", next_version(tags, "major", "1.2.3"))
+    def test_patch_minor_and_major_bumps_use_highest_stable_tag(self) -> None:
+        tags = ["v1.2.3", "v1.3.0-beta.1", "not-a-release", "v1.1.9"]
+        self.assertEqual("1.2.4", next_version(tags, "patch"))
+        self.assertEqual("1.3.0", next_version(tags, "minor"))
+        self.assertEqual("2.0.0", next_version(tags, "major"))
 
     def test_existing_tag_can_advance_beyond_repository_default(self) -> None:
         self.assertEqual(
             "2.4.8",
-            next_version(["v2.4.7"], "patch", "1.9.9"),
+            next_version(["v2.4.7"], "patch"),
         )
+
+    def test_requires_stable_tag_without_exact_version(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no stable release tag"):
+            next_version(["v2.0.0-rc.1"], "patch")
 
     def test_exact_version_overrides_bump_and_can_be_prerelease(self) -> None:
         self.assertEqual(
             "3.0.0-rc.1",
-            next_version(["v2.0.0"], "patch", "2.0.0", "v3.0.0-rc.1"),
+            next_version(["v2.0.0"], "patch", "v3.0.0-rc.1"),
         )
 
 
