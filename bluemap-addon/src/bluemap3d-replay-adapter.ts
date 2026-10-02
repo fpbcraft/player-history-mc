@@ -141,7 +141,7 @@ export class BlueMap3DReplayAdapter {
         geometryMismatch++;
 
       if (liveMatches && source) {
-        const key = `live:${live?.meshUrl ?? identity.provider + "/" + identity.sourceId}`;
+        const key = `live:${live?.meshUrl ?? `${identity.provider}/${identity.sourceId}`}`;
         this.desired.set(pose.object, key);
         let historical = this.meshes.get(pose.object);
         if (!historical || historical.key !== key || historical.source !== source) {
