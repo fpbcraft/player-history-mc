@@ -6,6 +6,7 @@ import { chatEventsBetween } from "./event-notifications.js";
 import { ObjectReplaySession } from "./object-replay-session.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { LiveFeedState } from "./live-feed-state.js";
+import { LiveReplaySession } from "./live-replay-session.js";
 import { loadHeatmapRange } from "./heatmap-loader.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
@@ -22,7 +23,7 @@ import {
   UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import { ChunkCache, OFFLINE, ReplayEngine } from "./replay-core.js";
+import { ChunkCache, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { clamp, ReplayClock } from "./replay-state.js";
 import { ReplayWindowState } from "./replay-window-state.js";
@@ -53,6 +54,7 @@ declare global {
 }
 
 const BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
+const LIVE_POLL_INTERVAL_MS = 1_000;
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -108,6 +110,7 @@ export class ReplayPanel extends HTMLElement {
   private trailMode = 60_000;
   private chatNotifications: ChatNotification[] = [];
   private liveFeed = new LiveFeedState();
+  private liveReplay = new LiveReplaySession(LIVE_POLL_INTERVAL_MS);
 
   private setTrailProgress(completed: number, total: number): void {
     if (total <= 0) return;
@@ -250,6 +253,7 @@ export class ReplayPanel extends HTMLElement {
     this.livePoints = [];
     this.chatNotifications = [];
     this.liveFeed.reset();
+    this.liveReplay.reset();
     this.mobileQuery = matchMedia("(max-width: 600px)");
     this.engine = new ReplayEngine();
     this.objectReplay.clear();
@@ -551,7 +555,7 @@ export class ReplayPanel extends HTMLElement {
     this.lifecycle.frame((time) => this.tickFrame(time));
     const startLivePolling = () => {
       void this.pollLive();
-      this.lifecycle.interval(() => this.pollLive(), 1000);
+      this.lifecycle.interval(() => this.pollLive(), LIVE_POLL_INTERVAL_MS);
     };
     void this.refresh(true).then(startLivePolling);
     this.lifecycle.interval(() => {
@@ -631,8 +635,10 @@ export class ReplayPanel extends HTMLElement {
     this.trailMode = this.trailMode || 60000;
     this.q("trails").value = String(this.trailMode);
     preferences.saveTrails(this.trailMode);
+    this.liveReplay.reset();
     this.goNow();
     await this.refresh(true);
+    await this.pollLive();
   }
   async openChat() {
     const box = this.require<HTMLElement>(".history-chat-panel");
@@ -1146,13 +1152,7 @@ export class ReplayPanel extends HTMLElement {
       const ready = this.windowState.isLoaded(this.clock.time, this.cache.duration);
       let positions: HistoryPoint[] = [];
       if (this.isLive) {
-        const latest = new Map<number, HistoryPoint>();
-        for (const point of this.livePoints) {
-          if (point.world !== world || !this.selection.has(point.player)) continue;
-          const previous = latest.get(point.player);
-          if (!previous || point.time >= previous.time) latest.set(point.player, point);
-        }
-        positions = [...latest.values()].filter((point) => !(point.flags & OFFLINE));
+        positions = this.liveReplay.positions(this.selection, world);
       } else if (ready) {
         positions = [...this.selection]
           .map((id) => this.engine.position(id, this.clock.time))
@@ -1255,7 +1255,8 @@ export class ReplayPanel extends HTMLElement {
     this.liveLoading = true;
     const controller = this.requests.start("live");
     try {
-      const data = this.opened
+      const fullLive = this.opened;
+      const data = fullLive
         ? await this.historyClient.live(controller.signal)
         : await this.historyClient.presence(controller.signal);
       const update = this.liveFeed.apply(data);
@@ -1263,6 +1264,7 @@ export class ReplayPanel extends HTMLElement {
 
       this.livePoints = update.points;
       this.liveEvents = update.events;
+      if (fullLive) this.liveReplay.update(update.points, update.generatedAt);
       for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
       this.eventRevision++;
 
