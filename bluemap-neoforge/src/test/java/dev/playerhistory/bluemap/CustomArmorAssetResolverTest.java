@@ -82,6 +82,49 @@ final class CustomArmorAssetResolverTest {
   }
 
   @Test
+  void supportsStandardGeckoArmorSegmentBonesWithoutBipedParents() {
+    var root =
+        JsonParser.parseString(
+                """
+                {
+                  "minecraft:geometry": [{
+                    "description": {"texture_width":64,"texture_height":64},
+                    "bones": [
+                      {
+                        "name":"armorHead",
+                        "pivot":[0,24,0],
+                        "cubes":[{"origin":[-4,24,-4],"size":[8,8,8],"uv":[0,0]}]
+                      },
+                      {
+                        "name":"armorBody",
+                        "pivot":[0,24,0],
+                        "cubes":[{"origin":[-4,12,-2],"size":[8,12,4],"uv":[16,16]}]
+                      },
+                      {
+                        "name":"armorRightBoot",
+                        "pivot":[-2,12,0],
+                        "cubes":[{"origin":[-4,0,-2],"size":[4,4,4],"uv":[0,32]}]
+                      }
+                    ]
+                  }]
+                }
+                """)
+            .getAsJsonObject();
+
+    var model = CustomArmorAssetResolver.parseGeometry(root, "example:armor/test");
+    assertNotNull(model);
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("head") && part.slot().equals("head")));
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("torso") && part.slot().equals("chest")));
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("rightLeg") && part.slot().equals("feet")));
+  }
+
+  @Test
   void appliesGeckoAxisAndRotationConventions() {
     var root =
         JsonParser.parseString(
