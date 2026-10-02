@@ -11,12 +11,24 @@ async function projectVersion() {
   const releaseVersion = process.env.PLAYER_HISTORY_VERSION?.trim();
   if (releaseVersion) return releaseVersion;
 
-  const { stdout } = await execFileAsync("git", ["rev-parse", "--short=8", "HEAD"], {
-    cwd: join(root, ".."),
-  });
-  const sha = stdout.trim().toLowerCase();
+  const cwd = join(root, "..");
+  const [{ stdout: shaOutput }, { stdout: tagOutput }] = await Promise.all([
+    execFileAsync("git", ["rev-parse", "--short=8", "HEAD"], { cwd }),
+    execFileAsync("git", ["tag", "--merged", "HEAD", "--list", "v*"], { cwd }),
+  ]);
+  const sha = shaOutput.trim().toLowerCase();
   if (!/^[0-9a-f]{7,8}$/.test(sha)) throw new Error("Could not determine Git SHA");
-  return `dev.${sha}`;
+
+  const versions = tagOutput
+    .split(/\r?\n/)
+    .map((tag) => /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag.trim()))
+    .filter(Boolean)
+    .map((match) => match.slice(1).map(Number))
+    .sort((left, right) =>
+      right[0] - left[0] || right[1] - left[1] || right[2] - left[2],
+    );
+  if (!versions.length) throw new Error("Could not determine stable release tag");
+  return `${versions[0].join(".")}-dev.${sha}`;
 }
 
 export const outputDirectory = join(root, "dist");
