@@ -113,23 +113,87 @@ const armorParents = new Set([
 ]);
 const armorSlots = new Set(["head", "chest", "legs", "feet"]);
 
+const ARMOR_PARENTS = new Set<ArmorParent>([
+  "head",
+  "torso",
+  "rightArm",
+  "leftArm",
+  "rightLeg",
+  "leftLeg",
+]);
+const ARMOR_SLOTS = new Set<ArmorSlot>(["head", "chest", "legs", "feet"]);
+
+const parseArmorLayer = (value: unknown): PublishedArmorLayer | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const layer = value as Record<string, unknown>;
+  if (
+    !safeRelativePath(layer.texture) ||
+    (layer.overlayTexture != null && !safeRelativePath(layer.overlayTexture))
+  )
+    return null;
+  return {
+    texture: layer.texture,
+    ...(typeof layer.overlayTexture === "string"
+      ? { overlayTexture: layer.overlayTexture }
+      : {}),
+    ...(typeof layer.dyeable === "boolean" ? { dyeable: layer.dyeable } : {}),
+  };
+};
+
 const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const model = value as Record<string, unknown>;
-  if (model.format !== 1 || model.item !== item) return null;
+  if (model.item !== item) return null;
 
+  // Backward compatibility for descriptors published by #42.
+  if (
+    model.format === 1 &&
+    (model.layer === 1 || model.layer === 2) &&
+    safeRelativePath(model.texture) &&
+    (model.overlayTexture == null || safeRelativePath(model.overlayTexture))
+  ) {
+    return {
+      format: 1,
+      item,
+      kind: "layers",
+      layer: model.layer,
+      layers: [
+        {
+          texture: model.texture,
+          ...(typeof model.overlayTexture === "string"
+            ? { overlayTexture: model.overlayTexture }
+            : {}),
+          dyeable: typeof model.overlayTexture === "string",
+        },
+      ],
+    };
+  }
+
+  if (model.format !== 2) return null;
+  if (model.kind === "layers") {
+    if ((model.layer !== 1 && model.layer !== 2) || !Array.isArray(model.layers))
+      return null;
+    const layers = model.layers.map(parseArmorLayer);
+    if (!layers.length || layers.some((layer) => !layer)) return null;
+    return {
+      format: 2,
+      item,
+      kind: "layers",
+      layer: model.layer,
+      layers: layers as PublishedArmorLayer[],
+    };
+  }
   if (model.kind === "custom") {
-    if (!safeRelativePath(model.texture)) return null;
-    if (!Array.isArray(model.parts)) return null;
-    const parts: PublishedCustomArmorPart[] = [];
+    if (!safeRelativePath(model.texture) || !Array.isArray(model.parts)) return null;
+    const parts: PublishedArmorPart[] = [];
     for (const raw of model.parts) {
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
       const part = raw as Record<string, unknown>;
       if (
         typeof part.parent !== "string" ||
-        !armorParents.has(part.parent) ||
+        !ARMOR_PARENTS.has(part.parent as ArmorParent) ||
         typeof part.slot !== "string" ||
-        !armorSlots.has(part.slot) ||
+        !ARMOR_SLOTS.has(part.slot as ArmorSlot) ||
         !isNumberArray(part.positions, 18) ||
         !isNumberArray(part.uvs, 12) ||
         part.positions.length / 3 !== part.uvs.length / 2
@@ -142,57 +206,16 @@ const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | nu
         uvs: part.uvs,
       });
     }
+    if (!parts.length) return null;
     return {
-      format: 1,
+      format: 2,
       item,
       kind: "custom",
       texture: model.texture,
       parts,
     };
   }
-
-  if (model.layer !== 1 && model.layer !== 2) return null;
-
-  const layers: PublishedArmorTextureLayer[] = [];
-  if (Array.isArray(model.layers)) {
-    for (const raw of model.layers) {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-      const layer = raw as Record<string, unknown>;
-      if (
-        !safeRelativePath(layer.texture) ||
-        typeof layer.dyeable !== "boolean"
-      )
-        return null;
-      layers.push({
-        texture: layer.texture,
-        dyeable: layer.dyeable,
-      });
-    }
-  } else {
-    // Backward compatibility with descriptors emitted by #42.
-    if (!safeRelativePath(model.texture)) return null;
-    if (
-      model.overlayTexture != null &&
-      !safeRelativePath(model.overlayTexture)
-    )
-      return null;
-    const hasOverlay = typeof model.overlayTexture === "string";
-    layers.push({ texture: model.texture, dyeable: hasOverlay });
-    if (hasOverlay)
-      layers.push({
-        texture: model.overlayTexture as string,
-        dyeable: false,
-      });
-  }
-  if (!layers.length) return null;
-
-  return {
-    format: 1,
-    item,
-    kind: "layer",
-    layer: model.layer,
-    layers,
-  };
+  return null;
 };
 
 const parseModel = (value: unknown, item: string): PublishedItemModel | null => {
@@ -262,15 +285,26 @@ export class EquipmentModelLoader {
     if (!model) return null;
     if (model.kind === "custom") {
       const texture = await this.loadTexture(model.texture);
-      return texture ? { kind: "custom", texture, parts: model.parts } : null;
+      return texture
+        ? { kind: "custom", texture, parts: model.parts }
+        : null;
     }
-    const layers: { texture: Texture; dyeable: boolean }[] = [];
+
+    const layers = [];
     for (const layer of model.layers) {
       const texture = await this.loadTexture(layer.texture);
-      if (texture) layers.push({ texture, dyeable: layer.dyeable });
+      if (!texture) continue;
+      const overlayTexture = layer.overlayTexture
+        ? await this.loadTexture(layer.overlayTexture)
+        : null;
+      layers.push({
+        texture,
+        ...(overlayTexture ? { overlayTexture } : {}),
+        dyeable: layer.dyeable === true,
+      });
     }
     return layers.length
-      ? { kind: "layer", layer: model.layer, layers }
+      ? { kind: "layers", layer: model.layer, layers }
       : null;
   }
 
