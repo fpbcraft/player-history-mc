@@ -71,7 +71,10 @@ const skinBox = (
   depth: number,
 ): SkinBox => ({ u, v, width, height, depth });
 
-const PLAYER_HISTORY_SKIN_BUILD = "0.8.23";
+declare const __PLAYER_HISTORY_VERSION__: string;
+
+const PLAYER_HISTORY_SKIN_BUILD =
+  typeof __PLAYER_HISTORY_VERSION__ === "undefined" ? "dev" : __PLAYER_HISTORY_VERSION__;
 
 const SKIN = {
   head: skinBox(0, 0, 8, 8, 8),
