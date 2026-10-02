@@ -25,6 +25,7 @@ import { preferences } from "./preferences.js";
 import { ChunkCache, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { clamp, ReplayClock } from "./replay-state.js";
+import { ReplayWindowState } from "./replay-window-state.js";
 import { loadRangeEvents } from "./range-events-loader.js";
 import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
@@ -88,12 +89,10 @@ export class ReplayPanel extends HTMLElement {
   private panelState: ReplayPanelState = createReplayPanelState();
   private chatClient!: ChatClient;
   private chatToken = "";
-  private requestId = 0;
+  private windowState = new ReplayWindowState();
   private lastFrame = 0;
   private lastOverlay: number | undefined;
   private lastMap: string | undefined;
-  private loadedBucket: number | undefined;
-  private pendingBucket: number | undefined;
   private heatVersion = 0;
   private chatTimer: PanelTimer | undefined;
   private seekTimer: PanelTimer | undefined;
@@ -284,7 +283,7 @@ export class ReplayPanel extends HTMLElement {
     this.heatEnabled = preferences.heatmap();
     this.chatPinned = true;
     this.rangeEvents = [];
-    this.requestId = 0;
+    this.windowState.reset();
     this.statusCoordinator = new StatusCoordinator(this.require<HTMLElement>(".history-status"));
     this.chatClient = new ChatClient(() => this.chatToken);
     this.chatToken = preferences.chatToken();
@@ -993,8 +992,7 @@ export class ReplayPanel extends HTMLElement {
     this.objectEngine.setPoints([]);
     this.objectLoadedBucket = undefined;
     this.objectAdapter?.clear();
-    this.requestId++;
-    this.pendingBucket = this.loadedBucket = undefined;
+    this.windowState.reset();
     this.fullTrails = null;
     this.trailDataKey = null;
     this.requests.abort("trails");
@@ -1085,8 +1083,7 @@ export class ReplayPanel extends HTMLElement {
     this.sync();
     this.render();
     if (!this.cache) return;
-    const bucket = Math.floor(this.clock.time / this.cache.duration);
-    if (bucket !== this.loadedBucket && bucket !== this.pendingBucket) {
+    if (this.windowState.needsLoad(this.clock.time, this.cache.duration)) {
       // Throttle, rather than debounce: a held drag keeps updating the map.
       if (!this.seekTimer)
         this.seekTimer = this.lifecycle.timeout(() => {
@@ -1097,17 +1094,14 @@ export class ReplayPanel extends HTMLElement {
   }
   async loadWindow() {
     if (!this.cache) return;
-    const id = ++this.requestId,
-      bucket = Math.floor(this.clock.time / this.cache.duration);
-    this.pendingBucket = bucket;
+    const objectTime = this.clock.time;
+    const request = this.windowState.begin(objectTime, this.cache.duration);
     try {
-      const objectTime = this.clock.time;
       const [data, objectPoints] = await Promise.all([
         this.cache.window(objectTime),
         this.objectCache?.window(objectTime) ?? Promise.resolve([]),
       ]);
-      if (id !== this.requestId) return;
-      if (bucket !== Math.floor(this.clock.time / this.cache.duration)) return;
+      if (!this.windowState.accept(request, this.clock.time, this.cache.duration)) return;
       this.engine.setPoints(data.points);
       if (this.objectCache) {
         this.objectEngine.setPoints(objectPoints);
@@ -1118,7 +1112,7 @@ export class ReplayPanel extends HTMLElement {
       }
       this.events = data.events;
       this.eventRevision++;
-      this.loadedBucket = bucket;
+      this.windowState.markLoaded(request);
       this.statusCoordinator.show(
         "context",
         data.points.length
@@ -1130,16 +1124,13 @@ export class ReplayPanel extends HTMLElement {
       this.render();
       this.updateOverlays();
     } catch (error) {
-      if (id === this.requestId) this.report(error);
+      if (this.windowState.isCurrent(request)) this.report(error);
     } finally {
-      if (id === this.requestId) {
-        this.pendingBucket = undefined;
-        if (
-          bucket !== Math.floor(this.clock.time / this.cache.duration) &&
-          this.loadedBucket !== Math.floor(this.clock.time / this.cache.duration)
-        )
-          this.loadWindow();
-      }
+      if (
+        this.windowState.finish(request) &&
+        this.windowState.needsLoad(this.clock.time, this.cache.duration)
+      )
+        this.loadWindow();
     }
   }
   private tickFrame(time: number): void {
@@ -1197,7 +1188,7 @@ export class ReplayPanel extends HTMLElement {
         this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       }
       const world = this.world();
-      const ready = Math.floor(this.clock.time / this.cache.duration) === this.loadedBucket;
+      const ready = this.windowState.isLoaded(this.clock.time, this.cache.duration);
       let positions: HistoryPoint[] = [];
       if (this.isLive) {
         const latest = new Map<number, HistoryPoint>();
@@ -1335,11 +1326,9 @@ export class ReplayPanel extends HTMLElement {
         this.sync();
         this.render();
         this.updateOverlays();
-        const bucket = Math.floor(this.clock.time / this.cache.duration);
         if (
           this.opened &&
-          bucket !== this.loadedBucket &&
-          bucket !== this.pendingBucket
+          this.windowState.needsLoad(this.clock.time, this.cache.duration)
         )
           void this.loadWindow();
       }
