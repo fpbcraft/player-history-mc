@@ -760,6 +760,9 @@ export class HistoryScene3D {
       return;
     }
 
+    const expectedLayer = slot === "legs" ? 2 : 1;
+    if (armor.layer !== expectedLayer) return;
+
     for (const fallback of fallbacks) this.removeEquipmentMesh(avatar, fallback);
     this.addTexturedArmor(avatar, item, slot, armor);
   }
