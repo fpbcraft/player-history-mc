@@ -71,7 +71,10 @@ const skinBox = (
   depth: number,
 ): SkinBox => ({ u, v, width, height, depth });
 
-const PLAYER_HISTORY_SKIN_BUILD = "0.8.23";
+declare const __PLAYER_HISTORY_VERSION__: string;
+
+const PLAYER_HISTORY_SKIN_BUILD =
+  typeof __PLAYER_HISTORY_VERSION__ === "undefined" ? "" : __PLAYER_HISTORY_VERSION__;
 
 const SKIN = {
   head: skinBox(0, 0, 8, 8, 8),
@@ -103,7 +106,7 @@ export class HistoryScene3D {
   private readonly players = new Map<number, PlayerAvatar>();
   private trailLines: DisposableLine[] = [];
   private eventMeshes: EventMesh[] = [];
-  private eventGeometry?: Geometry;
+  private eventGeometry: Geometry | undefined;
   private readonly geometries = new Map<string, Geometry>();
   private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
 
@@ -199,8 +202,7 @@ export class HistoryScene3D {
       if (!first || segment.length < 2) continue;
 
       const positions = new Float32Array(segment.length * 3);
-      for (let i = 0; i < segment.length; i++) {
-        const point = segment[i];
+      for (const [i, point] of segment.entries()) {
         positions[i * 3] = point.x / 32;
         positions[i * 3 + 1] = point.y / 32 + 0.03;
         positions[i * 3 + 2] = point.z / 32;
@@ -262,8 +264,7 @@ export class HistoryScene3D {
       };
       const tooltips: string[] = [];
       const points: HistoryPoint[] = [];
-      for (let i = 0; i < bucket.length; i++) {
-        const event = bucket[i];
+      for (const [i, event] of bucket.entries()) {
         const matrix = new T.Matrix4();
         matrix.makeTranslation(
           event.point.x / 32,
@@ -345,7 +346,8 @@ export class HistoryScene3D {
     let texture: Texture | undefined;
     if (uuid) {
       const skinUrl = new URL(`${uuid}.png`, this.skinBase);
-      skinUrl.searchParams.set("v", PLAYER_HISTORY_SKIN_BUILD);
+      if (PLAYER_HISTORY_SKIN_BUILD)
+        skinUrl.searchParams.set("v", PLAYER_HISTORY_SKIN_BUILD);
       const url = skinUrl.href;
       texture = this.textureLoader.load(
         url,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, test } from "vitest";
+import { test } from "vitest";
 import {
   OBJECT_BREAK,
   OBJECT_OFFLINE,
@@ -34,9 +34,6 @@ const p = (
   flags,
 });
 
-afterEach(() => {
-  delete window.__bluemap3d;
-});
 
 test("object replay interpolates position and quaternion with slerp", () => {
   const engine = new ObjectReplayEngine(32, 32767, [

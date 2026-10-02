@@ -46,14 +46,14 @@ export interface ObjectReplayRenderStats {
  * durable .bm3d copy from the object geometry archive.
  */
 export class BlueMap3DReplayAdapter {
-  private root?: Object3D;
-  private parentRoot?: Object3D;
+  private root: Object3D | undefined;
+  private parentRoot: Object3D | undefined;
   private readonly meshes = new Map<number, HistoricalMesh>();
   private readonly pending = new Map<number, string>();
   private readonly desired = new Map<number, string>();
   private hiddenSources = new Set<Object3D>();
   private suppressedIds = new Set<string>();
-  private fallbackFrame?: number;
+  private fallbackFrame: number | undefined;
   private generation = 0;
 
   constructor(private readonly api: BlueMapRuntime) {}
@@ -141,7 +141,7 @@ export class BlueMap3DReplayAdapter {
         geometryMismatch++;
 
       if (liveMatches && source) {
-        const key = `live:${live?.meshUrl ?? identity.provider + "/" + identity.sourceId}`;
+        const key = `live:${live?.meshUrl ?? `${identity.provider}/${identity.sourceId}`}`;
         this.desired.set(pose.object, key);
         let historical = this.meshes.get(pose.object);
         if (!historical || historical.key !== key || historical.source !== source) {

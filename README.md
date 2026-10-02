@@ -1,11 +1,11 @@
-# Player History 0.8.16
+# Player History
 
 Two server-side **Minecraft 1.21.1 / NeoForge 21.1.248+ / Java 21** mods:
 
 - **Player History Recorder** records movement, configurable state and activity, and publishes a versioned dataset. It does not depend on BlueMap.
 - **Player History BlueMap** installs the replay viewer into **BlueMap 5.x**, links the public dataset, and maps BlueMap map IDs to Minecraft dimensions. It does not depend on recorder classes and can view an existing compatible dataset.
 
-Install `player-history-recorder-0.8.16.jar` for recording. Add BlueMap and `player-history-bluemap-0.8.16.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
+Install `player-history-recorder-<version>.jar` for recording. Add BlueMap and `player-history-bluemap-<version>.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 
@@ -14,10 +14,9 @@ The viewer defaults to a three-hour range, live mode and one-minute trails. It i
 ## Build
 
 ```sh
-./gradlew :recorder-neoforge:build
-./gradlew :bluemap-neoforge:build
-npm test
-npm --prefix bluemap-addon run build
+npm ci --prefix bluemap-addon
+npm --prefix bluemap-addon run check
+./gradlew test build
 ```
 
 For live UI development against an already-running BlueMap instance:
@@ -28,7 +27,7 @@ npm run dev -- --target http://127.0.0.1:8100
 
 The local proxy rebuilds TypeScript and CSS and refreshes the browser without rebuilding a JAR or restarting Minecraft. See [BlueMap installation and live frontend development](docs/bluemap-addon.md) for hosted targets, phone testing and options.
 
-Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
+The Gradle `modVersion` property is the release version source; the private npm package is intentionally not independently versioned. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
 
 ## Documentation
 
