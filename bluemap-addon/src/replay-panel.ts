@@ -1126,11 +1126,11 @@ export class ReplayPanel extends HTMLElement {
     } catch (error) {
       if (this.windowState.isCurrent(request)) this.report(error);
     } finally {
-      if (
-        this.windowState.finish(request) &&
-        this.windowState.needsLoad(this.clock.time, this.cache.duration)
-      )
-        this.loadWindow();
+      const needsFollowUp = this.windowState.needsLoad(
+        this.clock.time,
+        this.cache.duration,
+      );
+      if (this.windowState.finish(request) && needsFollowUp) this.loadWindow();
     }
   }
   private tickFrame(time: number): void {
