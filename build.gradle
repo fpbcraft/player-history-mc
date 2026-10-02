@@ -1,6 +1,5 @@
 plugins { id 'base'; id 'net.neoforged.moddev' version '2.0.146' apply false }
 
-def baseVersion = providers.gradleProperty('modVersion').get()
 def releaseVersion = providers.environmentVariable('RELEASE_VERSION').orNull
 
 def buildVersion
@@ -17,7 +16,7 @@ if (releaseVersion) {
     if (!(gitSha ==~ /[0-9a-fA-F]{7,40}/)) {
         throw new GradleException("Could not determine Git SHA for immutable development version")
     }
-    buildVersion = "${baseVersion}-dev.${gitSha.take(8).toLowerCase()}"
+    buildVersion = "dev.${gitSha.take(8).toLowerCase()}"
 }
 
 allprojects {
