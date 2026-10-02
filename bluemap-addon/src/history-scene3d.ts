@@ -202,8 +202,7 @@ export class HistoryScene3D {
       if (!first || segment.length < 2) continue;
 
       const positions = new Float32Array(segment.length * 3);
-      for (let i = 0; i < segment.length; i++) {
-        const point = segment[i]!;
+      for (const [i, point] of segment.entries()) {
         positions[i * 3] = point.x / 32;
         positions[i * 3 + 1] = point.y / 32 + 0.03;
         positions[i * 3 + 2] = point.z / 32;
@@ -265,8 +264,7 @@ export class HistoryScene3D {
       };
       const tooltips: string[] = [];
       const points: HistoryPoint[] = [];
-      for (let i = 0; i < bucket.length; i++) {
-        const event = bucket[i]!;
+      for (const [i, event] of bucket.entries()) {
         const matrix = new T.Matrix4();
         matrix.makeTranslation(
           event.point.x / 32,
