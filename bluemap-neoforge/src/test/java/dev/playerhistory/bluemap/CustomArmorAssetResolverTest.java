@@ -125,6 +125,40 @@ final class CustomArmorAssetResolverTest {
   }
 
   @Test
+  void reflectsGeckoForwardAxisIntoViewerSpace() {
+    var root =
+        JsonParser.parseString(
+                """
+                {
+                  "minecraft:geometry": [{
+                    "description": {"texture_width":64,"texture_height":64},
+                    "bones": [
+                      {"name":"bipedBody","pivot":[0,24,0]},
+                      {
+                        "name":"armorBody",
+                        "parent":"bipedBody",
+                        "pivot":[0,24,0],
+                        "cubes":[
+                          {"origin":[-1,20,-5],"size":[2,2,2],"uv":[0,0]}
+                        ]
+                      }
+                    ]
+                  }]
+                }
+                """)
+            .getAsJsonObject();
+
+    var model = CustomArmorAssetResolver.parseGeometry(root, "example:armor/test");
+    assertNotNull(model);
+    var part = model.parts().getFirst();
+
+    // Gecko/Minecraft model front is -Z. The BlueMap avatar front is +Z,
+    // so an asymmetric cube in front of the body must land on positive Z.
+    assertEquals(0.1875f, axisMin(part.positions(), 2), 0.0001f);
+    assertEquals(0.3125f, axisMax(part.positions(), 2), 0.0001f);
+  }
+
+  @Test
   void appliesGeckoAxisAndRotationConventions() {
     var root =
         JsonParser.parseString(
