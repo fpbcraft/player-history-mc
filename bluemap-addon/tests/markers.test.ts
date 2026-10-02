@@ -122,6 +122,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       createElementNS: () => new Element(),
       body: new Element(),
       addEventListener() {},
+      baseURI: "https://map.example/",
     };
     globalThis.window = { addEventListener() {} };
     globalThis.innerWidth = 800;
