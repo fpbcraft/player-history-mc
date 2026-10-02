@@ -34,6 +34,7 @@ final class EquipmentAssetPublisher {
   private volatile Path root;
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
+  private volatile CustomArmorAssetResolver customArmor;
   private volatile long nextScan;
 
   EquipmentAssetPublisher(Consumer<String> log) {
@@ -62,6 +63,7 @@ final class EquipmentAssetPublisher {
     processed.clear();
     BlueMap3DItemModelBridge current = bridge;
     bridge = null;
+    customArmor = null;
     if (current != null) current.close();
   }
 
@@ -93,6 +95,7 @@ final class EquipmentAssetPublisher {
         currentBridge =
             BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
         bridge = currentBridge;
+        customArmor = new CustomArmorAssetResolver(currentBridge, log);
       } catch (ClassNotFoundException error) {
         log.accept("BlueMap3D is unavailable; Player History will keep simple equipment models");
         nextScan = Long.MAX_VALUE;
@@ -187,6 +190,14 @@ final class EquipmentAssetPublisher {
       BlueMap3DItemModelBridge currentBridge,
       String item,
       ResourceLocation id) {
+    CustomArmorAssetResolver resolver = customArmor;
+    if (resolver != null) {
+      CustomArmorAssetResolver.Model custom = resolver.resolve(id);
+      if (custom != null && publishCustomArmor(currentRoot, currentBridge, item, id, custom)) {
+        return;
+      }
+    }
+
     ArmorAsset armor = armorAsset(id);
     if (armor == null) return;
 
@@ -204,36 +215,70 @@ final class EquipmentAssetPublisher {
         writePng(currentRoot, overlayPath, overlay);
       }
 
-      Path target =
-          safeResolve(
-              currentRoot,
-              "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
-      Files.createDirectories(target.getParent());
-      writeAtomic(
-          target,
+      writeArmorDescriptor(
+          currentRoot,
+          id,
           JsonFiles.GSON.toJson(
-              new ArmorModel(FORMAT, item, armor.layer(), texturePath, overlayPath)));
+              new ArmorModel(FORMAT, item, "layer", armor.layer(), texturePath, overlayPath)));
     } catch (IOException error) {
       log.accept("Could not publish armor textures for " + item + ": " + error);
       processed.remove(item);
     }
   }
 
+  private boolean publishCustomArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id,
+      CustomArmorAssetResolver.Model custom) {
+    BufferedImage texture = currentBridge.texture(custom.texture());
+    if (texture == null) return false;
+
+    try {
+      String texturePath = texturePath(custom.texture());
+      writePng(currentRoot, texturePath, texture);
+      var parts = new ArrayList<CustomArmorPart>();
+      for (var part : custom.parts()) {
+        parts.add(
+            new CustomArmorPart(
+                part.parent(), part.slot(), part.positions(), part.uvs()));
+      }
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          JsonFiles.GSON.toJson(
+              new CustomArmorModel(FORMAT, item, "custom", texturePath, parts)));
+      return true;
+    } catch (IOException error) {
+      log.accept("Could not publish custom armor geometry for " + item + ": " + error);
+      return false;
+    }
+  }
+
+  private static void writeArmorDescriptor(Path root, ResourceLocation id, String json)
+      throws IOException {
+    Path target =
+        safeResolve(root, "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
+    Files.createDirectories(target.getParent());
+    writeAtomic(target, json);
+  }
+
   private static ArmorAsset armorAsset(ResourceLocation item) {
     String path = item.getPath();
     String suffix;
     int layer;
-    if (path.endsWith("_helmet")) {
-      suffix = "_helmet";
+    if (path.endsWith("_helmet") || path.endsWith("_head")) {
+      suffix = path.endsWith("_helmet") ? "_helmet" : "_head";
       layer = 1;
-    } else if (path.endsWith("_chestplate")) {
-      suffix = "_chestplate";
+    } else if (path.endsWith("_chestplate") || path.endsWith("_chest")) {
+      suffix = path.endsWith("_chestplate") ? "_chestplate" : "_chest";
       layer = 1;
-    } else if (path.endsWith("_leggings")) {
-      suffix = "_leggings";
+    } else if (path.endsWith("_leggings") || path.endsWith("_legs")) {
+      suffix = path.endsWith("_leggings") ? "_leggings" : "_legs";
       layer = 2;
-    } else if (path.endsWith("_boots")) {
-      suffix = "_boots";
+    } else if (path.endsWith("_boots") || path.endsWith("_feet")) {
+      suffix = path.endsWith("_boots") ? "_boots" : "_feet";
       layer = 1;
     } else {
       return null;
@@ -315,7 +360,17 @@ final class EquipmentAssetPublisher {
   private record ArmorAsset(int layer, String texture, String overlayTexture) {}
 
   private record ArmorModel(
-      int format, String item, int layer, String texture, String overlayTexture) {}
+      int format,
+      String item,
+      String kind,
+      int layer,
+      String texture,
+      String overlayTexture) {}
+
+  private record CustomArmorModel(
+      int format, String item, String kind, String texture, List<CustomArmorPart> parts) {}
+
+  private record CustomArmorPart(String parent, String slot, float[] positions, float[] uvs) {}
 
   private record ItemModel(int format, String item, List<ModelGroup> groups, String fingerprint) {}
 
