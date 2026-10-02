@@ -4,6 +4,12 @@ import { addActivityBins } from "./replay-state.js";
 const DAY_MS = 86_400_000;
 const MAX_DAYS = 2_000;
 
+export const activityRangeTooLarge = (from: number, to: number): boolean => {
+  const first = Math.floor(from / DAY_MS) * DAY_MS;
+  const last = Math.floor(to / DAY_MS) * DAY_MS;
+  return (last - first) / DAY_MS > MAX_DAYS;
+};
+
 export interface ActivityDensityResult {
   bins: number[];
   max: number;
@@ -35,7 +41,7 @@ export const loadActivityDensity = async ({
 }: ActivityDensityOptions): Promise<ActivityDensityLoad> => {
   const first = Math.floor(from / DAY_MS) * DAY_MS;
   const last = Math.floor(to / DAY_MS) * DAY_MS;
-  if ((last - first) / DAY_MS > MAX_DAYS) return { kind: "too-large" };
+  if (activityRangeTooLarge(from, to)) return { kind: "too-large" };
 
   const starts = Array.from(
     { length: Math.floor((last - first) / DAY_MS) + 1 },
