@@ -88,7 +88,7 @@ final class ServerOverlayPublisher {
       for (var claim : claims.snapshot())
         claimByDimension.computeIfAbsent(claim.dimension(), ignored -> new ArrayList<>()).add(claim);
 
-      Map<String, DimensionData> dimensions = new TreeMap<>();      Map<String, DimensionData> dimensions = new TreeMap<>();
+      Map<String, DimensionData> dimensions = new TreeMap<>();
       for (ServerLevel level : current.getAllLevels()) {
         String key = level.dimension().location().toString();
         List<ClaimsOverlaySource.ClaimCell> dimensionClaims =
@@ -110,7 +110,7 @@ final class ServerOverlayPublisher {
     }
   }
 
-  private static List<ChunkCell> pinnedChunks(  private static List<ChunkCell> pinnedChunks(
+  private static List<ChunkCell> pinnedChunks(
       ServerLevel level, List<ClaimsOverlaySource.ClaimCell> claims) {
     var positions = new HashSet<Long>();
     for (long packed : level.getForcedChunks()) positions.add(packed);
@@ -147,7 +147,7 @@ final class ServerOverlayPublisher {
     return result;
   }
 
-  private static List<ChunkCell> loadedChunks(  private static List<ChunkCell> loadedChunks(ServerLevel level) {
+  private static List<ChunkCell> loadedChunks(ServerLevel level) {
     var result = new ArrayList<ChunkCell>();
     try {
       Object source = level.getChunkSource();
