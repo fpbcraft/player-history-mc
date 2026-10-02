@@ -495,38 +495,36 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void recover() throws IOException {
-    try (var files = Files.list(root.resolve("tracks"))) {
-      for (Path f : files.filter(p -> p.toString().endsWith(".tmp")).toList()) {
-        try {
-          BinaryCodec.Read r;
-          try (var in = Files.newInputStream(f)) {
-            r = BinaryCodec.read(in);
-          }
-          try (var ch = FileChannel.open(f, StandardOpenOption.WRITE)) {
-            ch.truncate(r.validBytes());
-            ch.position(r.validBytes());
-            var tail = new HashMap<Integer, Point>();
-            for (var p : r.batch().points()) tail.put(p.player(), p);
-            var closed =
-                tail.values().stream()
-                    .filter(Point::online)
-                    .map(p -> p.with(p.time(), Point.OFFLINE | Point.BREAK))
-                    .toList();
-            var data =
-                java.nio.ByteBuffer.wrap(
-                    BinaryCodec.frame(new BinaryCodec.Batch(closed, List.of()), r.start()));
-            while (data.hasRemaining()) ch.write(data);
-            ch.force(false);
-          }
-          JsonFiles.move(f, f.resolveSibling(r.start() + ".bin"));
-          log.accept(
-              "Recovered history chunk "
-                  + r.start()
-                  + "; unfinished sessions closed at last durable sample");
-        } catch (Exception e) {
-          log.accept("Quarantined corrupt history " + f + ": " + e);
-          JsonFiles.move(f, f.resolveSibling(f.getFileName() + ".corrupt"));
+    for (Path file : TemporaryChunkFiles.list(root.resolve("tracks"))) {
+      try {
+        BinaryCodec.Read read;
+        try (var in = Files.newInputStream(file)) {
+          read = BinaryCodec.read(in);
         }
+        TemporaryChunkFiles.repair(
+            file,
+            read.validBytes(),
+            channel -> {
+              var tail = new HashMap<Integer, Point>();
+              for (var point : read.batch().points()) tail.put(point.player(), point);
+              var closed =
+                  tail.values().stream()
+                      .filter(Point::online)
+                      .map(point -> point.with(point.time(), Point.OFFLINE | Point.BREAK))
+                      .toList();
+              var data =
+                  java.nio.ByteBuffer.wrap(
+                      BinaryCodec.frame(new BinaryCodec.Batch(closed, List.of()), read.start()));
+              while (data.hasRemaining()) channel.write(data);
+            });
+        TemporaryChunkFiles.complete(file, read.start());
+        log.accept(
+            "Recovered history chunk "
+                + read.start()
+                + "; unfinished sessions closed at last durable sample");
+      } catch (Exception error) {
+        log.accept("Quarantined corrupt history " + file + ": " + error);
+        TemporaryChunkFiles.quarantine(file);
       }
     }
   }
