@@ -254,8 +254,10 @@ final class CustomArmorAssetResolver {
   private static String textureId(String path) {
     String relative = path.substring("assets/".length());
     int slash = relative.indexOf('/');
+    int marker = relative.indexOf("/textures/");
+    if (slash <= 0 || marker < 0) throw new IllegalArgumentException("Invalid texture path: " + path);
     String namespace = relative.substring(0, slash);
-    String texture = relative.substring(slash + "/textures/".length() + 1, relative.length() - 4);
+    String texture = relative.substring(marker + "/textures/".length(), relative.length() - 4);
     return namespace + ":" + texture;
   }
 
