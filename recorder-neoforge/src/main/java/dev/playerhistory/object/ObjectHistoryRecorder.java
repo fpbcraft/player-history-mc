@@ -3,6 +3,7 @@ package dev.playerhistory.object;
 import dev.playerhistory.core.JsonFiles;
 import dev.playerhistory.core.PublishedChunkIndex;
 import dev.playerhistory.core.RetentionFiles;
+import dev.playerhistory.core.TemporaryChunkFiles;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
@@ -477,23 +478,18 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   }
 
   private void recover() throws IOException {
-    try (var files = Files.list(root.resolve("tracks"))) {
-      for (Path file : files.filter(path -> path.toString().endsWith(".tmp")).toList()) {
-        try {
-          ObjectBinaryCodec.Read read;
-          try (var in = Files.newInputStream(file)) {
-            read = ObjectBinaryCodec.read(in);
-          }
-          try (var out = FileChannel.open(file, StandardOpenOption.WRITE)) {
-            out.truncate(read.validBytes());
-            out.force(false);
-          }
-          JsonFiles.move(file, file.resolveSibling(read.start() + ".bin"));
-          log.accept("Recovered object-history chunk " + read.start());
-        } catch (Exception error) {
-          log.accept("Quarantined corrupt object history " + file + ": " + error);
-          JsonFiles.move(file, file.resolveSibling(file.getFileName() + ".corrupt"));
+    for (Path file : TemporaryChunkFiles.list(root.resolve("tracks"))) {
+      try {
+        ObjectBinaryCodec.Read read;
+        try (var in = Files.newInputStream(file)) {
+          read = ObjectBinaryCodec.read(in);
         }
+        TemporaryChunkFiles.repair(file, read.validBytes(), channel -> {});
+        TemporaryChunkFiles.complete(file, read.start());
+        log.accept("Recovered object-history chunk " + read.start());
+      } catch (Exception error) {
+        log.accept("Quarantined corrupt object history " + file + ": " + error);
+        TemporaryChunkFiles.quarantine(file);
       }
     }
   }
