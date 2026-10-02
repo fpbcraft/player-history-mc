@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.google.gson.JsonParser;
 import java.util.Arrays;
 import java.util.Set;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.ArmorItem;
 import org.junit.jupiter.api.Test;
 
 final class CustomArmorAssetResolverTest {
@@ -310,9 +308,7 @@ final class CustomArmorAssetResolverTest {
 
     var chest =
         CustomArmorAssetResolver.layeredModel(
-            ResourceLocation.parse("immersive_armors:robe_chestplate"),
-            ArmorItem.Type.CHESTPLATE,
-            available::contains);
+            "immersive_armors", "robe", false, available::contains);
     assertNotNull(chest);
     assertEquals(1, chest.layer());
     assertEquals(2, chest.layers().size());
@@ -323,9 +319,7 @@ final class CustomArmorAssetResolverTest {
 
     var legs =
         CustomArmorAssetResolver.layeredModel(
-            ResourceLocation.parse("immersive_armors:robe_leggings"),
-            ArmorItem.Type.LEGGINGS,
-            available::contains);
+            "immersive_armors", "robe", true, available::contains);
     assertNotNull(legs);
     assertEquals(2, legs.layer());
     assertEquals(2, legs.layers().size());

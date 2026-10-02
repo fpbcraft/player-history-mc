@@ -102,16 +102,18 @@ final class CustomArmorAssetResolver {
 
 
   LayeredModel resolveLayered(ResourceLocation item, ArmorItem.Type type) {
-    return layeredModel(item, type, path -> assets.asset(path) != null);
+    return layeredModel(
+        item.getNamespace(),
+        family(item.getPath()),
+        type == ArmorItem.Type.LEGGINGS,
+        path -> assets.asset(path) != null);
   }
 
   static LayeredModel layeredModel(
-      ResourceLocation item, ArmorItem.Type type, Predicate<String> exists) {
-    boolean leggings = type == ArmorItem.Type.LEGGINGS;
-    String family = family(item.getPath());
+      String namespace, String family, boolean leggings, Predicate<String> exists) {
     String directory =
         "assets/"
-            + item.getNamespace()
+            + namespace
             + "/textures/models/armor/"
             + family
             + "/";
