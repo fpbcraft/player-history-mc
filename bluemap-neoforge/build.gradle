@@ -34,4 +34,8 @@ neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); prog
 dependencies {
   implementation project(':recorder-neoforge')
   compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
+  testImplementation platform('org.junit:junit-bom:5.11.4')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+test { useJUnitPlatform() }
