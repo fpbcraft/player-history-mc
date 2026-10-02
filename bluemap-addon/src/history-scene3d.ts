@@ -818,18 +818,24 @@ export class HistoryScene3D {
         layer.dyeable
           ? item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff)
           : 0xffffff;
-      this.addArmorParts(
-        avatar,
-        slot,
-        this.armorMaterial(avatar, layer.texture, color),
-        index * 0.008,
-      );
+      const addLayer = (material: Material, extra = 0) => {
+        if (layer.deformation !== undefined) {
+          this.addDeformedArmorParts(
+            avatar,
+            slot,
+            material,
+            layer.deformation + extra,
+            (layer.headDeformation ?? layer.deformation) + extra,
+          );
+        } else {
+          this.addArmorParts(avatar, slot, material, index * 0.008 + extra);
+        }
+      };
+      addLayer(this.armorMaterial(avatar, layer.texture, color));
       if (layer.overlayTexture)
-        this.addArmorParts(
-          avatar,
-          slot,
+        addLayer(
           this.armorMaterial(avatar, layer.overlayTexture, 0xffffff),
-          index * 0.008 + 0.004,
+          0.004,
         );
     }
   }
@@ -902,6 +908,32 @@ export class HistoryScene3D {
       mesh.position.set(...spec.position);
       const scale = spec.scale + grow;
       mesh.scale.set(scale, scale, scale);
+      this.decoratePlayerPart(mesh, Number(avatar.root.userData.historyPlayer));
+      this.armorParent(avatar, spec.parent).add(mesh);
+      avatar.equipmentParts.push(mesh);
+      avatar.equipmentGeometries.push(geometry);
+    }
+  }
+
+
+  private addDeformedArmorParts(
+    avatar: PlayerAvatar,
+    slot: ArmorSlot,
+    material: Material,
+    deformation: number,
+    headDeformation: number,
+  ): void {
+    for (const spec of ARMOR_PARTS[slot]) {
+      const grow = spec.parent === "head" ? headDeformation : deformation;
+      const geometry = this.armorGeometry(
+        (spec.uv.width + grow * 2) / 16,
+        (spec.uv.height + grow * 2) / 16,
+        (spec.uv.depth + grow * 2) / 16,
+        spec.uv,
+      );
+      const mesh = new this.api.Three.Mesh(geometry, material);
+      mesh.name = spec.name;
+      mesh.position.set(...spec.position);
       this.decoratePlayerPart(mesh, Number(avatar.root.userData.historyPlayer));
       this.armorParent(avatar, spec.parent).add(mesh);
       avatar.equipmentParts.push(mesh);

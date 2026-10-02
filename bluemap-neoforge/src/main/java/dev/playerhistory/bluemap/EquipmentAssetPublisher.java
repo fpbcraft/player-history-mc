@@ -206,7 +206,14 @@ final class EquipmentAssetPublisher {
     if (!(registered instanceof ArmorItem armor)) return;
     boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
     var layers = armor.getMaterial().value().layers();
-    if (layers.isEmpty()) return;
+    if (layers.isEmpty()) {
+      CustomArmorAssetResolver.LayeredModel layered =
+          resolver == null ? null : resolver.resolveLayered(id, armor.getType());
+      if (layered != null) {
+        publishLayeredArmor(currentRoot, currentBridge, item, id, layered);
+      }
+      return;
+    }
 
     try {
       var published = new ArrayList<ArmorLayer>();
@@ -218,7 +225,7 @@ final class EquipmentAssetPublisher {
         String path = texturePath(texture);
         writePng(currentRoot, path, image);
 
-        published.add(new ArmorLayer(path, null, layer.dyeable()));
+        published.add(new ArmorLayer(path, null, layer.dyeable(), null, null));
       }
       if (published.isEmpty()) return;
       writeArmorDescriptor(
@@ -227,6 +234,50 @@ final class EquipmentAssetPublisher {
           new ArmorModel(ARMOR_FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
     } catch (IOException error) {
       log.accept("Could not publish armor textures for " + item + ": " + error);
+      processed.remove(item);
+    }
+  }
+
+
+  private void publishLayeredArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id,
+      CustomArmorAssetResolver.LayeredModel model) {
+    try {
+      var published = new ArrayList<ArmorLayer>();
+      for (var layer : model.layers()) {
+        BufferedImage image = currentBridge.texture(layer.texture());
+        if (image == null) continue;
+        String basePath = texturePath(layer.texture());
+        writePng(currentRoot, basePath, image);
+
+        String overlayPath = null;
+        if (layer.overlayTexture() != null) {
+          BufferedImage overlay = currentBridge.texture(layer.overlayTexture());
+          if (overlay != null) {
+            overlayPath = texturePath(layer.overlayTexture());
+            writePng(currentRoot, overlayPath, overlay);
+          }
+        }
+
+        published.add(
+            new ArmorLayer(
+                basePath,
+                overlayPath,
+                layer.dyeable(),
+                layer.deformation(),
+                layer.headDeformation()));
+      }
+      if (published.isEmpty()) return;
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(
+              ARMOR_FORMAT, item, "layers", model.layer(), published, null, null));
+    } catch (IOException error) {
+      log.accept("Could not publish segmented armor textures for " + item + ": " + error);
       processed.remove(item);
     }
   }
@@ -333,7 +384,12 @@ final class EquipmentAssetPublisher {
 
   private record GroupKey(String texture, int tint) {}
 
-  private record ArmorLayer(String texture, String overlayTexture, boolean dyeable) {}
+  private record ArmorLayer(
+      String texture,
+      String overlayTexture,
+      boolean dyeable,
+      Float deformation,
+      Float headDeformation) {}
 
   private record CustomArmorPart(String parent, String slot, float[] positions, float[] uvs) {}
 

@@ -33,6 +33,8 @@ interface PublishedArmorLayer {
   texture: string;
   overlayTexture?: string | null;
   dyeable?: boolean;
+  deformation?: number;
+  headDeformation?: number;
 }
 
 export interface PublishedArmorPart {
@@ -73,6 +75,8 @@ export type LoadedArmorModel =
         texture: Texture;
         overlayTexture?: Texture;
         dyeable: boolean;
+        deformation?: number;
+        headDeformation?: number;
       }[];
     }
   | {
@@ -119,9 +123,16 @@ const ARMOR_SLOTS = new Set<ArmorSlot>(["head", "chest", "legs", "feet"]);
 const parseArmorLayer = (value: unknown): PublishedArmorLayer | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const layer = value as Record<string, unknown>;
+  const validDeformation = (candidate: unknown) =>
+    typeof candidate === "number" &&
+    Number.isFinite(candidate) &&
+    candidate >= -1 &&
+    candidate <= 4;
   if (
     !safeRelativePath(layer.texture) ||
-    (layer.overlayTexture != null && !safeRelativePath(layer.overlayTexture))
+    (layer.overlayTexture != null && !safeRelativePath(layer.overlayTexture)) ||
+    (layer.deformation != null && !validDeformation(layer.deformation)) ||
+    (layer.headDeformation != null && !validDeformation(layer.headDeformation))
   )
     return null;
   return {
@@ -130,6 +141,12 @@ const parseArmorLayer = (value: unknown): PublishedArmorLayer | null => {
       ? { overlayTexture: layer.overlayTexture }
       : {}),
     ...(typeof layer.dyeable === "boolean" ? { dyeable: layer.dyeable } : {}),
+    ...(typeof layer.deformation === "number"
+      ? { deformation: layer.deformation }
+      : {}),
+    ...(typeof layer.headDeformation === "number"
+      ? { headDeformation: layer.headDeformation }
+      : {}),
   };
 };
 
@@ -292,6 +309,12 @@ export class EquipmentModelLoader {
         texture,
         ...(overlayTexture ? { overlayTexture } : {}),
         dyeable: layer.dyeable === true,
+        ...(layer.deformation !== undefined
+          ? { deformation: layer.deformation }
+          : {}),
+        ...(layer.headDeformation !== undefined
+          ? { headDeformation: layer.headDeformation }
+          : {}),
       });
     }
     return layers.length
