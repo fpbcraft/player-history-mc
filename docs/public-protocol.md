@@ -18,7 +18,7 @@ Consumers must reject unknown `protocolVersion` values. Internal `formatVersion:
 | `trackingEnabled` | Current tracker configuration |
 | `cellSize` | Heatmap cell size in blocks |
 | `activityBucketMs` | `60000` |
-| `activityReady` | Movement/event activity backfill finished |
+| `activityReady` | Player activity backfill finished |
 
 Capability history is persisted so disabling a tracker does not hide previous data. Capability booleans do not establish that a value exists at a particular time: only checkpoints/deltas do. A category can remain advertised after its old data expires. The viewer uses capability flags for state fields and unavailable overlay controls. Older data migrated from the combined release has no state records.
 
@@ -26,7 +26,7 @@ For T, `bucket = floor(T / chunkDurationMs) * chunkDurationMs`:
 
 - `chunks/<bucket>.json`: `{points: [...], events: [...]}`. Points are `{player,time,world,x,y,z,flags}` with **32 coordinate units per block**. Events are `{point,type,payload}`, with a bounded JSON string payload. Unknown event types can be displayed using a generic icon.
 - `states/<bucket>.json`: ordered `{player,time,kind,values}` records. `kind` is `checkpoint`, `delta` or `unknown`. Checkpoints replace all state; deltas replace only named fields; a null field means unknown/disabled. `unknown` clears state until a new checkpoint. Each bucket begins a player's state with a checkpoint. Never extrapolate across a missing bucket or apply a delta without a checkpoint.
-- `activity/<UTC-day>.json`: `[minuteTimestamp,count]` rows. Counts derive from retained movement observations and events, excluding copied movement context; this measures recording/activity density, not distance or unique players. Missing minutes are zero.
+- `activity/<UTC-day>.json`: `[minuteTimestamp,count]` rows. Counts derive only from retained online player movement observations, excluding copied movement context and offline markers. Events and object history do not contribute; this measures recorded player activity density, not distance or unique players. Missing minutes are zero.
 - `heatmap/{chunk,hour,day}/<bucket>.json`: `[player,world,cellX,cellZ,durationMs]` rows. Negative coordinates use floor division.
 
 State fields include health/maxHealth/absorption, food/saturation, xpTotal/xpLevel/xpProgress, gameMode, effects, selectedSlot/heldItem, `equipment:<slot>`, optional posture flags and `slot:<inventory index>`. An item is `{item,count,damage?,name?,enchantments?}`. Empty stacks are `{item:0,count:0}`. Effects are keyed by resource location with amplifier and ambient values; no duration countdown is sampled. Equipment slots use Minecraft names (`mainhand`, `offhand`, `head`, `chest`, `legs`, `feet`). Inventory indices follow `PlayerInventory` (including armor and offhand).
