@@ -26,6 +26,7 @@ import net.minecraft.world.item.ArmorItem;
  */
 final class EquipmentAssetPublisher {
   private static final int FORMAT = 1;
+  private static final int ARMOR_FORMAT = 2;
   private static final long SCAN_INTERVAL_MS = 30_000;
 
   private final Consumer<String> log;
@@ -230,7 +231,7 @@ final class EquipmentAssetPublisher {
       writeArmorDescriptor(
           currentRoot,
           id,
-          new ArmorModel(FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
+          new ArmorModel(ARMOR_FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
     } catch (IOException error) {
       log.accept("Could not publish armor textures for " + item + ": " + error);
       processed.remove(item);
@@ -255,7 +256,7 @@ final class EquipmentAssetPublisher {
       writeArmorDescriptor(
           currentRoot,
           id,
-          new ArmorModel(FORMAT, item, "custom", null, null, texturePath, parts));
+          new ArmorModel(ARMOR_FORMAT, item, "custom", null, null, texturePath, parts));
     } catch (IOException error) {
       log.accept("Could not publish custom armor geometry for " + item + ": " + error);
       processed.remove(item);
