@@ -168,4 +168,38 @@ class ObjectHistoryTest {
     assertEquals(99, rewritten[newTail]);
   }
 
+
+  @Test
+  void recoversTemporaryObjectChunkAndClosesRecoveredObject() throws Exception {
+    Path objectRoot = root.resolve("objects");
+    Files.createDirectories(objectRoot.resolve("tracks"));
+    long time = 1_780_000_000_000L;
+    long start = Math.floorDiv(time, 60_000) * 60_000;
+    var point =
+        ObjectPoint.at(
+            1,
+            time,
+            0,
+            snapshot("train/0", 1, 0, 1, 7),
+            ObjectPoint.BREAK);
+
+    var bytes = new ByteArrayOutputStream();
+    ObjectBinaryCodec.header(new DataOutputStream(bytes), start, 60_000);
+    bytes.write(ObjectBinaryCodec.frame(List.of(point), start));
+    bytes.write(new byte[] {0, 1, 2});
+    Files.write(objectRoot.resolve("tracks/" + start + ".tmp"), bytes.toByteArray());
+
+    var options = new ObjectHistoryRecorder.Options(60_000, -1, 64, .25, 1, 30_000);
+    try (var ignored = new ObjectHistoryRecorder(objectRoot, options, message -> {})) {}
+
+    Path recovered = objectRoot.resolve("tracks/" + start + ".bin");
+    assertTrue(Files.isRegularFile(recovered));
+    try (var input = Files.newInputStream(recovered)) {
+      var points = ObjectBinaryCodec.read(input).points();
+      assertEquals(2, points.size());
+      assertEquals(time, points.getFirst().time());
+      assertTrue((points.getLast().flags() & ObjectPoint.OFFLINE) != 0);
+    }
+  }
+
 }
