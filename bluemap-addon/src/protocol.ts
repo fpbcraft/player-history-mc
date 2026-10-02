@@ -173,6 +173,33 @@ export const parseLiveSnapshot = (value: unknown): LiveSnapshot => {
   };
 };
 
+const parseObjectInstance = (value: unknown) => {
+  if (!isObject(value)) throw new Error("Invalid object-history instance");
+  return {
+    x: numberField(value, "x"),
+    y: numberField(value, "y"),
+    z: numberField(value, "z"),
+    qx: numberField(value, "qx"),
+    qy: numberField(value, "qy"),
+    qz: numberField(value, "qz"),
+    qw: numberField(value, "qw"),
+    sx: numberField(value, "sx"),
+    sy: numberField(value, "sy"),
+    sz: numberField(value, "sz"),
+  };
+};
+
+const parseObjectInstanceGroup = (value: unknown) => {
+  if (!isObject(value)) throw new Error("Invalid object-history instance group");
+  const instances = Array.isArray(value.instances) ? value.instances : [];
+  if (instances.length > 4096) throw new Error("Oversized object-history instance group");
+  return {
+    id: stringField(value, "id"),
+    geometry: numberField(value, "geometry"),
+    instances: instances.map(parseObjectInstance),
+  };
+};
+
 export const parseObjectPoint = (value: unknown): ObjectHistoryPoint => {
   if (!isObject(value)) throw new Error("Invalid object-history point");
   return {
@@ -191,6 +218,9 @@ export const parseObjectPoint = (value: unknown): ObjectHistoryPoint => {
     sz: Number.isFinite(value.sz) ? (value.sz as number) : 1024,
     geometry: numberField(value, "geometry"),
     flags: numberField(value, "flags"),
+    groups: Array.isArray(value.groups)
+      ? value.groups.slice(0, 32).map(parseObjectInstanceGroup)
+      : [],
   };
 };
 
@@ -216,7 +246,12 @@ const parseObjectRegistry = (value: unknown): ObjectHistoryRegistry => {
 };
 
 export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
-  if (!isObject(value) || (value.protocolVersion !== 1 && value.protocolVersion !== 2))
+  if (
+    !isObject(value) ||
+    (value.protocolVersion !== 1
+      && value.protocolVersion !== 2
+      && value.protocolVersion !== 3)
+  )
     throw new Error("Unsupported object-history version");
   const earliestTimestamp = numberField(value, "earliestTimestamp");
   const latestTimestamp = numberField(value, "latestTimestamp");
@@ -234,7 +269,7 @@ export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
   )
     throw new Error("Invalid object-history manifest");
   const result: ObjectHistoryManifest = {
-    protocolVersion: value.protocolVersion as 1 | 2,
+    protocolVersion: value.protocolVersion as 1 | 2 | 3,
     earliestTimestamp,
     latestTimestamp,
     chunkDurationMs,
@@ -244,6 +279,8 @@ export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
     geometryArchive: value.geometryArchive === true,
     registry: parseObjectRegistry(value.registry),
   };
+  if (Number.isFinite(value.pointsPerSecond))
+    result.pointsPerSecond = value.pointsPerSecond as number;
   if (value.geometries !== undefined) {
     if (!Array.isArray(value.geometries) || value.geometries.length > 100_000)
       throw new Error("Invalid object-history geometry catalog");
