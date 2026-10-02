@@ -49,26 +49,56 @@ public final class HistoryStore implements AutoCloseable {
   private final HeatmapStore heatmaps;
   private final StateStore states;
   private final ArrayDeque<HistoryEvent> liveEvents = new ArrayDeque<>();
-  private long lastLiveFlush;
+  private long lastLiveFlush, lastFullLiveFlush;
   private final ArrayDeque<Point> livePoints = new ArrayDeque<>();
   private void publishLive(long now) throws IOException {
     while (!liveEvents.isEmpty()
         && (liveEvents.size() > 1000 || liveEvents.peekFirst().point().time() < now - 300000))
       liveEvents.removeFirst();
-    while (!livePoints.isEmpty() && (livePoints.size() > 20000 || livePoints.peekFirst().time() < now - 300000)) livePoints.removeFirst();
-    if (publicRoot != null)
+    while (!livePoints.isEmpty()
+        && (livePoints.size() > 20000 || livePoints.peekFirst().time() < now - 300000))
+      livePoints.removeFirst();
+
+    Path publication = publicRoot;
+    if (publication != null) {
+      var latest = new HashMap<Integer, Point>();
+      for (var point : livePoints) latest.put(point.player(), point);
+      var presencePoints =
+          latest.values().stream().sorted(Comparator.comparingLong(Point::time)).toList();
+      var chatEvents =
+          liveEvents.stream().filter(event -> "CHAT".equals(event.type())).toList();
+
       JsonFiles.write(
-          publicRoot.resolve("live.json"),
+          publication.resolve("presence.json"),
           Map.of(
               "protocolVersion",
               2,
               "generatedAt",
               now,
-              "points", List.copyOf(livePoints),
+              "points",
+              presencePoints,
               "events",
-              List.copyOf(liveEvents),
+              chatEvents,
               "registry",
               registry.snapshot()));
+
+      if (now - lastFullLiveFlush >= 1000) {
+        JsonFiles.write(
+            publication.resolve("live.json"),
+            Map.of(
+                "protocolVersion",
+                2,
+                "generatedAt",
+                now,
+                "points",
+                List.copyOf(livePoints),
+                "events",
+                List.copyOf(liveEvents),
+                "registry",
+                registry.snapshot()));
+        lastFullLiveFlush = now;
+      }
+    }
     lastLiveFlush = now;
   }
 

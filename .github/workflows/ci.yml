@@ -23,6 +23,18 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: bluemap-addon/package-lock.json
+
+      - name: Resolve immutable build version
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          base="$(sed -n 's/^modVersion=//p' gradle.properties)"
+          version="$(python3 scripts/release_version.py dev --base "$base" --sha "$SOURCE_SHA")"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "PLAYER_HISTORY_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Check release version tooling
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
@@ -38,7 +50,7 @@ jobs:
       - name: Upload test jars
         uses: actions/upload-artifact@v4
         with:
-          name: player-history-object-history
+          name: player-history-${{ env.RELEASE_VERSION }}
           path: |
             recorder-neoforge/build/libs/*.jar
             bluemap-neoforge/build/libs/*.jar

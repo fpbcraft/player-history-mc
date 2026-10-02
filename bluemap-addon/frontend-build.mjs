@@ -1,4 +1,6 @@
 import { mkdir, readFile, rm, stat, watch } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
@@ -8,10 +10,19 @@ const source = join(root, "src");
 const gradleProperties = join(root, "..", "gradle.properties");
 
 async function projectVersion() {
+  const releaseVersion = process.env.PLAYER_HISTORY_VERSION?.trim();
+  if (releaseVersion) return releaseVersion;
+
   const properties = await readFile(gradleProperties, "utf8");
   const match = properties.match(/^modVersion=(.+)$/m);
   if (!match?.[1]?.trim()) throw new Error("gradle.properties is missing modVersion");
-  return match[1].trim();
+
+  const { stdout } = await execFileAsync("git", ["rev-parse", "--short=8", "HEAD"], {
+    cwd: join(root, ".."),
+  });
+  const sha = stdout.trim().toLowerCase();
+  if (!/^[0-9a-f]{7,8}$/.test(sha)) throw new Error("Could not determine Git SHA");
+  return `${match[1].trim()}-dev.${sha}`;
 }
 
 export const outputDirectory = join(root, "dist");
@@ -20,6 +31,7 @@ export const developmentScriptOutput = join(outputDirectory, ".player-history.js
 export const styleOutput = join(outputDirectory, "player-history.css");
 
 const maximumBundleSize = 250 * 1024;
+const execFileAsync = promisify(execFile);
 
 export async function copyStyles() {
   await mkdir(outputDirectory, { recursive: true });
