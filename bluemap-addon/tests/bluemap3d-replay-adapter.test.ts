@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { afterEach, test } from "vitest";
 import { BlueMap3DReplayAdapter } from "../src/bluemap3d-replay-adapter.js";
