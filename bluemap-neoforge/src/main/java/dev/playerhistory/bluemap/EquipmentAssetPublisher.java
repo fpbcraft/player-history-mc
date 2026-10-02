@@ -16,6 +16,7 @@ import javax.imageio.ImageIO;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.Equipable;
 
 /**
  * Publishes resolved resource models only for item ids that have actually appeared in
@@ -193,14 +194,15 @@ final class EquipmentAssetPublisher {
       BlueMap3DItemModelBridge currentBridge,
       String item,
       ResourceLocation id) {
+    var registered = BuiltInRegistries.ITEM.get(id);
     CustomArmorAssetResolver resolver = customArmor;
-    CustomArmorAssetResolver.Model custom = resolver == null ? null : resolver.resolve(id);
+    CustomArmorAssetResolver.Model custom =
+        registered instanceof Equipable && resolver != null ? resolver.resolve(id) : null;
     if (custom != null) {
       publishCustomArmor(currentRoot, currentBridge, item, id, custom);
       return;
     }
 
-    var registered = BuiltInRegistries.ITEM.get(id);
     if (!(registered instanceof ArmorItem armor)) return;
     boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
     var layers = armor.getMaterial().value().layers();
