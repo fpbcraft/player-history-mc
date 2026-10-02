@@ -109,6 +109,55 @@ const SKIN = {
   leftPants: skinBox(0, 48, 4, 12, 4),
 } as const;
 
+type ArmorSlot = "head" | "chest" | "legs" | "feet";
+type ArmorParent = "head" | "torso" | "rightArm" | "leftArm" | "rightLeg" | "leftLeg";
+
+interface ArmorPartSpec {
+  parent: ArmorParent;
+  uv: SkinBox;
+  position: readonly [number, number, number];
+  scale: number;
+  name: string;
+}
+
+interface ArmorFallbackSpec {
+  parent: ArmorParent;
+  size: readonly [number, number, number];
+  position: readonly [number, number, number];
+  name: string;
+}
+
+const ARMOR_PARTS: Record<ArmorSlot, readonly ArmorPartSpec[]> = {
+  head: [{ parent: "head", uv: SKIN.head, position: [0, 0, 0], scale: 1.14, name: "helmet" }],
+  chest: [
+    { parent: "torso", uv: SKIN.body, position: [0, 0, 0], scale: 1.08, name: "chestplate" },
+    { parent: "rightArm", uv: SKIN.rightArm, position: [0, -0.375, 0], scale: 1.08, name: "right-arm-armor" },
+    { parent: "leftArm", uv: SKIN.rightArm, position: [0, -0.375, 0], scale: 1.08, name: "left-arm-armor" },
+  ],
+  legs: [
+    { parent: "torso", uv: SKIN.body, position: [0, 0, 0], scale: 1.04, name: "leggings-waist" },
+    { parent: "rightLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.08, name: "right-leg-armor" },
+    { parent: "leftLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.08, name: "left-leg-armor" },
+  ],
+  feet: [
+    { parent: "rightLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.1, name: "right-boot" },
+    { parent: "leftLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.1, name: "left-boot" },
+  ],
+};
+
+const ARMOR_FALLBACKS: Record<ArmorSlot, readonly ArmorFallbackSpec[]> = {
+  head: [{ parent: "head", size: [0.59, 0.59, 0.59], position: [0, 0, 0], name: "helmet" }],
+  chest: [{ parent: "torso", size: [0.59, 0.82, 0.32], position: [0, 0, 0], name: "chestplate" }],
+  legs: [
+    { parent: "rightLeg", size: [0.29, 0.43, 0.29], position: [0, -0.25, 0], name: "right-leg-armor" },
+    { parent: "leftLeg", size: [0.29, 0.43, 0.29], position: [0, -0.25, 0], name: "left-leg-armor" },
+  ],
+  feet: [
+    { parent: "rightLeg", size: [0.3, 0.32, 0.31], position: [0, -0.58, 0.02], name: "right-boot" },
+    { parent: "leftLeg", size: [0.3, 0.32, 0.31], position: [0, -0.58, 0.02], name: "left-boot" },
+  ],
+};
+
 /**
  * Three.js scene used by Player History for things that should exist in world space:
  * player avatars, trails and event anchors.
@@ -656,72 +705,19 @@ export class HistoryScene3D {
   private addArmor(
     avatar: PlayerAvatar,
     item: ResolvedItem,
-    slot: "head" | "chest" | "legs" | "feet",
+    slot: ArmorSlot,
     signature: string,
   ): void {
-    const fallbacks: Mesh[] = [];
-    if (slot === "head") {
-      fallbacks.push(
-        this.addEquipmentBox(
-          avatar,
-          avatar.head,
-          item.key,
-          [0.59, 0.59, 0.59],
-          [0, 0, 0],
-          "helmet",
-        ),
-      );
-    } else if (slot === "chest") {
-      fallbacks.push(
-        this.addEquipmentBox(
-          avatar,
-          avatar.torso,
-          item.key,
-          [0.59, 0.82, 0.32],
-          [0, 0, 0],
-          "chestplate",
-        ),
-      );
-    } else if (slot === "legs") {
-      fallbacks.push(
-        this.addEquipmentBox(
-          avatar,
-          avatar.rightLeg.group,
-          item.key,
-          [0.29, 0.43, 0.29],
-          [0, -0.25, 0],
-          "right-leg-armor",
-        ),
-        this.addEquipmentBox(
-          avatar,
-          avatar.leftLeg.group,
-          item.key,
-          [0.29, 0.43, 0.29],
-          [0, -0.25, 0],
-          "left-leg-armor",
-        ),
-      );
-    } else {
-      fallbacks.push(
-        this.addEquipmentBox(
-          avatar,
-          avatar.rightLeg.group,
-          item.key,
-          [0.3, 0.32, 0.31],
-          [0, -0.58, 0.02],
-          "right-boot",
-        ),
-        this.addEquipmentBox(
-          avatar,
-          avatar.leftLeg.group,
-          item.key,
-          [0.3, 0.32, 0.31],
-          [0, -0.58, 0.02],
-          "left-boot",
-        ),
-      );
-    }
-
+    const fallbacks = ARMOR_FALLBACKS[slot].map((spec) =>
+      this.addEquipmentBox(
+        avatar,
+        this.armorParent(avatar, spec.parent),
+        item.key,
+        spec.size,
+        spec.position,
+        spec.name,
+      ),
+    );
     if (this.equipmentModels && item.key !== "minecraft:elytra")
       void this.upgradeArmor(avatar, item, slot, fallbacks, signature, 0);
   }
@@ -729,7 +725,7 @@ export class HistoryScene3D {
   private async upgradeArmor(
     avatar: PlayerAvatar,
     item: ResolvedItem,
-    slot: "head" | "chest" | "legs" | "feet",
+    slot: ArmorSlot,
     fallbacks: Mesh[],
     signature: string,
     attempt: number,
@@ -741,27 +737,17 @@ export class HistoryScene3D {
     )
       return;
     if (!armor) {
-      if (attempt < 8) {
+      if (attempt < 8)
         setTimeout(() => {
           if (
             avatar.equipmentSignature === signature &&
             fallbacks.every((fallback) => fallback.parent)
           )
-            void this.upgradeArmor(
-              avatar,
-              item,
-              slot,
-              fallbacks,
-              signature,
-              attempt + 1,
-            );
+            void this.upgradeArmor(avatar, item, slot, fallbacks, signature, attempt + 1);
         }, 5_000);
-      }
       return;
     }
-
-    const expectedLayer = slot === "legs" ? 2 : 1;
-    if (armor.layer !== expectedLayer) return;
+    if (armor.layer !== (slot === "legs" ? 2 : 1)) return;
 
     for (const fallback of fallbacks) this.removeEquipmentMesh(avatar, fallback);
     this.addTexturedArmor(avatar, item, slot, armor);
@@ -770,19 +756,22 @@ export class HistoryScene3D {
   private addTexturedArmor(
     avatar: PlayerAvatar,
     item: ResolvedItem,
-    slot: "head" | "chest" | "legs" | "feet",
+    slot: ArmorSlot,
     armor: LoadedArmorModel,
   ): void {
-    const baseColor =
-      item.color ??
-      (item.key.includes("leather") ? 0xa06540 : 0xffffff);
-    const base = this.armorMaterial(avatar, armor.texture, baseColor);
+    const base = this.armorMaterial(
+      avatar,
+      armor.texture,
+      item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff),
+    );
     this.addArmorParts(avatar, slot, base, 0);
-
-    if (armor.overlayTexture) {
-      const overlay = this.armorMaterial(avatar, armor.overlayTexture, 0xffffff);
-      this.addArmorParts(avatar, slot, overlay, 0.008);
-    }
+    if (armor.overlayTexture)
+      this.addArmorParts(
+        avatar,
+        slot,
+        this.armorMaterial(avatar, armor.overlayTexture, 0xffffff),
+        0.008,
+      );
   }
 
   private armorMaterial(
@@ -805,111 +794,36 @@ export class HistoryScene3D {
 
   private addArmorParts(
     avatar: PlayerAvatar,
-    slot: "head" | "chest" | "legs" | "feet",
+    slot: ArmorSlot,
     material: Material,
     grow: number,
   ): void {
-    if (slot === "head") {
-      this.addArmorMesh(
-        avatar,
-        avatar.head,
-        material,
-        0.5,
-        0.5,
-        0.5,
-        skinBox(0, 0, 8, 8, 8),
-        [0, 0, 0],
-        1.14 + grow,
-        "helmet",
+    for (const spec of ARMOR_PARTS[slot]) {
+      const geometry = this.armorGeometry(
+        spec.uv.width / 16,
+        spec.uv.height / 16,
+        spec.uv.depth / 16,
+        spec.uv,
       );
-      return;
+      const mesh = new this.api.Three.Mesh(geometry, material);
+      mesh.name = spec.name;
+      mesh.position.set(...spec.position);
+      const scale = spec.scale + grow;
+      mesh.scale.set(scale, scale, scale);
+      this.decoratePlayerPart(mesh, Number(avatar.root.userData.historyPlayer));
+      this.armorParent(avatar, spec.parent).add(mesh);
+      avatar.equipmentParts.push(mesh);
+      avatar.equipmentGeometries.push(geometry);
     }
-
-    if (slot === "chest") {
-      this.addArmorMesh(
-        avatar,
-        avatar.torso,
-        material,
-        0.5,
-        0.75,
-        0.25,
-        skinBox(16, 16, 8, 12, 4),
-        [0, 0, 0],
-        1.08 + grow,
-        "chestplate",
-      );
-      for (const [parent, name] of [
-        [avatar.rightArm.group, "right-arm-armor"],
-        [avatar.leftArm.group, "left-arm-armor"],
-      ] as const)
-        this.addArmorMesh(
-          avatar,
-          parent,
-          material,
-          0.25,
-          0.75,
-          0.25,
-          skinBox(40, 16, 4, 12, 4),
-          [0, -0.375, 0],
-          1.08 + grow,
-          name,
-        );
-      return;
-    }
-
-    if (slot === "legs") {
-      this.addArmorMesh(
-        avatar,
-        avatar.torso,
-        material,
-        0.5,
-        0.75,
-        0.25,
-        skinBox(16, 16, 8, 12, 4),
-        [0, 0, 0],
-        1.04 + grow,
-        "leggings-waist",
-      );
-    }
-    for (const [parent, name] of [
-      [avatar.rightLeg.group, slot === "legs" ? "right-leg-armor" : "right-boot"],
-      [avatar.leftLeg.group, slot === "legs" ? "left-leg-armor" : "left-boot"],
-    ] as const)
-      this.addArmorMesh(
-        avatar,
-        parent,
-        material,
-        0.25,
-        0.75,
-        0.25,
-        skinBox(0, 16, 4, 12, 4),
-        [0, -0.375, 0],
-        (slot === "legs" ? 1.08 : 1.1) + grow,
-        name,
-      );
   }
 
-  private addArmorMesh(
-    avatar: PlayerAvatar,
-    parent: Object3D,
-    material: Material,
-    width: number,
-    height: number,
-    depth: number,
-    uv: SkinBox,
-    position: readonly [number, number, number],
-    scale: number,
-    name: string,
-  ): void {
-    const geometry = this.armorGeometry(width, height, depth, uv);
-    const mesh = new this.api.Three.Mesh(geometry, material);
-    mesh.name = name;
-    mesh.position.set(position[0], position[1], position[2]);
-    mesh.scale.set(scale, scale, scale);
-    this.decoratePlayerPart(mesh, Number(avatar.root.userData.historyPlayer));
-    parent.add(mesh);
-    avatar.equipmentParts.push(mesh);
-    avatar.equipmentGeometries.push(geometry);
+  private armorParent(avatar: PlayerAvatar, parent: ArmorParent): Object3D {
+    if (parent === "head") return avatar.head;
+    if (parent === "torso") return avatar.torso;
+    if (parent === "rightArm") return avatar.rightArm.group;
+    if (parent === "leftArm") return avatar.leftArm.group;
+    if (parent === "rightLeg") return avatar.rightLeg.group;
+    return avatar.leftLeg.group;
   }
 
   private addEquipmentBox(
