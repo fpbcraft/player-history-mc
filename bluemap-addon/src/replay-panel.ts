@@ -4,7 +4,6 @@ import { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { chatEventsBetween } from "./event-notifications.js";
 import { ObjectChunkCache, ObjectReplayEngine } from "./object-replay.js";
-import { mapConcurrent } from "./history-loading.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { loadHeatmapRange } from "./heatmap-loader.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
@@ -22,7 +21,7 @@ import {
   UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import { BREAK, ChunkCache, CONTEXT, OFFLINE, ReplayEngine } from "./replay-core.js";
+import { ChunkCache, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { clamp, ReplayClock } from "./replay-state.js";
 import { loadRangeEvents } from "./range-events-loader.js";
@@ -30,6 +29,7 @@ import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
 import { describeState, eventDetails, TelemetryCache } from "./telemetry.js";
 import { formatDate } from "./time-format.js";
+import { loadTrailData } from "./trail-loader.js";
 import type {
   HistoryEvent,
   HistoryManifest,
@@ -1420,62 +1420,25 @@ export class ReplayPanel extends HTMLElement {
     if (!this.cache) return;
     const cache = this.cache;
     const controller = this.requests.start("trails");
-    const duration = cache.duration;
-    const from =
-      this.trailMode === Infinity
-        ? this.clock.from
-        : Math.max(
-            this.clock.from,
-            Math.floor(this.clock.time / duration) * duration - (this.trailMode || 30000),
-          );
-    const to =
-      this.trailMode === Infinity
-        ? this.clock.to
-        : Math.min(this.clock.to, (Math.floor(this.clock.time / duration) + 1) * duration);
-    const points = [],
-      events = [];
-    let previousPlayers = new Set();
     try {
-      const starts = cache.chunkStarts(from, to, 5000);
-      this.statusCoordinator.show("loading", `Loading trails… ${starts.length ? "0" : "100"}%`);
-      if (starts.length > 5000)
-        throw Error(
-          "Full trails exceed 5,000 recording chunks. Choose a shorter range or 30s / 5m trails.",
-        );
-      const chunks = await mapConcurrent(
-        starts,
-        this.loadingConcurrency(),
-        (time) => cache.read(time, controller.signal),
-        (completed, total) => this.setTrailProgress(completed, total),
-      );
-      let previousStart: number | undefined;
-      for (let index = 0; index < chunks.length; index++) {
-        const data = chunks[index];
-        const t = starts[index];
-        if (!data || t === undefined) continue;
-        if (previousStart !== undefined && t !== previousStart + duration)
-          previousPlayers = new Set();
-        const seen = new Set<number>();
-        events.push(...data.events);
-        if (events.length > 100000)
-          throw Error("Too many events in this range. Choose a shorter trail duration.");
-        for (const point of data.points) {
-          seen.add(point.player);
-          if (point.flags & CONTEXT && t !== starts[0]) continue;
-          points.push(
-            !previousPlayers.has(point.player) ? { ...point, flags: point.flags | BREAK } : point,
-          );
-          previousPlayers.add(point.player);
-          if (points.length > 100000)
-            throw Error("Full trails exceed the browser limit. Use 30s or 5m trails.");
-        }
-        previousPlayers = seen;
-        previousStart = t;
-      }
+      const result = await loadTrailData({
+        clockFrom: this.clock.from,
+        clockTo: this.clock.to,
+        clockTime: this.clock.time,
+        trailMode: this.trailMode,
+        duration: cache.duration,
+        concurrency: this.loadingConcurrency(),
+        chunkStarts: (from, to, limit) => cache.chunkStarts(from, to, limit),
+        readChunk: (time) => cache.read(time, controller.signal),
+        onPlan: (total) =>
+          this.statusCoordinator.show("loading", `Loading trails… ${total ? "0" : "100"}%`),
+        onProgress: (completed, total) => this.setTrailProgress(completed, total),
+      });
       if (controller.signal.aborted) return;
+
       this.trailDataKey = dataKey;
       let added = false;
-      for (const event of events)
+      for (const event of result.events)
         if (
           !UNAVAILABLE_EVENT_TYPES.includes(
             event.type as (typeof UNAVAILABLE_EVENT_TYPES)[number],
@@ -1486,7 +1449,7 @@ export class ReplayPanel extends HTMLElement {
           added = true;
         }
       if (added) this.renderEventFilters();
-      this.fullTrails = new ReplayEngine(points.sort((a, b) => a.time - b.time));
+      this.fullTrails = new ReplayEngine(result.points);
       this.statusCoordinator.show(
         "context",
         this.isLive ? "Live · local time" : "Historical replay · local time",
