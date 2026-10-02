@@ -618,9 +618,7 @@ export class HistoryScene3D {
     );
 
     const headYaw =
-      avatar.recordedBodyYaw !== undefined && avatar.recordedYaw !== undefined
-        ? avatar.recordedYaw - avatar.recordedBodyYaw
-        : 0;
+      avatar.recordedYaw === undefined ? 0 : avatar.recordedYaw - bodyYaw;
     let headPitch = Math.max(
       -Math.PI / 2,
       Math.min(Math.PI / 2, avatar.recordedPitch ?? 0),
