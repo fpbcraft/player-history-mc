@@ -26,8 +26,8 @@ class PublicProtocolContractTest {
     registry.world("minecraft:overworld");
 
     long time = System.currentTimeMillis();
-    long bucket = Math.floorDiv(time, 100) * 100;
-    var options = new HistoryStore.Options(100, -1, 64, 8, false);
+    long bucket = Math.floorDiv(time, 60_000) * 60_000;
+    var options = new HistoryStore.Options(60_000, -1, 64, 8, false);
 
     try (var store = new HistoryStore(root, registry, options, ignored -> {})) {
       store.capabilities(Map.of("movement", true));
