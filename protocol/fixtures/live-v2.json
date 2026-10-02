@@ -4,11 +4,20 @@
   "registry": {
     "players": [{"id": 1, "uuid": "00000000-0000-0000-0000-000000000001", "name": "Fixture"}],
     "worlds": [{"id": 0, "key": "minecraft:overworld"}],
-    "items": []
+    "items": [{"id": 1, "key": "minecraft:diamond_sword"}]
   },
   "points": [
     {"player": 1, "time": 1780000004000, "world": 0, "x": 32, "y": 2048, "z": -64, "flags": 0}
   ],
+  "states": {
+    "1": {
+      "yaw": 90,
+      "pitch": 5,
+      "sprinting": true,
+      "onGround": true,
+      "heldItem": {"item": 1, "count": 1}
+    }
+  },
   "events": [
     {
       "point": {"player": 1, "time": 1780000004000, "world": 0, "x": 32, "y": 2048, "z": -64, "flags": 0},

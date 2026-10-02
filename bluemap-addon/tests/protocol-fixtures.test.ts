@@ -35,4 +35,6 @@ test("shared live fixture is accepted by the browser protocol parser", async () 
   assert.equal(parsed.points[0]?.player, 1);
   assert.equal(parsed.events.length, 1);
   assert.equal(parsed.events[0]?.type, "CHAT");
+  assert.equal(parsed.states?.["1"]?.sprinting, true);
+  assert.deepEqual(parsed.states?.["1"]?.heldItem, { item: 1, count: 1 });
 });

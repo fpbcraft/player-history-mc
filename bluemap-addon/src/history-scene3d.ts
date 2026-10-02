@@ -37,10 +37,15 @@ interface Limb {
 
 interface PlayerAvatar {
   root: Object3D;
+  model: Object3D;
+  torso: Object3D;
   innerMaterial: Material;
   outerMaterial: Material;
   texture?: Texture;
   parts: Object3D[];
+  equipmentParts: Object3D[];
+  equipmentMaterials: Material[];
+  equipmentGeometries: Geometry[];
   head: Object3D;
   rightArm: Limb;
   leftArm: Limb;
@@ -49,8 +54,11 @@ interface PlayerAvatar {
   last?: HistoryPoint;
   yaw: number;
   phase: number;
+  walking: number;
   recordedYaw: number | undefined;
   recordedPitch: number | undefined;
+  state: PlayerState;
+  equipmentSignature: string;
 }
 
 interface DisposableLine extends Object3D {
@@ -168,6 +176,7 @@ export class HistoryScene3D {
     for (const [id, avatar] of this.players) {
       if (keep.has(id)) continue;
       this.playersRoot.remove(avatar.root);
+      this.clearEquipment(avatar);
       avatar.texture?.dispose();
       avatar.innerMaterial.dispose();
       avatar.outerMaterial.dispose();
@@ -175,10 +184,15 @@ export class HistoryScene3D {
     }
   }
 
-  setPlayerVitals(player: number, state: PlayerState = {}): void {
+  setPlayerVitals(
+    player: number,
+    state: PlayerState = {},
+    items: readonly HistoryRegistry["items"][number][] = [],
+  ): void {
     const avatar = this.players.get(player);
     if (!avatar) return;
     avatar.root.userData.historyVitals = state;
+    avatar.state = state;
     avatar.recordedYaw =
       typeof state.yaw === "number" && Number.isFinite(state.yaw)
         ? (-state.yaw * Math.PI) / 180
@@ -187,10 +201,8 @@ export class HistoryScene3D {
       typeof state.pitch === "number" && Number.isFinite(state.pitch)
         ? (state.pitch * Math.PI) / 180
         : undefined;
-    const yaw = avatar.recordedYaw ?? avatar.yaw;
-    avatar.root.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2));
-    const pitch = avatar.recordedPitch ?? 0;
-    avatar.head.quaternion.set(Math.sin(pitch / 2), 0, 0, Math.cos(pitch / 2));
+    this.updateEquipment(avatar, state, items);
+    this.applyPose(avatar);
   }
 
   setTrails(segments: readonly PointSegment[], names: ReadonlyMap<number, string>): void {
@@ -313,6 +325,7 @@ export class HistoryScene3D {
     this.clearTrails();
     this.clearEvents();
     for (const avatar of this.players.values()) {
+      this.clearEquipment(avatar);
       avatar.texture?.dispose();
       avatar.innerMaterial.dispose();
       avatar.outerMaterial.dispose();
@@ -325,10 +338,6 @@ export class HistoryScene3D {
 
   private createPlayer(id: number, uuid: string | undefined, label: string): PlayerAvatar {
     const T = this.api.Three;
-    // Keep Minecraft's two skin layers separate. The base skin is opaque and writes
-    // depth first; only the hat/jacket/sleeves/pants layer is transparent. With one
-    // transparent DoubleSide material for both, the back face of the hat could render
-    // through its transparent front pixels before the actual face had written depth.
     const innerMaterial = new T.MeshBasicMaterial({
       color: uuid ? 0xffffff : playerColor(id),
       transparent: false,
@@ -348,12 +357,9 @@ export class HistoryScene3D {
       const skinUrl = new URL(`${uuid}.png`, this.skinBase);
       if (PLAYER_HISTORY_SKIN_BUILD)
         skinUrl.searchParams.set("v", PLAYER_HISTORY_SKIN_BUILD);
-      const url = skinUrl.href;
       texture = this.textureLoader.load(
-        url,
+        skinUrl.href,
         (loaded) => {
-          // Keep Three.js' normal image-texture orientation. The canonical
-          // Minecraft UV mapping below (same as skinview3d) is defined for flipY=true.
           loaded.flipY = true;
           if (T.NearestFilter !== undefined) {
             loaded.magFilter = T.NearestFilter;
@@ -370,7 +376,6 @@ export class HistoryScene3D {
         },
         undefined,
         () => {
-          // Skin unavailable: fall back to the same deterministic colour used elsewhere.
           innerMaterial.color?.setStyle?.(playerColor(id));
           outerMaterial.color?.setStyle?.(playerColor(id));
           innerMaterial.needsUpdate = true;
@@ -384,48 +389,40 @@ export class HistoryScene3D {
     root.userData.historyKind = "player";
     root.userData.historyPlayer = id;
 
+    const model = new T.Group();
+    model.name = "player-model";
+    root.add(model);
+
     const parts: Object3D[] = [];
-    const addStatic = (
+    const addMesh = (
+      parent: Object3D,
       geometry: Geometry,
+      material: Material,
       x: number,
       y: number,
       z: number,
       name: string,
     ): Mesh => {
-      const mesh = new T.Mesh(geometry, innerMaterial);
+      const mesh = new T.Mesh(geometry, material);
       mesh.position.set(x, y, z);
       mesh.name = name;
       this.decoratePlayerPart(mesh, id);
-      root.add(mesh);
+      parent.add(mesh);
       parts.push(mesh);
       return mesh;
     };
 
     const head = new T.Group();
     head.position.set(0, 1.75, 0);
-    root.add(head);
-    for (const [name, geometry, layerMaterial] of [
-      ["head", this.geometry("head", 0.5, 0.5, 0.5, SKIN.head), innerMaterial],
-      ["hat", this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat), outerMaterial],
-    ] as const) {
-      const mesh = new T.Mesh(geometry, layerMaterial);
-      mesh.name = name;
-      this.decoratePlayerPart(mesh, id);
-      head.add(mesh);
-      parts.push(mesh);
-    }
-    addStatic(this.geometry("body", 0.5, 0.75, 0.25, SKIN.body), 0, 1.125, 0, "body");
-    {
-      const jacket = new T.Mesh(
-        this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket),
-        outerMaterial,
-      );
-      jacket.position.set(0, 1.125, 0);
-      jacket.name = "jacket";
-      this.decoratePlayerPart(jacket, id);
-      root.add(jacket);
-      parts.push(jacket);
-    }
+    model.add(head);
+    addMesh(head, this.geometry("head", 0.5, 0.5, 0.5, SKIN.head), innerMaterial, 0, 0, 0, "head");
+    addMesh(head, this.geometry("hat", 0.54, 0.54, 0.54, SKIN.hat), outerMaterial, 0, 0, 0, "hat");
+
+    const torso = new T.Group();
+    torso.position.set(0, 1.125, 0);
+    model.add(torso);
+    addMesh(torso, this.geometry("body", 0.5, 0.75, 0.25, SKIN.body), innerMaterial, 0, 0, 0, "body");
+    addMesh(torso, this.geometry("jacket", 0.53, 0.78, 0.28, SKIN.jacket), outerMaterial, 0, 0, 0, "jacket");
 
     const limb = (
       key: string,
@@ -437,63 +434,44 @@ export class HistoryScene3D {
     ): Limb => {
       const group = new T.Group();
       group.position.set(x, pivotY, 0);
-      const mesh = new T.Mesh(
+      const mesh = addMesh(
+        group,
         this.geometry(key, 0.25, 0.75, 0.25, skin),
         innerMaterial,
+        0,
+        -0.375,
+        0,
+        key,
       );
-      const overlay = new T.Mesh(
+      const overlay = addMesh(
+        group,
         this.geometry(overlayKey, 0.28, 0.78, 0.28, overlaySkin),
         outerMaterial,
+        0,
+        -0.375,
+        0,
+        overlayKey,
       );
-      mesh.position.set(0, -0.375, 0);
-      overlay.position.set(0, -0.375, 0);
-      this.decoratePlayerPart(mesh, id);
-      this.decoratePlayerPart(overlay, id);
-      group.add(mesh, overlay);
-      root.add(group);
-      parts.push(mesh, overlay);
+      model.add(group);
       return { group, mesh, overlay };
     };
 
-    const rightArm = limb(
-      "rightArm",
-      "rightSleeve",
-      SKIN.rightArm,
-      SKIN.rightSleeve,
-      -0.375,
-      1.5,
-    );
-    const leftArm = limb(
-      "leftArm",
-      "leftSleeve",
-      SKIN.leftArm,
-      SKIN.leftSleeve,
-      0.375,
-      1.5,
-    );
-    const rightLeg = limb(
-      "rightLeg",
-      "rightPants",
-      SKIN.rightLeg,
-      SKIN.rightPants,
-      -0.125,
-      0.75,
-    );
-    const leftLeg = limb(
-      "leftLeg",
-      "leftPants",
-      SKIN.leftLeg,
-      SKIN.leftPants,
-      0.125,
-      0.75,
-    );
+    const rightArm = limb("rightArm", "rightSleeve", SKIN.rightArm, SKIN.rightSleeve, -0.375, 1.5);
+    const leftArm = limb("leftArm", "leftSleeve", SKIN.leftArm, SKIN.leftSleeve, 0.375, 1.5);
+    const rightLeg = limb("rightLeg", "rightPants", SKIN.rightLeg, SKIN.rightPants, -0.125, 0.75);
+    const leftLeg = limb("leftLeg", "leftPants", SKIN.leftLeg, SKIN.leftPants, 0.125, 0.75);
 
     return {
       root,
+      model,
+      torso,
       innerMaterial,
       outerMaterial,
       ...(texture ? { texture } : {}),
       parts,
+      equipmentParts: [],
+      equipmentMaterials: [],
+      equipmentGeometries: [],
       head,
       rightArm,
       leftArm,
@@ -501,11 +479,13 @@ export class HistoryScene3D {
       leftLeg,
       yaw: 0,
       phase: 0,
+      walking: 0,
       recordedYaw: undefined,
       recordedPitch: undefined,
+      state: {},
+      equipmentSignature: "",
     };
   }
-
   private positionPlayer(avatar: PlayerAvatar, point: HistoryPoint, label: string): void {
     const x = point.x / 32;
     const y = point.y / 32;
@@ -525,25 +505,15 @@ export class HistoryScene3D {
         avatar.phase = 0;
       }
     }
-
+    avatar.walking = walking;
     avatar.root.position.set(x, y, z);
-    const effectiveYaw = avatar.recordedYaw ?? avatar.yaw;
-    const halfYaw = effectiveYaw / 2;
-    avatar.root.quaternion.set(0, Math.sin(halfYaw), 0, Math.cos(halfYaw));
-    const pitch = avatar.recordedPitch ?? 0;
-    avatar.head.quaternion.set(Math.sin(pitch / 2), 0, 0, Math.cos(pitch / 2));
-
-    const swing = Math.sin(avatar.phase) * walking;
-    this.rotateX(avatar.rightArm.group, swing);
-    this.rotateX(avatar.leftArm.group, -swing);
-    this.rotateX(avatar.rightLeg.group, -swing);
-    this.rotateX(avatar.leftLeg.group, swing);
+    this.applyPose(avatar);
 
     const tooltip = `♟ ${label}\n◷ ${formatTimestamp(point.time)}\n⌖ ${formatCoordinates(point)}`;
     avatar.root.userData.historyTooltip = tooltip;
     avatar.root.userData.historyTime = point.time;
     avatar.root.userData.historyPoint = point;
-    for (const part of avatar.parts) {
+    for (const part of [...avatar.parts, ...avatar.equipmentParts]) {
       part.userData.historyTooltip = tooltip;
       part.userData.historyTime = point.time;
       part.userData.historyPoint = point;
@@ -551,16 +521,213 @@ export class HistoryScene3D {
     avatar.last = point;
   }
 
-  private rotateX(object: Object3D, angle: number): void {
-    const half = angle / 2;
-    object.quaternion.set(Math.sin(half), 0, 0, Math.cos(half));
+  private applyPose(avatar: PlayerAvatar): void {
+    const state = avatar.state;
+    const sprinting = state.sprinting === true;
+    const sneaking = state.sneaking === true;
+    const swimming = state.swimming === true;
+    const elytra = state.elytra === true;
+    const sleeping = state.sleeping === true;
+    const airborne = state.onGround === false && !swimming && !elytra && !sleeping;
+
+    const yaw = avatar.recordedYaw ?? avatar.yaw;
+    avatar.root.quaternion.set(0, Math.sin(yaw / 2), 0, Math.cos(yaw / 2));
+
+    let modelY = 0;
+    let modelPitch = 0;
+    let torsoPitch = sprinting ? 0.18 : 0;
+    let rightArm = Math.sin(avatar.phase) * avatar.walking * (sprinting ? 1.35 : 1);
+    let leftArm = -rightArm;
+    let rightLeg = -rightArm;
+    let leftLeg = rightArm;
+    let rightArmZ = 0;
+    let leftArmZ = 0;
+
+    if (airborne) {
+      rightArm = -0.25;
+      leftArm = -0.25;
+      rightLeg = 0.15;
+      leftLeg = -0.15;
+    }
+    if (sneaking) {
+      modelY = -0.12;
+      torsoPitch = 0.45;
+      rightArm *= 0.6;
+      leftArm *= 0.6;
+      rightLeg = -0.18 + rightLeg * 0.45;
+      leftLeg = -0.18 + leftLeg * 0.45;
+    }
+    if (swimming) {
+      modelY = 0.45;
+      modelPitch = Math.PI / 2;
+      torsoPitch = 0;
+      const stroke = Math.sin(avatar.phase * 0.8);
+      rightArm = -1.35 + stroke * 0.45;
+      leftArm = -1.35 - stroke * 0.45;
+      rightLeg = stroke * 0.25;
+      leftLeg = -stroke * 0.25;
+    } else if (elytra) {
+      modelY = 0.45;
+      modelPitch = Math.PI / 2;
+      torsoPitch = 0;
+      rightArm = 0.35;
+      leftArm = 0.35;
+      rightArmZ = -0.35;
+      leftArmZ = 0.35;
+      rightLeg = 0.15;
+      leftLeg = 0.15;
+    } else if (sleeping) {
+      modelY = 0.35;
+      modelPitch = Math.PI / 2;
+      torsoPitch = 0;
+      rightArm = 0;
+      leftArm = 0;
+      rightLeg = 0;
+      leftLeg = 0;
+    }
+
+    avatar.model.position.set(0, modelY, 0);
+    this.setEuler(avatar.model, modelPitch, 0, 0);
+    this.setEuler(avatar.torso, torsoPitch, 0, 0);
+    this.setEuler(avatar.head, (avatar.recordedPitch ?? 0) - torsoPitch * 0.25, 0, 0);
+    this.setEuler(avatar.rightArm.group, rightArm, 0, rightArmZ);
+    this.setEuler(avatar.leftArm.group, leftArm, 0, leftArmZ);
+    this.setEuler(avatar.rightLeg.group, rightLeg, 0, 0);
+    this.setEuler(avatar.leftLeg.group, leftLeg, 0, 0);
+  }
+
+  private updateEquipment(
+    avatar: PlayerAvatar,
+    state: PlayerState,
+    items: readonly HistoryRegistry["items"][number][],
+  ): void {
+    const head = this.itemKey(state["equipment:head"], items);
+    const chest = this.itemKey(state["equipment:chest"], items);
+    const legs = this.itemKey(state["equipment:legs"], items);
+    const feet = this.itemKey(state["equipment:feet"], items);
+    const main =
+      this.itemKey(state.heldItem, items) ?? this.itemKey(state["equipment:mainhand"], items);
+    const offhand = this.itemKey(state["equipment:offhand"], items);
+    const signature = JSON.stringify([head, chest, legs, feet, main, offhand]);
+    if (signature === avatar.equipmentSignature) return;
+
+    this.clearEquipment(avatar);
+    avatar.equipmentSignature = signature;
+
+    if (head && this.isArmor(head, "head"))
+      this.addEquipmentBox(avatar, avatar.head, head, [0.59, 0.59, 0.59], [0, 0, 0], "helmet");
+    if (chest && this.isArmor(chest, "chest"))
+      this.addEquipmentBox(avatar, avatar.torso, chest, [0.59, 0.82, 0.32], [0, 0, 0], "chestplate");
+    if (legs && this.isArmor(legs, "legs")) {
+      this.addEquipmentBox(avatar, avatar.rightLeg.group, legs, [0.29, 0.43, 0.29], [0, -0.25, 0], "right-leg-armor");
+      this.addEquipmentBox(avatar, avatar.leftLeg.group, legs, [0.29, 0.43, 0.29], [0, -0.25, 0], "left-leg-armor");
+    }
+    if (feet && this.isArmor(feet, "feet")) {
+      this.addEquipmentBox(avatar, avatar.rightLeg.group, feet, [0.3, 0.32, 0.31], [0, -0.58, 0.02], "right-boot");
+      this.addEquipmentBox(avatar, avatar.leftLeg.group, feet, [0.3, 0.32, 0.31], [0, -0.58, 0.02], "left-boot");
+    }
+    if (main) this.addHeldItem(avatar, avatar.rightArm.group, main, "main-hand");
+    if (offhand) this.addHeldItem(avatar, avatar.leftArm.group, offhand, "off-hand");
+  }
+
+  private clearEquipment(avatar: PlayerAvatar): void {
+    for (const part of avatar.equipmentParts) part.parent?.remove(part);
+    for (const material of avatar.equipmentMaterials) material.dispose();
+    for (const geometry of avatar.equipmentGeometries) geometry.dispose();
+    avatar.equipmentParts.length = 0;
+    avatar.equipmentMaterials.length = 0;
+    avatar.equipmentGeometries.length = 0;
+    avatar.equipmentSignature = "";
+  }
+
+  private addEquipmentBox(
+    avatar: PlayerAvatar,
+    parent: Object3D,
+    item: string,
+    size: readonly [number, number, number],
+    position: readonly [number, number, number],
+    name: string,
+    pitch = 0,
+  ): void {
+    const T = this.api.Three;
+    const geometry = new T.BoxGeometry(size[0], size[1], size[2]);
+    const material = new T.MeshBasicMaterial({
+      color: this.equipmentColor(item),
+      transparent: false,
+    });
+    const mesh = new T.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.position.set(position[0], position[1], position[2]);
+    this.setEuler(mesh, pitch, 0, 0);
+    this.decoratePlayerPart(mesh, Number(avatar.root.userData.historyPlayer));
+    parent.add(mesh);
+    avatar.equipmentParts.push(mesh);
+    avatar.equipmentMaterials.push(material);
+    avatar.equipmentGeometries.push(geometry);
+  }
+
+  private addHeldItem(
+    avatar: PlayerAvatar,
+    parent: Object3D,
+    item: string,
+    name: string,
+  ): void {
+    let size: readonly [number, number, number] = [0.18, 0.32, 0.08];
+    if (item.includes("shield")) size = [0.42, 0.5, 0.08];
+    else if (item.endsWith("_sword")) size = [0.08, 0.68, 0.05];
+    else if (/(pickaxe|_axe|shovel|_hoe)$/.test(item)) size = [0.1, 0.58, 0.1];
+    else if (item.includes("bow")) size = [0.08, 0.55, 0.12];
+    this.addEquipmentBox(avatar, parent, item, size, [0, -0.82, 0.08], name, -0.35);
+  }
+
+  private itemKey(
+    value: unknown,
+    items: readonly HistoryRegistry["items"][number][],
+  ): string | undefined {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+    const item = (value as { item?: unknown }).item;
+    if (typeof item !== "number" || item <= 0) return undefined;
+    return items.find((entry) => entry.id === item)?.key;
+  }
+
+  private isArmor(item: string, slot: "head" | "chest" | "legs" | "feet"): boolean {
+    if (slot === "head") return /(_helmet|turtle_helmet|pumpkin|_head|_skull)$/.test(item);
+    if (slot === "chest") return /(_chestplate|elytra)$/.test(item);
+    if (slot === "legs") return item.endsWith("_leggings");
+    return item.endsWith("_boots");
+  }
+
+  private equipmentColor(item: string): number {
+    if (item.includes("netherite")) return 0x36343f;
+    if (item.includes("diamond")) return 0x55d8dc;
+    if (item.includes("gold")) return 0xf2c94c;
+    if (item.includes("iron") || item.includes("chain")) return 0xc7c7c7;
+    if (item.includes("leather")) return 0x8b5a2b;
+    if (item.includes("turtle")) return 0x4f9a57;
+    if (item.includes("shield")) return 0x8b6b45;
+    if (item.includes("torch")) return 0xf2a93b;
+    return 0x8c8c8c;
+  }
+
+  private setEuler(object: Object3D, x: number, y: number, z: number): void {
+    const sx = Math.sin(x / 2);
+    const cx = Math.cos(x / 2);
+    const sy = Math.sin(y / 2);
+    const cy = Math.cos(y / 2);
+    const sz = Math.sin(z / 2);
+    const cz = Math.cos(z / 2);
+    object.quaternion.set(
+      sx * cy * cz + cx * sy * sz,
+      cx * sy * cz - sx * cy * sz,
+      cx * cy * sz + sx * sy * cz,
+      cx * cy * cz - sx * sy * sz,
+    );
   }
 
   private decoratePlayerPart(part: Object3D, id: number): void {
     part.userData.historyKind = "player";
     part.userData.historyPlayer = id;
   }
-
   private geometry(
     key: string,
     width: number,

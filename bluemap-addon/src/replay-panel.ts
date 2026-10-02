@@ -38,6 +38,7 @@ import type {
   HistoryManifest,
   HistoryPoint,
   IntegrationMapping,
+  PlayerState,
 } from "./types.js";
 import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
 import { type ChatNotification, renderChatNotifications } from "./ui/chat-notification-view.js";
@@ -70,6 +71,7 @@ export class ReplayPanel extends HTMLElement {
   private rangeEvents: HistoryEvent[] = [];
   private liveEvents: HistoryEvent[] = [];
   private livePoints: HistoryPoint[] = [];
+  private liveStates: Record<string, PlayerState> = {};
   private manifest?: HistoryManifest;
   private integration?: IntegrationMapping;
   private cache: ChunkCache | undefined;
@@ -1176,25 +1178,39 @@ export class ReplayPanel extends HTMLElement {
       } else {
         this.objectAdapter?.clear();
       }
-      const healthKey = `${Math.floor(this.clock.time / 1000)}:${positions
-        .map((position) => position.player)
-        .join(",")}`;
-      if (healthKey !== this.healthKey) {
-        this.healthKey = healthKey;
-        const token = {};
-        this.healthToken = token;
-        const telemetryCache = this.telemetryCache;
-        if (!telemetryCache) return;
-        Promise.all(
-          positions.map(
-            async (position) =>
-              [position.player, await telemetryCache.at(position.player, this.clock.time)] as const,
-          ),
-        ).then((states) => {
-          if (this.healthToken !== token || this.isLive) return;
-          for (const [player, state] of states)
-            this.adapter?.setPlayerVitals(player, state ?? undefined);
-        });
+      if (this.isLive) {
+        for (const position of positions) {
+          this.adapter.setPlayerVitals(
+            position.player,
+            this.liveStates[String(position.player)] ?? {},
+            this.manifest.registry.items,
+          );
+        }
+      } else {
+        const healthKey = `${Math.floor(this.clock.time / 1000)}:${positions
+          .map((position) => position.player)
+          .join(",")}`;
+        if (healthKey !== this.healthKey) {
+          this.healthKey = healthKey;
+          const token = {};
+          this.healthToken = token;
+          const telemetryCache = this.telemetryCache;
+          if (!telemetryCache) return;
+          Promise.all(
+            positions.map(
+              async (position) =>
+                [position.player, await telemetryCache.at(position.player, this.clock.time)] as const,
+            ),
+          ).then((states) => {
+            if (this.healthToken !== token || this.isLive) return;
+            for (const [player, state] of states)
+              this.adapter?.setPlayerVitals(
+                player,
+                state ?? undefined,
+                this.manifest?.registry.items ?? [],
+              );
+          });
+        }
       }
       if (world === undefined)
         this.statusCoordinator.show("range", "This map has no matching recorded dimension.");
@@ -1264,6 +1280,7 @@ export class ReplayPanel extends HTMLElement {
 
       this.livePoints = update.points;
       this.liveEvents = update.events;
+      this.liveStates = update.states;
       if (fullLive) this.liveReplay.update(update.points, update.generatedAt);
       for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
       this.eventRevision++;

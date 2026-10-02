@@ -23,6 +23,7 @@ const snapshot = (
   generatedAt: number,
   points: HistoryPoint[] = [],
   events: HistoryEvent[] = [],
+  states: LiveSnapshot["states"] = {},
 ): LiveSnapshot => ({
   protocolVersion: 2,
   generatedAt,
@@ -33,6 +34,7 @@ const snapshot = (
   },
   points,
   events,
+  states,
 });
 
 test("live feed state rejects stale snapshots without initializing chat notifications", () => {
@@ -79,4 +81,19 @@ test("live feed state keeps only the browser live-window caps", () => {
   assert.equal(update?.points[0]?.time, 5);
   assert.equal(update?.events.length, 1_000);
   assert.equal(update?.events[0]?.point.time, 5);
+});
+
+
+test("live feed state carries current player state with the position snapshot", () => {
+  const state = new LiveFeedState();
+  const update = state.apply(
+    snapshot(10_000, [point(10_000)], [], {
+      "1": { sprinting: true, "equipment:head": { item: 2, count: 1 } },
+    }),
+    10_000,
+  );
+  assert.deepEqual(update?.states["1"], {
+    sprinting: true,
+    "equipment:head": { item: 2, count: 1 },
+  });
 });

@@ -71,6 +71,8 @@ export interface LiveSnapshot {
   registry: HistoryRegistry;
   points: HistoryPoint[];
   events: HistoryEvent[];
+  /** Current reconstructed state keyed by numeric player id. Optional for older publishers. */
+  states?: Record<string, PlayerState>;
 }
 
 export interface ObjectHistoryInstance {

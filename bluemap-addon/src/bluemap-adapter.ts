@@ -371,8 +371,12 @@ export class BlueMapAdapter {
       if (!keep.has(id)) this.players.remove(marker);
     }
   }
-  setPlayerVitals(player: number, state: PlayerState = {}): void {
-    this.scene3d.setPlayerVitals(player, state);
+  setPlayerVitals(
+    player: number,
+    state: PlayerState = {},
+    items: readonly HistoryRegistry["items"][number][] = [],
+  ): void {
+    this.scene3d.setPlayerVitals(player, state, items);
     const element = this.players.markers.get(`p${player}`)?.element;
     renderVitals(element?.querySelector(".history-player-vitals"), state);
   }
