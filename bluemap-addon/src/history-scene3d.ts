@@ -258,9 +258,13 @@ export class HistoryScene3D {
     if (!avatar) return;
     avatar.root.userData.historyVitals = state;
     avatar.state = state;
+    const headYaw =
+      typeof state.headYaw === "number" && Number.isFinite(state.headYaw)
+        ? state.headYaw
+        : state.yaw;
     avatar.recordedYaw =
-      typeof state.yaw === "number" && Number.isFinite(state.yaw)
-        ? (-state.yaw * Math.PI) / 180
+      typeof headYaw === "number" && Number.isFinite(headYaw)
+        ? (-headYaw * Math.PI) / 180
         : undefined;
     avatar.recordedBodyYaw =
       typeof state.bodyYaw === "number" && Number.isFinite(state.bodyYaw)
