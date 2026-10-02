@@ -922,7 +922,7 @@ export class ReplayPanel extends HTMLElement {
       this.requests.finish("activity", controller);
       return;
     }
-    const count = Math.max(12, Math.min(96, Math.floor((chart.clientWidth || 720) / 10));
+    const count = Math.max(12, Math.min(96, Math.floor((chart.clientWidth || 720) / 10)));
     if (activityRangeTooLarge(from, to)) {
       chart.replaceChildren();
       caption.textContent = "Choose a range of up to 2,000 days to show recording density";
