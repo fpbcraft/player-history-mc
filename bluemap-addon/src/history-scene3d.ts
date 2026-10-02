@@ -619,7 +619,7 @@ export class HistoryScene3D {
 
     const headYaw =
       avatar.recordedBodyYaw !== undefined && avatar.recordedYaw !== undefined
-        ? this.wrapRadians(avatar.recordedYaw - avatar.recordedBodyYaw)
+        ? avatar.recordedYaw - avatar.recordedBodyYaw
         : 0;
     let headPitch = Math.max(
       -Math.PI / 2,
@@ -705,10 +705,6 @@ export class HistoryScene3D {
     this.setEuler(avatar.leftArm.group, leftArm, 0, leftArmZ);
     this.setEuler(avatar.rightLeg.group, rightLeg, 0, 0);
     this.setEuler(avatar.leftLeg.group, leftLeg, 0, 0);
-  }
-
-  private wrapRadians(value: number): number {
-    return Math.atan2(Math.sin(value), Math.cos(value));
   }
 
   private updateEquipment(
