@@ -186,12 +186,23 @@ final class CustomArmorAssetResolver {
     byte[] bytes = assets.asset(path);
     if (bytes == null) return false;
     String text = new String(bytes, StandardCharsets.UTF_8);
-    return text.contains("bipedHead")
-        && text.contains("bipedBody")
-        && text.contains("bipedRightArm")
-        && text.contains("bipedLeftArm")
-        && text.contains("bipedRightLeg")
-        && text.contains("bipedLeftLeg");
+    boolean biped =
+        text.contains("bipedHead")
+            && text.contains("bipedBody")
+            && text.contains("bipedRightArm")
+            && text.contains("bipedLeftArm")
+            && text.contains("bipedRightLeg")
+            && text.contains("bipedLeftLeg");
+    boolean geckoArmor =
+        text.contains("armorHead")
+            || text.contains("armorBody")
+            || text.contains("armorRightArm")
+            || text.contains("armorLeftArm")
+            || text.contains("armorRightLeg")
+            || text.contains("armorLeftLeg")
+            || text.contains("armorRightBoot")
+            || text.contains("armorLeftBoot");
+    return biped || geckoArmor;
   }
 
   private static String best(
@@ -340,26 +351,29 @@ final class CustomArmorAssetResolver {
   private static Root rootOf(Bone bone, Map<String, Bone> definitions) {
     Bone current = bone;
     for (int depth = 0; current != null && depth < 32; depth++) {
-      String part =
+      Root semantic =
           switch (current.name()) {
-            case "bipedHead" -> "head";
-            case "bipedBody" -> "torso";
-            case "bipedRightArm" -> "rightArm";
-            case "bipedLeftArm" -> "leftArm";
-            case "bipedRightLeg" -> "rightLeg";
-            case "bipedLeftLeg" -> "leftLeg";
+            case "bipedHead", "armorHead" -> new Root(current, "head", "head");
+            case "bipedBody", "armorBody" -> new Root(current, "torso", "chest");
+            case "bipedRightArm", "armorRightArm" -> new Root(current, "rightArm", "chest");
+            case "bipedLeftArm", "armorLeftArm" -> new Root(current, "leftArm", "chest");
+            case "armorRightLeg" -> new Root(current, "rightLeg", "legs");
+            case "armorLeftLeg" -> new Root(current, "leftLeg", "legs");
+            case "armorRightBoot" -> new Root(current, "rightLeg", "feet");
+            case "armorLeftBoot" -> new Root(current, "leftLeg", "feet");
+            case "bipedRightLeg" -> new Root(current, "rightLeg", null);
+            case "bipedLeftLeg" -> new Root(current, "leftLeg", null);
             default -> null;
           };
-      if (part != null) return new Root(current, part);
+      if (semantic != null) return semantic;
       current = current.parent() == null ? null : definitions.get(current.parent());
     }
     return null;
   }
 
   private static String slotOf(Bone bone, Root root) {
+    if (root.slot() != null) return root.slot();
     String name = bone.name().toLowerCase(Locale.ROOT);
-    if (root.part().equals("head")) return "head";
-    if (root.part().equals("torso") || root.part().endsWith("Arm")) return "chest";
     return name.contains("boot") || name.contains("foot") ? "feet" : "legs";
   }
 
@@ -512,7 +526,7 @@ final class CustomArmorAssetResolver {
       boolean mirror,
       float inflate,
       JsonArray cubes) {}
-  private record Root(Bone bone, String part) {}
+  private record Root(Bone bone, String part, String slot) {}
 
   private static final class MeshBuilder {
     private final ArrayList<Float> positions = new ArrayList<>();
