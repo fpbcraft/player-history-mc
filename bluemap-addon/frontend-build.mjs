@@ -8,6 +8,9 @@ const source = join(root, "src");
 const gradleProperties = join(root, "..", "gradle.properties");
 
 async function projectVersion() {
+  const releaseVersion = process.env.PLAYER_HISTORY_VERSION?.trim();
+  if (releaseVersion) return releaseVersion;
+
   const properties = await readFile(gradleProperties, "utf8");
   const match = properties.match(/^modVersion=(.+)$/m);
   if (!match?.[1]?.trim()) throw new Error("gradle.properties is missing modVersion");
