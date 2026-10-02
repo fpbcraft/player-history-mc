@@ -1,5 +1,6 @@
 package dev.playerhistory.object;
 
+import dev.playerhistory.core.ChunkChannelIO;
 import dev.playerhistory.core.JsonFiles;
 import dev.playerhistory.core.PublishedChunkIndex;
 import dev.playerhistory.core.RetentionFiles;
@@ -464,17 +465,14 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
   private void finish() throws IOException {
     if (channel == null) return;
-    channel.force(false);
-    channel.close();
+    ChunkChannelIO.closeDurably(channel);
     channel = null;
     JsonFiles.move(
         root.resolve("tracks/" + start + ".tmp"), root.resolve("tracks/" + start + ".bin"));
   }
 
   private void write(byte[] data) throws IOException {
-    var buffer = java.nio.ByteBuffer.wrap(data);
-    while (buffer.hasRemaining()) channel.write(buffer);
-    bytes.addAndGet(data.length);
+    bytes.addAndGet(ChunkChannelIO.writeFully(channel, data));
   }
 
   private void recover() throws IOException {
