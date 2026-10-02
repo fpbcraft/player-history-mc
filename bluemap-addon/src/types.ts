@@ -62,6 +62,8 @@ export interface HistoryManifest {
   activityBucketMs?: number;
   activityReady?: boolean;
   capabilities: Record<string, boolean>;
+  /** Current recorder tracker switches. Missing on older publishers. */
+  trackingEnabled: Record<string, boolean>;
   registry: HistoryRegistry;
 }
 

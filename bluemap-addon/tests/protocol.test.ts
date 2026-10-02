@@ -63,6 +63,29 @@ test("live parser validates complete points and registry entries", () => {
   );
 });
 
+test("manifest retains current tracker configuration", () => {
+  const parsed = parseManifest({
+    protocolVersion: 2,
+    earliestTimestamp: 100,
+    latestTimestamp: 500,
+    chunkDurationMs: 100,
+    capabilities: { posture: true },
+    trackingEnabled: { movement: true, posture: false, ignored: "nope" },
+    registry,
+  });
+  assert.deepEqual(parsed.trackingEnabled, { movement: true, posture: false });
+
+  const legacy = parseManifest({
+    protocolVersion: 2,
+    earliestTimestamp: 100,
+    latestTimestamp: 500,
+    chunkDurationMs: 100,
+    capabilities: {},
+    registry,
+  });
+  assert.deepEqual(legacy.trackingEnabled, {});
+});
+
 test("manifest validates the optional published chunk index", () => {
   const manifest = {
     protocolVersion: 2,
