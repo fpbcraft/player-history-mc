@@ -5,6 +5,7 @@ import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
 import { chatEventsBetween } from "./event-notifications.js";
 import { ObjectChunkCache, ObjectReplayEngine } from "./object-replay.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
+import { LiveFeedState } from "./live-feed-state.js";
 import { loadHeatmapRange } from "./heatmap-loader.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
@@ -111,8 +112,7 @@ export class ReplayPanel extends HTMLElement {
   private healthToken: object = {};
   private trailMode = 60_000;
   private chatNotifications: ChatNotification[] = [];
-  private seenLiveChatEvents = new Set<string>();
-  private liveChatInitialized = false;
+  private liveFeed = new LiveFeedState();
 
   private setTrailProgress(completed: number, total: number): void {
     if (total <= 0) return;
@@ -254,8 +254,7 @@ export class ReplayPanel extends HTMLElement {
     this.liveEvents = [];
     this.livePoints = [];
     this.chatNotifications = [];
-    this.seenLiveChatEvents = new Set();
-    this.liveChatInitialized = false;
+    this.liveFeed.reset();
     this.mobileQuery = matchMedia("(max-width: 600px)");
     this.engine = new ReplayEngine();
     this.objectEngine = new ObjectReplayEngine(32, 32767);
@@ -1313,39 +1312,24 @@ export class ReplayPanel extends HTMLElement {
       const data = this.opened
         ? await this.historyClient.live(controller.signal)
         : await this.historyClient.presence(controller.signal);
-      if (
-        !this.isConnected ||
-        data.protocolVersion !== 2 ||
-        !Number.isFinite(data.generatedAt) ||
-        Date.now() - data.generatedAt > 10000
-      )
-        return;
-      this.livePoints = Array.isArray(data.points) ? data.points.slice(-20000) : [];
-      this.liveEvents = Array.isArray(data.events) ? data.events.slice(-1000) : [];
-      for (const event of this.liveEvents) {
-        if (event.type !== "CHAT") continue;
-        const key = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
-        if (this.liveChatInitialized && !this.seenLiveChatEvents.has(key))
-          this.notifyLiveChat(event, data.registry);
-        this.seenLiveChatEvents.add(key);
-      }
-      while (this.seenLiveChatEvents.size > 2_000) {
-        const oldest = this.seenLiveChatEvents.values().next().value;
-        if (oldest === undefined) break;
-        this.seenLiveChatEvents.delete(oldest);
-      }
-      this.liveChatInitialized = true;
+      const update = this.liveFeed.apply(data);
+      if (!this.isConnected || !update) return;
+
+      this.livePoints = update.points;
+      this.liveEvents = update.events;
+      for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
       this.eventRevision++;
+
       if (!this.manifest && (this.opened || this.heatEnabled)) await this.refresh();
-      if (this.manifest && data.registry) this.manifest.registry = data.registry;
-      for (const player of data.registry?.players || []) {
+      if (this.manifest) this.manifest.registry = update.registry;
+      for (const player of update.registry.players) {
         if (!this.names.has(player.id)) this.selection.add(player.id);
         this.names.set(player.id, player.name);
       }
       if (this.isLive && this.manifest && this.cache) {
         this.clock.refresh(
           this.manifest.earliestTimestamp,
-          Math.max(this.manifest.latestTimestamp, data.generatedAt, Date.now()),
+          Math.max(this.manifest.latestTimestamp, update.generatedAt, Date.now()),
         );
         this.clock.seek(this.clock.to);
         this.sync();
