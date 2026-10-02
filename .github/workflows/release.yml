@@ -70,8 +70,7 @@ jobs:
               echo "::error::Manual releases must run from the default branch."
               exit 1
             fi
-            base="$(sed -n 's/^modVersion=//p' gradle.properties)"
-            version="$(python3 scripts/release_version.py next --bump "$BUMP" --fallback "$base" --exact "$EXACT_VERSION")"
+            version="$(python3 scripts/release_version.py next --bump "$BUMP" --exact "$EXACT_VERSION")"
             tag="v$version"
             create_tag=true
             if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
