@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "vitest";
-import { parseChunk, parseManifest } from "../src/protocol.js";
+import { parseChunk, parseLiveSnapshot, parseManifest } from "../src/protocol.js";
 
 const fixture = async (name: string): Promise<unknown> =>
   JSON.parse(
@@ -25,4 +25,14 @@ test("shared chunk fixture is accepted by the browser protocol parser", async ()
   assert.equal(parsed.points[0]?.player, 1);
   assert.equal(parsed.points[0]?.flags, 1);
   assert.deepEqual(parsed.events, []);
+});
+
+
+test("shared live fixture is accepted by the browser protocol parser", async () => {
+  const parsed = parseLiveSnapshot(await fixture("live-v2.json"));
+  assert.equal(parsed.protocolVersion, 2);
+  assert.equal(parsed.points.length, 1);
+  assert.equal(parsed.points[0]?.player, 1);
+  assert.equal(parsed.events.length, 1);
+  assert.equal(parsed.events[0]?.type, "CHAT");
 });
