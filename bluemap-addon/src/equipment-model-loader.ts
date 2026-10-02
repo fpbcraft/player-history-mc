@@ -20,13 +20,17 @@ interface PublishedItemModel {
   groups: PublishedGroup[];
 }
 
+interface PublishedArmorTextureLayer {
+  texture: string;
+  dyeable: boolean;
+}
+
 interface PublishedLayerArmorModel {
   format: 1;
   item: string;
   kind: "layer";
   layer: 1 | 2;
-  texture: string;
-  overlayTexture?: string | null;
+  layers: PublishedArmorTextureLayer[];
 }
 
 type ArmorParent =
@@ -66,8 +70,7 @@ export type LoadedArmorModel =
   | {
       kind: "layer";
       layer: 1 | 2;
-      texture: Texture;
-      overlayTexture?: Texture;
+      layers: { texture: Texture; dyeable: boolean }[];
     }
   | {
       kind: "custom";
@@ -152,20 +155,47 @@ const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | nu
     };
   }
 
-  if (
-    (model.layer !== 1 && model.layer !== 2) ||
-    (model.overlayTexture != null && !safeRelativePath(model.overlayTexture))
-  )
-    return null;
+  if (model.layer !== 1 && model.layer !== 2) return null;
+
+  const layers: PublishedArmorTextureLayer[] = [];
+  if (Array.isArray(model.layers)) {
+    for (const raw of model.layers) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const layer = raw as Record<string, unknown>;
+      if (
+        !safeRelativePath(layer.texture) ||
+        typeof layer.dyeable !== "boolean"
+      )
+        return null;
+      layers.push({
+        texture: layer.texture,
+        dyeable: layer.dyeable,
+      });
+    }
+  } else {
+    // Backward compatibility with descriptors emitted by #42.
+    if (!safeRelativePath(model.texture)) return null;
+    if (
+      model.overlayTexture != null &&
+      !safeRelativePath(model.overlayTexture)
+    )
+      return null;
+    const hasOverlay = typeof model.overlayTexture === "string";
+    layers.push({ texture: model.texture, dyeable: hasOverlay });
+    if (hasOverlay)
+      layers.push({
+        texture: model.overlayTexture as string,
+        dyeable: false,
+      });
+  }
+  if (!layers.length) return null;
+
   return {
     format: 1,
     item,
     kind: "layer",
     layer: model.layer,
-    texture: model.texture,
-    ...(typeof model.overlayTexture === "string"
-      ? { overlayTexture: model.overlayTexture }
-      : {}),
+    layers,
   };
 };
 
@@ -234,20 +264,18 @@ export class EquipmentModelLoader {
   async armor(item: string): Promise<LoadedArmorModel | null> {
     const model = await this.armorModel(item);
     if (!model) return null;
-    const texture = await this.loadTexture(model.texture);
-    if (!texture) return null;
     if (model.kind === "custom") {
-      return { kind: "custom", texture, parts: model.parts };
+      const texture = await this.loadTexture(model.texture);
+      return texture ? { kind: "custom", texture, parts: model.parts } : null;
     }
-    const overlayTexture = model.overlayTexture
-      ? await this.loadTexture(model.overlayTexture)
+    const layers: { texture: Texture; dyeable: boolean }[] = [];
+    for (const layer of model.layers) {
+      const texture = await this.loadTexture(layer.texture);
+      if (texture) layers.push({ texture, dyeable: layer.dyeable });
+    }
+    return layers.length
+      ? { kind: "layer", layer: model.layer, layers }
       : null;
-    return {
-      kind: "layer",
-      layer: model.layer,
-      texture,
-      ...(overlayTexture ? { overlayTexture } : {}),
-    };
   }
 
   async build(item: string): Promise<BuiltEquipmentModel | null> {
