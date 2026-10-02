@@ -74,7 +74,7 @@ const skinBox = (
 declare const __PLAYER_HISTORY_VERSION__: string;
 
 const PLAYER_HISTORY_SKIN_BUILD =
-  typeof __PLAYER_HISTORY_VERSION__ === "undefined" ? "dev" : __PLAYER_HISTORY_VERSION__;
+  typeof __PLAYER_HISTORY_VERSION__ === "undefined" ? "" : __PLAYER_HISTORY_VERSION__;
 
 const SKIN = {
   head: skinBox(0, 0, 8, 8, 8),
@@ -346,7 +346,8 @@ export class HistoryScene3D {
     let texture: Texture | undefined;
     if (uuid) {
       const skinUrl = new URL(`${uuid}.png`, this.skinBase);
-      skinUrl.searchParams.set("v", PLAYER_HISTORY_SKIN_BUILD);
+      if (PLAYER_HISTORY_SKIN_BUILD)
+        skinUrl.searchParams.set("v", PLAYER_HISTORY_SKIN_BUILD);
       const url = skinUrl.href;
       texture = this.textureLoader.load(
         url,
