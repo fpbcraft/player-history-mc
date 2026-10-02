@@ -12,7 +12,7 @@
     "lint": "biome lint src tests *.mjs vitest.config.ts",
     "format": "biome format --write src tests *.mjs vitest.config.ts",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "check": "npm run typecheck && npm run lint && npm run build && npm test",
     "dev": "node dev.mjs"
   },
   "devDependencies": {
