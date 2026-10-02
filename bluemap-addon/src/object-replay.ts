@@ -84,6 +84,66 @@ const slerp = (
   ];
 };
 
+const normalizedInstanceQuaternion = (
+  instance: { qx: number; qy: number; qz: number; qw: number },
+  scale: number,
+): [number, number, number, number] => {
+  let x = instance.qx / scale;
+  let y = instance.qy / scale;
+  let z = instance.qz / scale;
+  let w = instance.qw / scale;
+  const length = Math.hypot(x, y, z, w);
+  if (length < 1e-8) return [0, 0, 0, 1];
+  x /= length;
+  y /= length;
+  z /= length;
+  w /= length;
+  return [x, y, z, w];
+};
+
+const instanceGroupsAt = (
+  from: ObjectHistoryPoint,
+  to: ObjectHistoryPoint | undefined,
+  ratio: number,
+  positionScale: number,
+  quaternionScale: number,
+  scaleScale: number,
+) =>
+  (from.groups ?? []).map((group) => {
+    const target =
+      to && connectsObjects(from, to)
+        ? (to.groups ?? []).find(
+            (candidate) =>
+              candidate.id === group.id && candidate.geometry === group.geometry,
+          )
+        : undefined;
+
+    return {
+      id: group.id,
+      geometry: group.geometry,
+      // Keep the FROM topology until the next recorded point. Stable existing instances
+      // interpolate; additions/removals happen atomically at their recorded sample.
+      instances: group.instances.map((instance, index) => {
+        const next = target?.instances[index] ?? instance;
+        const fromQ = normalizedInstanceQuaternion(instance, quaternionScale);
+        const toQ = normalizedInstanceQuaternion(next, quaternionScale);
+        const rotation = slerp(fromQ, toQ, ratio);
+        return [
+          (instance.x + (next.x - instance.x) * ratio) / positionScale,
+          (instance.y + (next.y - instance.y) * ratio) / positionScale,
+          (instance.z + (next.z - instance.z) * ratio) / positionScale,
+          rotation[0],
+          rotation[1],
+          rotation[2],
+          rotation[3],
+          (instance.sx + (next.sx - instance.sx) * ratio) / scaleScale,
+          (instance.sy + (next.sy - instance.sy) * ratio) / scaleScale,
+          (instance.sz + (next.sz - instance.sz) * ratio) / scaleScale,
+        ];
+      }),
+    };
+  });
+
 export class ObjectReplayEngine {
   readonly objects = new Map<number, ObjectHistoryPoint[]>();
   private readonly travel = new Map<number, number[]>();
@@ -165,6 +225,14 @@ export class ObjectReplayEngine {
         sy: from.sy / this.scaleScale,
         sz: from.sz / this.scaleScale,
         geometry: from.geometry,
+        groups: instanceGroupsAt(
+          from,
+          undefined,
+          0,
+          this.positionScale,
+          this.quaternionScale,
+          this.scaleScale,
+        ),
         travel: this.travelAt(id, low - 1),
       };
     }
@@ -186,6 +254,14 @@ export class ObjectReplayEngine {
       sy: (from.sy + (to.sy - from.sy) * ratio) / this.scaleScale,
       sz: (from.sz + (to.sz - from.sz) * ratio) / this.scaleScale,
       geometry: from.geometry,
+      groups: instanceGroupsAt(
+        from,
+        to,
+        ratio,
+        this.positionScale,
+        this.quaternionScale,
+        this.scaleScale,
+      ),
       travel:
         this.travelAt(id, low - 1)
         + segmentTravel(from, to, this.positionScale, this.quaternionScale) * ratio,

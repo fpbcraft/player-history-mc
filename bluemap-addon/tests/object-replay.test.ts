@@ -32,6 +32,7 @@ const p = (
   sz: 1024,
   geometry,
   flags,
+  groups: [],
 });
 
 

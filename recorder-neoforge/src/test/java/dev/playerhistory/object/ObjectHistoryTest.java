@@ -30,7 +30,8 @@ class ObjectHistoryTest {
         1,
         1,
         1,
-        geometry);
+        geometry,
+        List.of());
   }
 
   @Test
@@ -52,6 +53,36 @@ class ObjectHistoryTest {
     read = ObjectBinaryCodec.read(new ByteArrayInputStream(bytes.toByteArray()));
     assertTrue(read.partial());
     assertEquals(List.of(a, b), read.points());
+  }
+
+  @Test
+  void binaryRoundTripPreservesLogicalInstanceGroups() throws Exception {
+    long start = 1_780_000_000_000L;
+    var instance =
+        new ObjectSnapshot.Instance(
+            12.25, 70.5, -4.75,
+            0, 0, 0, 1,
+            1, 2.5f, 1);
+    var snapshot =
+        new ObjectSnapshot(
+            "rope",
+            "Rope",
+            "minecraft:overworld",
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            99,
+            List.of(new ObjectSnapshot.InstanceGroup("segments", 7, List.of(instance))));
+    var point = ObjectPoint.at(4, start + 100, 0, snapshot, ObjectPoint.BREAK);
+
+    var bytes = new ByteArrayOutputStream();
+    ObjectBinaryCodec.header(new DataOutputStream(bytes), start, 300_000);
+    bytes.write(ObjectBinaryCodec.frame(List.of(point), start));
+
+    var read = ObjectBinaryCodec.read(new ByteArrayInputStream(bytes.toByteArray()));
+    assertEquals(List.of(point), read.points());
+    assertEquals(1, read.points().getFirst().groups().size());
+    assertEquals(1, read.points().getFirst().groups().getFirst().instances().size());
   }
 
   @Test
