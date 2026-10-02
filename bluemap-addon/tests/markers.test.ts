@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
+import { test, vi } from "vitest";
 import { BlueMapAdapter, eventColor, meterLevels, playerColor } from "../src/bluemap-adapter.js";
+
+vi.mock("../src/history-scene3d.js", () => ({
+  HistoryScene3D: class {
+    root = { children: [], userData: {}, visible: true };
+
+    raycastObjects() {
+      return [];
+    }
+
+    setPlayers() {}
+
+    setPlayersVisible() {}
+
+    setPlayerVitals() {}
+
+    dispose() {}
+  },
+}));
+
 
 class Element {
   constructor() {
