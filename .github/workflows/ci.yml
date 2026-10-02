@@ -23,6 +23,16 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: bluemap-addon/package-lock.json
+
+      - name: Resolve immutable build version
+        id: version
+        shell: bash
+        run: |
+          BASE="$(sed -n 's/^modVersion=//p' gradle.properties)"
+          SHORT_SHA="$(git rev-parse --short=8 HEAD)"
+          VERSION="${BASE}-dev.${SHORT_SHA}"
+          echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "PLAYER_HISTORY_VERSION=${VERSION}" >> "$GITHUB_ENV"
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
@@ -38,7 +48,7 @@ jobs:
       - name: Upload test jars
         uses: actions/upload-artifact@v4
         with:
-          name: player-history-object-history
+          name: player-history-${{ steps.version.outputs.value }}
           path: |
             recorder-neoforge/build/libs/*.jar
             bluemap-neoforge/build/libs/*.jar
