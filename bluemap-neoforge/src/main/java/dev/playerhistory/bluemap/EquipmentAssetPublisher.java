@@ -123,6 +123,15 @@ final class EquipmentAssetPublisher {
   private void publish(Path currentRoot, BlueMap3DItemModelBridge currentBridge, String item) {
     ResourceLocation id = ResourceLocation.tryParse(item);
     if (id == null) return;
+    publishItemModel(currentRoot, currentBridge, item, id);
+    publishArmor(currentRoot, currentBridge, item, id);
+  }
+
+  private void publishItemModel(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id) {
     List<BlueMap3DItemModelBridge.Quad> quads = currentBridge.model(item);
     if (quads.isEmpty()) return;
 
@@ -171,6 +180,81 @@ final class EquipmentAssetPublisher {
       log.accept("Could not publish equipment model " + item + ": " + error);
       processed.remove(item);
     }
+  }
+
+  private void publishArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id) {
+    ArmorAsset armor = armorAsset(id);
+    if (armor == null) return;
+
+    BufferedImage base = currentBridge.texture(armor.texture());
+    if (base == null) return;
+
+    try {
+      String texturePath = texturePath(armor.texture());
+      writePng(currentRoot, texturePath, base);
+
+      String overlayPath = null;
+      BufferedImage overlay = currentBridge.texture(armor.overlayTexture());
+      if (overlay != null) {
+        overlayPath = texturePath(armor.overlayTexture());
+        writePng(currentRoot, overlayPath, overlay);
+      }
+
+      Path target =
+          safeResolve(
+              currentRoot,
+              "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
+      Files.createDirectories(target.getParent());
+      writeAtomic(
+          target,
+          JsonFiles.GSON.toJson(
+              new ArmorModel(FORMAT, item, armor.layer(), texturePath, overlayPath)));
+    } catch (IOException error) {
+      log.accept("Could not publish armor textures for " + item + ": " + error);
+      processed.remove(item);
+    }
+  }
+
+  private static ArmorAsset armorAsset(ResourceLocation item) {
+    String path = item.getPath();
+    String suffix;
+    int layer;
+    if (path.endsWith("_helmet")) {
+      suffix = "_helmet";
+      layer = 1;
+    } else if (path.endsWith("_chestplate")) {
+      suffix = "_chestplate";
+      layer = 1;
+    } else if (path.endsWith("_leggings")) {
+      suffix = "_leggings";
+      layer = 2;
+    } else if (path.endsWith("_boots")) {
+      suffix = "_boots";
+      layer = 1;
+    } else {
+      return null;
+    }
+
+    String material = path.substring(0, path.length() - suffix.length());
+    int slash = material.lastIndexOf('/');
+    String directory = slash >= 0 ? material.substring(0, slash + 1) : "";
+    String name = slash >= 0 ? material.substring(slash + 1) : material;
+    if ("golden".equals(name)) name = "gold";
+    material = directory + name;
+
+    String texture =
+        item.getNamespace() + ":models/armor/" + material + "_layer_" + layer;
+    return new ArmorAsset(layer, texture, texture + "_overlay");
+  }
+
+  private static String texturePath(String texture) throws IOException {
+    ResourceLocation id = ResourceLocation.tryParse(texture);
+    if (id == null) throw new IOException("Invalid armor texture id: " + texture);
+    return "textures/" + id.getNamespace() + "/" + id.getPath() + ".png";
   }
 
   private static void writePng(Path root, String relative, BufferedImage image) throws IOException {
@@ -227,6 +311,11 @@ final class EquipmentAssetPublisher {
   }
 
   private record GroupKey(String texture, int tint) {}
+
+  private record ArmorAsset(int layer, String texture, String overlayTexture) {}
+
+  private record ArmorModel(
+      int format, String item, int layer, String texture, String overlayTexture) {}
 
   private record ItemModel(int format, String item, List<ModelGroup> groups, String fingerprint) {}
 
