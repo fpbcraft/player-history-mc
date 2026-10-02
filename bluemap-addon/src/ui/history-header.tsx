@@ -53,15 +53,7 @@ const HeaderTools = () => (
         <div class="history-player-list" />
       </div>
     </div>
-    <button
-      type="button"
-      name="heat"
-      aria-pressed="false"
-      title="Time spent in the replay range; completed recording chunks"
-      aria-label="Heatmap"
-    >
-      <HistoryIcon name="heat" />
-    </button>
+    <button type="button" name="heat" hidden aria-hidden="true" tabIndex={-1} />
     <details class="history-event-control">
       <summary aria-label="Event filters" title="Event filters">
         <HistoryIcon name="events" />

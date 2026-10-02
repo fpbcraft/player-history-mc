@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -39,10 +40,12 @@ public final class BlueMapIntegration {
   private final String version;
   private volatile Object api;
   private volatile Path worldRoot;
+  private volatile MinecraftServer server;
   private final Map<String, Object> levels = new HashMap<>();
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
   private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
   private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
+  private final ServerOverlayPublisher serverOverlays = new ServerOverlayPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
@@ -68,6 +71,7 @@ public final class BlueMapIntegration {
                     api = null;
                     objectHistory.webRoot(null);
                     skins.disable();
+                    serverOverlays.stop();
                   });
     } catch (Exception ex) {
       log.accept("Cannot connect to BlueMap API: " + ex);
@@ -75,7 +79,8 @@ public final class BlueMapIntegration {
   }
 
   private void start(ServerStartedEvent event) {
-    worldRoot = event.getServer().getWorldPath(LevelResource.ROOT);
+    server = event.getServer();
+    worldRoot = server.getWorldPath(LevelResource.ROOT);
     event
         .getServer()
         .getAllLevels()
@@ -85,6 +90,8 @@ public final class BlueMapIntegration {
 
   private void stop(ServerStoppingEvent event) {
     objectHistory.reset();
+    serverOverlays.stop();
+    server = null;
     worldRoot = null;
     levels.clear();
   }
@@ -93,6 +100,7 @@ public final class BlueMapIntegration {
     objectHistory.tick(
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
     skins.tick(event.getServer(), worldRoot);
+    serverOverlays.tick(event.getServer());
   }
 
   private static Object call(
@@ -161,6 +169,7 @@ public final class BlueMapIntegration {
       skins.configure(api, webRoot);
       Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
+      if (server != null) serverOverlays.start(server, webRoot);
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);

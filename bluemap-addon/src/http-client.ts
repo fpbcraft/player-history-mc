@@ -45,6 +45,10 @@ export class HistoryClient {
     return parseLiveSnapshot(await this.json(`data/live.json?t=${Date.now()}`, signal));
   }
 
+  async presence(signal?: AbortSignal): Promise<LiveSnapshot> {
+    return parseLiveSnapshot(await this.json(`data/presence.json?t=${Date.now()}`, signal));
+  }
+
   async objectManifest(signal?: AbortSignal): Promise<ObjectHistoryManifest | null> {
     const response = await this.fetcher(new URL("data/objects/manifest.json", this.base), {
       cache: "no-store",
