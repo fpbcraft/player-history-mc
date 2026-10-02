@@ -1,6 +1,7 @@
 package dev.playerhistory.object;
 
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.PublishedChunkIndex;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
@@ -65,7 +66,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private final ArrayList<ObjectPoint> points = new ArrayList<>();
   private final ArrayList<ObjectPoint> pending = new ArrayList<>();
   private final ArrayDeque<ObjectPoint> live = new ArrayDeque<>();
-  private final NavigableSet<Long> publishedChunks = new TreeSet<>();
+  private final PublishedChunkIndex publishedChunks;
   private final ArrayDeque<Path> backfill = new ArrayDeque<>();
 
   private volatile boolean running = true;
@@ -88,6 +89,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     this.options = options;
     this.log = log;
     this.retentionDays = options.retentionDays();
+    this.publishedChunks = new PublishedChunkIndex(options.duration());
     this.queue = new ArrayBlockingQueue<>(options.queueCapacity());
 
     Files.createDirectories(root.resolve("tracks"));
@@ -422,7 +424,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     result.put("earliestTimestamp", earliest);
     result.put("latestTimestamp", latest);
     result.put("chunkDurationMs", options.duration());
-    result.put("chunkRanges", publishedChunkRanges());
+    result.put("chunkRanges", publishedChunks.ranges());
     result.put("positionScale", ObjectPoint.POSITION_SCALE);
     result.put("quaternionScale", ObjectPoint.QUATERNION_SCALE);
     result.put("scaleScale", ObjectPoint.SCALE_SCALE);
@@ -432,40 +434,13 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     return result;
   }
 
-  private List<long[]> publishedChunkRanges() {
-    var ranges = new ArrayList<long[]>();
-    long first = Long.MIN_VALUE, previous = Long.MIN_VALUE;
-    for (long chunk : publishedChunks) {
-      if (first == Long.MIN_VALUE) first = chunk;
-      else if (chunk != previous + options.duration()) {
-        ranges.add(new long[] {first, previous + options.duration()});
-        first = chunk;
-      }
-      previous = chunk;
-    }
-    if (first != Long.MIN_VALUE) ranges.add(new long[] {first, previous + options.duration()});
-    return ranges;
-  }
-
   private void backfill() throws IOException {
     Path pub = publicRoot;
     if (pub == null) return;
     if (!pub.equals(backfillRoot)) {
       backfillRoot = pub;
       backfill.clear();
-      publishedChunks.clear();
-      Path chunks = pub.resolve("chunks");
-      if (Files.exists(chunks))
-        try (var files = Files.list(chunks)) {
-          for (Path file : files.filter(Files::isRegularFile).toList()) {
-            String name = file.getFileName().toString();
-            if (!name.endsWith(".json")) continue;
-            try {
-              publishedChunks.add(Long.parseLong(name.substring(0, name.length() - 5)));
-            } catch (NumberFormatException ignored) {
-            }
-          }
-        }
+      publishedChunks.indexJsonDirectory(pub.resolve("chunks"));
       try (var files = Files.list(root.resolve("tracks"))) {
         files.filter(path -> path.toString().endsWith(".bin")).sorted().forEach(backfill::add);
       }
@@ -556,7 +531,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     Path pub = publicRoot;
     if (pub != null) prune(pub.resolve("chunks"), cutoff);
     geometryArchive.prune(cutoff);
-    publishedChunks.removeIf(chunk -> chunk < cutoff);
+    publishedChunks.removeBefore(cutoff);
     earliest = Math.max(earliest, cutoff);
   }
 

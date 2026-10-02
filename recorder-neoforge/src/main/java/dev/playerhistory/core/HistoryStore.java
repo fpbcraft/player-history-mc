@@ -77,7 +77,7 @@ public final class HistoryStore implements AutoCloseable {
       inventoryDeltas = new AtomicLong();
   private final Map<Integer, Long> statePlayers = new HashMap<>();
   private final ArrayDeque<Path> stateBackfill = new ArrayDeque<>();
-  private final NavigableSet<Long> publishedChunks = new TreeSet<>();
+  private final PublishedChunkIndex publishedChunks;
   private final Map<String, Boolean> capabilities = new java.util.concurrent.ConcurrentHashMap<>();
   private volatile Map<String, Boolean> trackingEnabled = Map.of();
 
@@ -94,7 +94,7 @@ public final class HistoryStore implements AutoCloseable {
     result.put("earliestTimestamp", earliest);
     result.put("latestTimestamp", latest);
     result.put("chunkDurationMs", options.duration);
-    result.put("chunkRanges", publishedChunkRanges());
+    result.put("chunkRanges", publishedChunks.ranges());
     result.put("registry", registry.snapshot());
     result.put("capabilities", Map.copyOf(capabilities));
     result.put("trackingEnabled", trackingEnabled);
@@ -102,37 +102,6 @@ public final class HistoryStore implements AutoCloseable {
     result.put("activityReady", backfill.isEmpty());
     result.put("cellSize", options.cellSize);
     return result;
-  }
-
-  private List<long[]> publishedChunkRanges() {
-    var ranges = new ArrayList<long[]>();
-    long first = Long.MIN_VALUE, previous = Long.MIN_VALUE;
-    for (long chunk : publishedChunks) {
-      if (first == Long.MIN_VALUE) first = chunk;
-      else if (chunk != previous + options.duration) {
-        ranges.add(new long[] {first, previous + options.duration});
-        first = chunk;
-      }
-      previous = chunk;
-    }
-    if (first != Long.MIN_VALUE) ranges.add(new long[] {first, previous + options.duration});
-    return ranges;
-  }
-
-  private void indexPublishedChunks(Path publication) throws IOException {
-    publishedChunks.clear();
-    Path chunks = publication.resolve("chunks");
-    if (!Files.exists(chunks)) return;
-    try (var files = Files.list(chunks)) {
-      for (Path file : files.filter(Files::isRegularFile).toList()) {
-        String name = file.getFileName().toString();
-        if (!name.endsWith(".json")) continue;
-        try {
-          publishedChunks.add(Long.parseLong(name.substring(0, name.length() - 5)));
-        } catch (NumberFormatException ignored) {
-        }
-      }
-    }
   }
 
   private FileChannel channel;
@@ -156,6 +125,7 @@ public final class HistoryStore implements AutoCloseable {
     this.registry = registry;
     this.options = options;
     this.log = log;
+    publishedChunks = new PublishedChunkIndex(options.duration);
     queue = new ArrayBlockingQueue<>(options.queueCapacity);
     heatmaps = new HeatmapStore(root, options.duration, options.cellSize);
     Files.createDirectories(root.resolve("tracks"));
@@ -480,7 +450,7 @@ public final class HistoryStore implements AutoCloseable {
       }
       JsonFiles.write(root.resolve("publication.json"), pub.toAbsolutePath().toString());
       retention(System.currentTimeMillis());
-      indexPublishedChunks(pub);
+      publishedChunks.indexJsonDirectory(pub.resolve("chunks"));
       try (var files = Files.list(root.resolve("tracks"))) {
         files.filter(p -> p.toString().endsWith(".bin")).sorted().forEach(backfill::add);
       }
@@ -573,7 +543,7 @@ public final class HistoryStore implements AutoCloseable {
       prune(retentionRoot.resolve("heatmap"), cutoff);
       prune(retentionRoot.resolve("activity"), cutoff);
     }
-    publishedChunks.removeIf(chunk -> chunk < cutoff);
+    publishedChunks.removeBefore(cutoff);
     earliest = Math.max(earliest, cutoff);
   }
 

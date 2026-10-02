@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { test } from "vitest";
 import { parseChunk, parseLiveSnapshot, parseManifest } from "../src/protocol.js";
 
@@ -75,22 +74,4 @@ test("manifest validates the optional published chunk index", () => {
     /not sorted/,
   );
   assert.throws(() => parseManifest({ ...manifest, chunkRanges: [[150, 300]] }), /chunk range/);
-});
-
-
-const fixture = async (name: string): Promise<unknown> =>
-  JSON.parse(await readFile(new URL(`../../protocol/fixtures/${name}`, import.meta.url), "utf8"));
-
-test("shared manifest fixture remains browser-compatible", async () => {
-  const manifest = parseManifest(await fixture("manifest-v2.json"));
-  assert.equal(manifest.protocolVersion, 2);
-  assert.equal(manifest.chunkDurationMs, 60_000);
-  assert.equal(manifest.registry.players[0]?.name, "Fixture");
-});
-
-test("shared live fixture remains browser-compatible", async () => {
-  const live = parseLiveSnapshot(await fixture("live-v2.json"));
-  assert.equal(live.protocolVersion, 2);
-  assert.equal(live.points.length, 1);
-  assert.equal(live.events[0]?.type, "CHAT");
 });

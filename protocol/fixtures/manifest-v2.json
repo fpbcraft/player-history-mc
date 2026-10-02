@@ -1,18 +1,33 @@
 {
-  "protocolVersion": 2,
   "formatVersion": 1,
-  "generatedAt": 1780000005000,
-  "earliestTimestamp": 1780000000000,
-  "latestTimestamp": 1780000004000,
+  "protocolVersion": 2,
+  "generatedAt": 0,
+  "earliestTimestamp": 0,
+  "latestTimestamp": 100,
   "chunkDurationMs": 60000,
-  "chunkRanges": [[1779999960000, 1780000020000]],
+  "chunkRanges": [[0, 60000]],
   "registry": {
-    "players": [{"id": 1, "uuid": "00000000-0000-0000-0000-000000000001", "name": "Fixture"}],
-    "worlds": [{"id": 0, "key": "minecraft:overworld"}],
-    "items": [{"id": 1, "key": "minecraft:stone"}]
+    "players": [
+      {
+        "id": 1,
+        "uuid": "00000000-0000-0000-0000-000000000001",
+        "name": "Test"
+      }
+    ],
+    "worlds": [
+      {
+        "id": 0,
+        "key": "minecraft:overworld"
+      }
+    ],
+    "items": []
   },
-  "capabilities": {"movement": true, "chat": true},
-  "trackingEnabled": {"movement": true, "chat": true},
+  "capabilities": {
+    "movement": true
+  },
+  "trackingEnabled": {
+    "movement": true
+  },
   "activityBucketMs": 60000,
   "activityReady": true,
   "cellSize": 8
