@@ -42,6 +42,15 @@ final class BlueMap3DHistoryBridge {
   private Method objectRotationMethod;
   private Method objectScaleMethod;
 
+  private Class<?> instancedObjectClass;
+  private Method instanceGroupsMethod;
+  private Method groupIdMethod;
+  private Method groupGeometryVersionMethod;
+  private Method groupInstancesMethod;
+  private Method instancePositionMethod;
+  private Method instanceRotationMethod;
+  private Method instanceScaleMethod;
+
   BlueMap3DHistoryBridge(Consumer<String> log) {
     this.log = log;
   }
@@ -126,6 +135,8 @@ final class BlueMap3DHistoryBridge {
             ? new org.joml.Vector3f(1f, 1f, 1f)
             : (org.joml.Vector3f) objectScaleMethod.invoke(object);
 
+    List<ObjectSnapshot.InstanceGroup> groups = instanceGroups(object);
+
     return new ObjectSnapshot(
         sourceId,
         label,
@@ -140,7 +151,50 @@ final class BlueMap3DHistoryBridge {
         scale.x,
         scale.y,
         scale.z,
-        geometryVersion);
+        geometryVersion,
+        groups);
+  }
+
+  private List<ObjectSnapshot.InstanceGroup> instanceGroups(Object object)
+      throws ReflectiveOperationException {
+    if (instancedObjectClass == null
+        || instanceGroupsMethod == null
+        || !instancedObjectClass.isInstance(object)) return List.of();
+
+    Object value = instanceGroupsMethod.invoke(object);
+    if (!(value instanceof Iterable<?> groups)) return List.of();
+
+    List<ObjectSnapshot.InstanceGroup> result = new ArrayList<>();
+    for (Object group : groups) {
+      if (group == null) continue;
+      String id = (String) groupIdMethod.invoke(group);
+      long geometryVersion = ((Number) groupGeometryVersionMethod.invoke(group)).longValue();
+      Object instancesValue = groupInstancesMethod.invoke(group);
+      if (!(instancesValue instanceof Iterable<?> instances)) continue;
+
+      List<ObjectSnapshot.Instance> snapshotInstances = new ArrayList<>();
+      for (Object instance : instances) {
+        if (instance == null) continue;
+        Vec3 position = (Vec3) instancePositionMethod.invoke(instance);
+        Quaternionf rotation = (Quaternionf) instanceRotationMethod.invoke(instance);
+        org.joml.Vector3f scale =
+            (org.joml.Vector3f) instanceScaleMethod.invoke(instance);
+        snapshotInstances.add(
+            new ObjectSnapshot.Instance(
+                position.x,
+                position.y,
+                position.z,
+                rotation.x,
+                rotation.y,
+                rotation.z,
+                rotation.w,
+                scale.x,
+                scale.y,
+                scale.z));
+      }
+      result.add(new ObjectSnapshot.InstanceGroup(id, geometryVersion, snapshotInstances));
+    }
+    return List.copyOf(result);
   }
 
   private boolean resolve() {
@@ -174,6 +228,23 @@ final class BlueMap3DHistoryBridge {
       } catch (NoSuchMethodException ignored) {
         objectScaleMethod = null;
       }
+
+      try {
+        instancedObjectClass = Class.forName("dev.duzo.bluemap3d.api.InstancedSceneObject");
+        Class<?> groupClass = Class.forName("dev.duzo.bluemap3d.api.SceneInstanceGroup");
+        Class<?> instanceClass = Class.forName("dev.duzo.bluemap3d.api.SceneInstance");
+        instanceGroupsMethod = instancedObjectClass.getMethod("instanceGroups");
+        groupIdMethod = groupClass.getMethod("id");
+        groupGeometryVersionMethod = groupClass.getMethod("geometryVersion");
+        groupInstancesMethod = groupClass.getMethod("instances");
+        instancePositionMethod = instanceClass.getMethod("position");
+        instanceRotationMethod = instanceClass.getMethod("rotation");
+        instanceScaleMethod = instanceClass.getMethod("scale");
+      } catch (ReflectiveOperationException ignored) {
+        instancedObjectClass = null;
+        instanceGroupsMethod = null;
+      }
+
       installMeshListener(api);
       return true;
     } catch (ReflectiveOperationException error) {
