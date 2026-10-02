@@ -29,11 +29,25 @@ def version_from_tag(tag: str) -> str:
     return normalize_version(tag)
 
 
-def development_version(sha: str) -> str:
+def stable_base_version(tags: Iterable[str]) -> str:
+    candidates = [
+        parsed
+        for tag in tags
+        if (parsed := stable_tuple(tag)) is not None
+    ]
+    if not candidates:
+        raise ValueError("no stable release tag found")
+    return ".".join(str(part) for part in max(candidates))
+
+
+def development_version(base: str, sha: str) -> str:
+    version = normalize_version(base)
+    if stable_tuple(version) is None:
+        raise ValueError("development base version must be a stable semantic version")
     short = sha.strip().lower()[:8]
     if not re.fullmatch(r"[0-9a-f]{7,8}", short):
         raise ValueError(f"invalid git SHA: {sha!r}")
-    return f"dev.{short}"
+    return f"{version}-dev.{short}"
 
 
 def stable_tuple(value: str) -> tuple[int, int, int] | None:
@@ -55,14 +69,12 @@ def next_version(
     if bump not in {"patch", "minor", "major"}:
         raise ValueError(f"invalid bump: {bump!r}")
 
-    candidates = [
-        parsed
-        for tag in tags
-        if (parsed := stable_tuple(tag)) is not None
-    ]
-    if not candidates:
-        raise ValueError("no stable release tag found; provide --exact")
-    major, minor, patch = max(candidates)
+    try:
+        major, minor, patch = (
+            int(part) for part in stable_base_version(tags).split(".")
+        )
+    except ValueError as error:
+        raise ValueError("no stable release tag found; provide --exact") from error
 
     if bump == "major":
         return f"{major + 1}.0.0"
@@ -74,6 +86,14 @@ def next_version(
 def repository_tags() -> list[str]:
     output = subprocess.check_output(
         ["git", "tag", "--list", "v*"],
+        text=True,
+    )
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def reachable_repository_tags() -> list[str]:
+    output = subprocess.check_output(
+        ["git", "tag", "--merged", "HEAD", "--list", "v*"],
         text=True,
     )
     return [line.strip() for line in output.splitlines() if line.strip()]
@@ -99,7 +119,12 @@ def main() -> None:
         if args.command == "from-tag":
             print(version_from_tag(args.tag))
         elif args.command == "dev":
-            print(development_version(args.sha))
+            print(
+                development_version(
+                    stable_base_version(reachable_repository_tags()),
+                    args.sha,
+                )
+            )
         else:
             print(
                 next_version(
