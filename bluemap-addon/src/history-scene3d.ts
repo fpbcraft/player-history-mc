@@ -106,7 +106,7 @@ export class HistoryScene3D {
   private readonly players = new Map<number, PlayerAvatar>();
   private trailLines: DisposableLine[] = [];
   private eventMeshes: EventMesh[] = [];
-  private eventGeometry?: Geometry;
+  private eventGeometry: Geometry | undefined;
   private readonly geometries = new Map<string, Geometry>();
   private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
 
@@ -203,7 +203,7 @@ export class HistoryScene3D {
 
       const positions = new Float32Array(segment.length * 3);
       for (let i = 0; i < segment.length; i++) {
-        const point = segment[i];
+        const point = segment[i]!;
         positions[i * 3] = point.x / 32;
         positions[i * 3 + 1] = point.y / 32 + 0.03;
         positions[i * 3 + 2] = point.z / 32;
@@ -266,7 +266,7 @@ export class HistoryScene3D {
       const tooltips: string[] = [];
       const points: HistoryPoint[] = [];
       for (let i = 0; i < bucket.length; i++) {
-        const event = bucket[i];
+        const event = bucket[i]!;
         const matrix = new T.Matrix4();
         matrix.makeTranslation(
           event.point.x / 32,
