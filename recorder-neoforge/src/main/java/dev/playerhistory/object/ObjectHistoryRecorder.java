@@ -329,7 +329,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   }
 
   private void ensureChunk(long time) throws IOException {
-    long bucket = Math.floorDiv(time, options.duration()) * options.duration();
+    long bucket = TemporaryChunkFiles.bucketStart(time, options.duration());
     if (channel != null && bucket <= start) return;
 
     flush();
@@ -337,8 +337,9 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     start = bucket;
     points.clear();
 
-    Path file = root.resolve("tracks/" + start + ".tmp");
-    Path existing = root.resolve("tracks/" + start + ".bin");
+    Path tracks = root.resolve("tracks");
+    Path file = TemporaryChunkFiles.temporary(tracks, start);
+    Path existing = TemporaryChunkFiles.completed(tracks, start);
     if (Files.exists(existing)) {
       try (var in = Files.newInputStream(existing)) {
         points.addAll(ObjectBinaryCodec.read(in).points());
@@ -467,8 +468,8 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     if (channel == null) return;
     ChunkChannelIO.closeDurably(channel);
     channel = null;
-    JsonFiles.move(
-        root.resolve("tracks/" + start + ".tmp"), root.resolve("tracks/" + start + ".bin"));
+    TemporaryChunkFiles.complete(
+        TemporaryChunkFiles.temporary(root.resolve("tracks"), start), start);
   }
 
   private void write(byte[] data) throws IOException {

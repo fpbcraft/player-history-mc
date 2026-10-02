@@ -16,6 +16,19 @@ public final class TemporaryChunkFiles {
 
   private TemporaryChunkFiles() {}
 
+  public static long bucketStart(long time, long duration) {
+    if (duration <= 0) throw new IllegalArgumentException("Chunk duration must be positive");
+    return Math.floorDiv(time, duration) * duration;
+  }
+
+  public static Path temporary(Path tracks, long start) {
+    return tracks.resolve(start + ".tmp");
+  }
+
+  public static Path completed(Path tracks, long start) {
+    return tracks.resolve(start + ".bin");
+  }
+
   public static List<Path> list(Path tracks) throws IOException {
     try (var files = Files.list(tracks)) {
       return files.filter(path -> path.toString().endsWith(".tmp")).toList();
@@ -32,7 +45,7 @@ public final class TemporaryChunkFiles {
   }
 
   public static void complete(Path file, long start) throws IOException {
-    JsonFiles.move(file, file.resolveSibling(start + ".bin"));
+    JsonFiles.move(file, completed(file.getParent(), start));
   }
 
   public static void quarantine(Path file) throws IOException {

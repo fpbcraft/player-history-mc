@@ -13,6 +13,15 @@ class TemporaryChunkFilesTest {
   @TempDir Path root;
 
   @Test
+  void bucketAndChunkPathsAreStable() {
+    assertEquals(120_000L, TemporaryChunkFiles.bucketStart(179_999, 60_000));
+    assertEquals(-60_000L, TemporaryChunkFiles.bucketStart(-1, 60_000));
+    assertThrows(IllegalArgumentException.class, () -> TemporaryChunkFiles.bucketStart(0, 0));
+    assertEquals(root.resolve("120000.tmp"), TemporaryChunkFiles.temporary(root, 120_000));
+    assertEquals(root.resolve("120000.bin"), TemporaryChunkFiles.completed(root, 120_000));
+  }
+
+  @Test
   void listsOnlyTemporaryChunksInTheRequestedDirectory() throws Exception {
     Files.write(root.resolve("100.tmp"), new byte[0]);
     Files.write(root.resolve("100.bin"), new byte[0]);

@@ -332,15 +332,16 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void ensureChunk(long time) throws IOException {
-    long bucket = Math.floorDiv(time, options.duration) * options.duration;
+    long bucket = TemporaryChunkFiles.bucketStart(time, options.duration);
     if (channel == null || start < 0 || bucket > start) {
       flush();
       finish();
       start = bucket;
       points.clear();
       events.clear();
-      Path file = root.resolve("tracks/" + start + ".tmp");
-      Path existing = root.resolve("tracks/" + start + ".bin");
+      Path tracks = root.resolve("tracks");
+      Path file = TemporaryChunkFiles.temporary(tracks, start);
+      Path existing = TemporaryChunkFiles.completed(tracks, start);
       if (Files.exists(existing)) {
         try (var in = Files.newInputStream(existing)) {
           var data = BinaryCodec.read(in);
@@ -431,8 +432,8 @@ public final class HistoryStore implements AutoCloseable {
     ChunkChannelIO.closeDurably(channel);
     channel = null;
     if (options.heatmap) heatmaps.flush(publicRoot, true);
-    JsonFiles.move(
-        root.resolve("tracks/" + start + ".tmp"), root.resolve("tracks/" + start + ".bin"));
+    TemporaryChunkFiles.complete(
+        TemporaryChunkFiles.temporary(root.resolve("tracks"), start), start);
   }
 
   private void backfill() throws IOException {
