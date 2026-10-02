@@ -1,3 +1,4 @@
+import { activityRangeTooLarge, loadActivityDensity } from "./activity-density.js";
 import { BlueMapAdapter } from "./bluemap-adapter.js";
 import { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
 import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
@@ -22,7 +23,7 @@ import {
 import { preferences } from "./preferences.js";
 import { BREAK, ChunkCache, CONTEXT, heatmapPlan, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
-import { addActivityBins, clamp, ReplayClock } from "./replay-state.js";
+import { clamp, ReplayClock } from "./replay-state.js";
 import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
 import { describeState, eventDetails, TelemetryCache } from "./telemetry.js";
@@ -922,11 +923,7 @@ export class ReplayPanel extends HTMLElement {
       return;
     }
     const count = Math.max(12, Math.min(96, Math.floor((chart.clientWidth || 720) / 10)));
-    const bins = Array(count).fill(0),
-      day = 86400000;
-    const first = Math.floor(from / day) * day,
-      last = Math.floor(to / day) * day;
-    if ((last - first) / day > 2000) {
+    if (activityRangeTooLarge(from, to)) {
       chart.replaceChildren();
       caption.textContent = "Choose a range of up to 2,000 days to show recording density";
       this.requests.finish("activity", controller);
@@ -934,34 +931,24 @@ export class ReplayPanel extends HTMLElement {
     }
     caption.textContent = "Loading recording density…";
     try {
-      const starts = Array.from(
-        { length: Math.floor((last - first) / day) + 1 },
-        (_, index) => first + index * day,
-      );
-      const days = await mapConcurrent(starts, this.loadingConcurrency(), (start) =>
-        this.historyClient.activity(start, controller.signal),
-      );
-      for (const rows of days) {
-        addActivityBins(bins, rows, from, to);
-      }
+      const result = await loadActivityDensity({
+        from,
+        to,
+        count,
+        concurrency: this.loadingConcurrency(),
+        activityReady: this.manifest.activityReady,
+        loadDay: (day) => this.historyClient.activity(day, controller.signal),
+      });
+      if (result.kind !== "ready") return;
       if (!this.requests.current("activity", controller) || !this.opened) return;
-      const max = Math.max(0, ...bins);
-      renderActivityHistogram(chart, { bins, from, to, formatTime: formatDate });
-      const total = Math.round(bins.reduce((a, b) => a + b, 0));
-      caption.textContent =
-        this.manifest.activityReady === false
-          ? "Recording density · history is still being indexed"
-          : max
-            ? "Recording density · all players · minute-level counts"
-            : "No recorded samples in this range";
-      chart.setAttribute(
-        "aria-label",
-        "Recording density: approximately " +
-          total.toLocaleString() +
-          " samples across " +
-          count +
-          " intervals. Taller bars mean more recorded samples.",
-      );
+      renderActivityHistogram(chart, {
+        bins: result.density.bins,
+        from,
+        to,
+        formatTime: formatDate,
+      });
+      caption.textContent = result.density.status;
+      chart.setAttribute("aria-label", result.density.ariaLabel);
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError"))
         caption.textContent = errorMessage(error);
