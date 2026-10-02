@@ -412,19 +412,30 @@ final class CustomArmorAssetResolver {
       vertex[2] -= root.bone().pivot()[2];
     }
 
-    float[] uv = uv(cube.get("uv"));
-    if (uv == null) return;
-    out.box(
-        vertices,
-        size,
-        uv[0],
-        uv[1],
-        textureWidth,
-        textureHeight,
-        mirror);
+    JsonElement uvValue = cube.get("uv");
+    if (uvValue == null) return;
+    if (uvValue.isJsonArray()) {
+      float[] uv = uvPair(uvValue);
+      if (uv != null)
+        out.box(
+            vertices,
+            size,
+            uv[0],
+            uv[1],
+            textureWidth,
+            textureHeight,
+            mirror);
+    } else if (uvValue.isJsonObject()) {
+      out.mapped(
+          vertices,
+          uvValue.getAsJsonObject(),
+          textureWidth,
+          textureHeight,
+          mirror);
+    }
   }
 
-  private static float[] uv(JsonElement value) {
+  private static float[] uvPair(JsonElement value) {
     if (value == null || !value.isJsonArray()) return null;
     JsonArray array = value.getAsJsonArray();
     return array.size() >= 2
@@ -576,6 +587,56 @@ final class CustomArmorAssetResolver {
       return new float[][] {
         {u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}
       };
+    }
+
+    void mapped(
+        float[][] vertices,
+        JsonObject mapping,
+        int textureWidth,
+        int textureHeight,
+        boolean mirror) {
+      mappedFace(vertices, mapping, "west", mirror ? new int[] {4, 5, 7, 6} : new int[] {3, 2, 0, 1}, textureWidth, textureHeight, mirror);
+      mappedFace(vertices, mapping, "east", mirror ? new int[] {3, 2, 0, 1} : new int[] {4, 5, 7, 6}, textureWidth, textureHeight, mirror);
+      mappedFace(vertices, mapping, "north", new int[] {2, 4, 6, 0}, textureWidth, textureHeight, mirror);
+      mappedFace(vertices, mapping, "south", new int[] {5, 3, 1, 7}, textureWidth, textureHeight, mirror);
+      mappedFace(vertices, mapping, "up", mirror ? new int[] {0, 6, 7, 1} : new int[] {3, 5, 4, 2}, textureWidth, textureHeight, mirror);
+      mappedFace(vertices, mapping, "down", mirror ? new int[] {3, 5, 4, 2} : new int[] {0, 6, 7, 1}, textureWidth, textureHeight, mirror);
+    }
+
+    private void mappedFace(
+        float[][] vertices,
+        JsonObject mapping,
+        String name,
+        int[] corners,
+        int textureWidth,
+        int textureHeight,
+        boolean mirror) {
+      JsonElement element = mapping.get(name);
+      if (element == null || !element.isJsonObject()) return;
+      JsonObject face = element.getAsJsonObject();
+      float[] uv = uvPair(face.get("uv"));
+      float[] size = uvPair(face.get("uv_size"));
+      if (uv == null || size == null) return;
+      int rotation = face.has("uv_rotation") ? Math.floorMod(face.get("uv_rotation").getAsInt(), 360) : 0;
+      float[][] coordinates =
+          uvRect(
+              uv[0],
+              uv[1],
+              size[0],
+              size[1],
+              textureWidth,
+              textureHeight,
+              mirror);
+      if (rotation == 90) coordinates = rotateUvs(coordinates, 1);
+      else if (rotation == 180) coordinates = rotateUvs(coordinates, 2);
+      else if (rotation == 270) coordinates = rotateUvs(coordinates, 3);
+      face(vertices, corners, coordinates);
+    }
+
+    private static float[][] rotateUvs(float[][] source, int amount) {
+      float[][] result = new float[4][];
+      for (int i = 0; i < 4; i++) result[i] = source[(i + amount) % 4];
+      return result;
     }
 
     float[] positions() {
