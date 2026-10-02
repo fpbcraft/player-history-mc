@@ -20,13 +20,40 @@ interface PublishedItemModel {
   groups: PublishedGroup[];
 }
 
-interface PublishedArmorModel {
+interface PublishedLayerArmorModel {
   format: 1;
   item: string;
+  kind: "layer";
   layer: 1 | 2;
   texture: string;
   overlayTexture?: string | null;
 }
+
+type ArmorParent =
+  | "head"
+  | "torso"
+  | "rightArm"
+  | "leftArm"
+  | "rightLeg"
+  | "leftLeg";
+type ArmorSlot = "head" | "chest" | "legs" | "feet";
+
+interface PublishedCustomArmorPart {
+  parent: ArmorParent;
+  slot: ArmorSlot;
+  positions: number[];
+  uvs: number[];
+}
+
+interface PublishedCustomArmorModel {
+  format: 1;
+  item: string;
+  kind: "custom";
+  texture: string;
+  parts: PublishedCustomArmorPart[];
+}
+
+type PublishedArmorModel = PublishedLayerArmorModel | PublishedCustomArmorModel;
 
 export interface BuiltEquipmentModel {
   root: Object3D;
@@ -35,11 +62,18 @@ export interface BuiltEquipmentModel {
   materials: Material[];
 }
 
-export interface LoadedArmorModel {
-  layer: 1 | 2;
-  texture: Texture;
-  overlayTexture?: Texture;
-}
+export type LoadedArmorModel =
+  | {
+      kind: "layer";
+      layer: 1 | 2;
+      texture: Texture;
+      overlayTexture?: Texture;
+    }
+  | {
+      kind: "custom";
+      texture: Texture;
+      parts: PublishedCustomArmorPart[];
+    };
 
 type JsonResponse = {
   ok: boolean;
@@ -66,20 +100,67 @@ const safeRelativePath = (value: unknown): value is string =>
   !value.startsWith("/") &&
   !value.includes("..");
 
+const armorParents = new Set([
+  "head",
+  "torso",
+  "rightArm",
+  "leftArm",
+  "rightLeg",
+  "leftLeg",
+]);
+const armorSlots = new Set(["head", "chest", "legs", "feet"]);
+
 const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const model = value as Record<string, unknown>;
   if (
     model.format !== 1 ||
     model.item !== item ||
+    !safeRelativePath(model.texture)
+  )
+    return null;
+
+  if (model.kind === "custom") {
+    if (!Array.isArray(model.parts)) return null;
+    const parts: PublishedCustomArmorPart[] = [];
+    for (const raw of model.parts) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const part = raw as Record<string, unknown>;
+      if (
+        typeof part.parent !== "string" ||
+        !armorParents.has(part.parent) ||
+        typeof part.slot !== "string" ||
+        !armorSlots.has(part.slot) ||
+        !isNumberArray(part.positions, 18) ||
+        !isNumberArray(part.uvs, 12) ||
+        part.positions.length / 3 !== part.uvs.length / 2
+      )
+        return null;
+      parts.push({
+        parent: part.parent as ArmorParent,
+        slot: part.slot as ArmorSlot,
+        positions: part.positions,
+        uvs: part.uvs,
+      });
+    }
+    return {
+      format: 1,
+      item,
+      kind: "custom",
+      texture: model.texture,
+      parts,
+    };
+  }
+
+  if (
     (model.layer !== 1 && model.layer !== 2) ||
-    !safeRelativePath(model.texture) ||
     (model.overlayTexture != null && !safeRelativePath(model.overlayTexture))
   )
     return null;
   return {
     format: 1,
     item,
+    kind: "layer",
     layer: model.layer,
     texture: model.texture,
     ...(typeof model.overlayTexture === "string"
@@ -155,10 +236,14 @@ export class EquipmentModelLoader {
     if (!model) return null;
     const texture = await this.loadTexture(model.texture);
     if (!texture) return null;
+    if (model.kind === "custom") {
+      return { kind: "custom", texture, parts: model.parts };
+    }
     const overlayTexture = model.overlayTexture
       ? await this.loadTexture(model.overlayTexture)
       : null;
     return {
+      kind: "layer",
       layer: model.layer,
       texture,
       ...(overlayTexture ? { overlayTexture } : {}),
