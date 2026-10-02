@@ -9,7 +9,7 @@
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check src tests *.mjs vitest.config.ts",
+    "lint": "biome lint src tests *.mjs vitest.config.ts",
     "format": "biome format --write src tests *.mjs vitest.config.ts",
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
