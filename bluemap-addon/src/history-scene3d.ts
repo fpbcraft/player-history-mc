@@ -198,7 +198,12 @@ export class HistoryScene3D {
 
     this.textureLoader = new api.Three.TextureLoader();
     this.equipmentModels = equipmentBase
-      ? new EquipmentModelLoader(api, equipmentBase)
+      ? new EquipmentModelLoader(
+          api,
+          equipmentBase,
+          (input) => fetch(input),
+          PLAYER_HISTORY_SKIN_BUILD,
+        )
       : undefined;
   }
 
