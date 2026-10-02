@@ -25,6 +25,7 @@ import { preferences } from "./preferences.js";
 import { BREAK, ChunkCache, CONTEXT, OFFLINE, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { clamp, ReplayClock } from "./replay-state.js";
+import { loadRangeEvents } from "./range-events-loader.js";
 import { RequestCoordinator } from "./request-coordinator.js";
 import { StatusCoordinator } from "./status-coordinator.js";
 import { describeState, eventDetails, TelemetryCache } from "./telemetry.js";
@@ -1342,27 +1343,25 @@ export class ReplayPanel extends HTMLElement {
     if (!this.cache || !this.manifest) return;
     const cache = this.cache;
     const controller = this.requests.start("range-events");
-    const starts = cache.chunkStarts(this.clock.from, this.clock.to, 5000);
-    if (starts.length > 5000) {
-      this.rangeEvents = [];
-      this.eventRevision++;
-      this.statusCoordinator.show(
-        "range",
-        "Event and chat history needs a range under 5,000 chunks",
-      );
-      return;
-    }
-    const events = [];
     try {
-      const chunks = await mapConcurrent(starts, this.loadingConcurrency(), (time) =>
-        cache.read(time, controller.signal),
-      );
-      for (const data of chunks) {
-        events.push(...data.events);
-        if (events.length > 100000) throw Error("Too many events in this range");
+      const result = await loadRangeEvents({
+        from: this.clock.from,
+        to: this.clock.to,
+        concurrency: this.loadingConcurrency(),
+        chunkStarts: (from, to, limit) => cache.chunkStarts(from, to, limit),
+        readChunk: (time) => cache.read(time, controller.signal),
+      });
+      if (result.kind === "too-large") {
+        this.rangeEvents = [];
+        this.eventRevision++;
+        this.statusCoordinator.show(
+          "range",
+          "Event and chat history needs a range under 5,000 chunks",
+        );
+        return;
       }
       if (controller.signal.aborted) return;
-      this.rangeEvents = events.sort((a, b) => a.point.time - b.point.time);
+      this.rangeEvents = result.events;
       this.eventRevision++;
       this.overlayKeys.timeline = null;
       this.overlayKeys.event = null;
