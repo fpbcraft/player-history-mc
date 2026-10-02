@@ -389,7 +389,10 @@ class WorldOverlayController {
     for (const row of rows) {
       const region = regionFor(row);
       let cells = regions.get(region);
-      if (!cells) regions.set(region, (cells = new Map()));
+      if (!cells) {
+        cells = new Map();
+        regions.set(region, cells);
+      }
       cells.set(`${row.x},${row.z}`, row);
     }
 
@@ -451,8 +454,13 @@ class WorldOverlayController {
       material?: { dispose(): void } | Array<{ dispose(): void }>;
     };
     disposable.geometry?.dispose();
-    if (Array.isArray(disposable.material)) disposable.material.forEach((material) => material.dispose());
-    else disposable.material?.dispose();
+    if (Array.isArray(disposable.material)) {
+      disposable.material.forEach((material) => {
+        material.dispose();
+      });
+    } else {
+      disposable.material?.dispose();
+    }
   }
 }
 
