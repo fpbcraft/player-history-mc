@@ -205,3 +205,58 @@ test("equipment loader rejects malformed descriptors and retries missing models"
   assert.equal(await loader.build("minecraft:diamond_sword"), null);
   assert.equal(requests, 2);
 });
+
+
+test("equipment loader loads armor base and overlay textures", async () => {
+  textureUrls.length = 0;
+  const requested: string[] = [];
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async (input) => {
+      requested.push(String(input));
+      return {
+        ok: true,
+        json: async () => ({
+          format: 1,
+          item: "minecraft:leather_helmet",
+          layer: 1,
+          texture: "textures/minecraft/models/armor/leather_layer_1.png",
+          overlayTexture:
+            "textures/minecraft/models/armor/leather_layer_1_overlay.png",
+        }),
+      };
+    },
+  );
+
+  const armor = await loader.armor("minecraft:leather_helmet");
+  assert.ok(armor);
+  assert.equal(armor.layer, 1);
+  assert.ok(armor.texture);
+  assert.ok(armor.overlayTexture);
+  assert.deepEqual(requested, [
+    "https://map.example/player-history/equipment/armor/minecraft/leather_helmet.json",
+  ]);
+  assert.deepEqual(textureUrls, [
+    "https://map.example/player-history/equipment/textures/minecraft/models/armor/leather_layer_1.png",
+    "https://map.example/player-history/equipment/textures/minecraft/models/armor/leather_layer_1_overlay.png",
+  ]);
+});
+
+test("equipment loader rejects unsafe armor texture paths", async () => {
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 1,
+        item: "minecraft:diamond_leggings",
+        layer: 2,
+        texture: "../secret.png",
+      }),
+    }),
+  );
+
+  assert.equal(await loader.armor("minecraft:diamond_leggings"), null);
+});

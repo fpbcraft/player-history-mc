@@ -14,7 +14,7 @@ test("build emits a self-contained stable viewer bundle", async () => {
   assert.match(source, /bluemap-player-replay/);
   assert.doesNotMatch(source, /\bimport\s*\(/);
   assert.doesNotMatch(source, /from\s+["']/);
-  assert.ok(source.length < 250 * 1024);
+  assert.ok(source.length < 256 * 1024);
   assert.match(styles, /bluemap-player-replay/);
 });
 

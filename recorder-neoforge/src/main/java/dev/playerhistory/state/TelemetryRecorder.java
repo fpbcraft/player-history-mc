@@ -101,6 +101,8 @@ public final class TelemetryRecorder {
     value.put(
         "item", registry.get().item(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()));
     value.put("count", stack.getCount());
+    var dyedColor = stack.get(DataComponents.DYED_COLOR);
+    if (dyedColor != null) value.put("color", dyedColor.rgb() & 0xFFFFFF);
     if (on("item-damage")) value.put("damage", stack.getDamageValue());
     if (on("item-custom-name") && stack.has(DataComponents.CUSTOM_NAME)) {
       String name = stack.getHoverName().getString();

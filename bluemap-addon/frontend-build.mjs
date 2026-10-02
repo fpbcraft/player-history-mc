@@ -36,7 +36,8 @@ export const scriptOutput = join(outputDirectory, "player-history.js");
 export const developmentScriptOutput = join(outputDirectory, ".player-history.js.next");
 export const styleOutput = join(outputDirectory, "player-history.css");
 
-const maximumBundleSize = 250 * 1024;
+// Textured avatar equipment added a small amount of intentional runtime code.
+const maximumBundleSize = 256 * 1024;
 const execFileAsync = promisify(execFile);
 
 export async function copyStyles() {

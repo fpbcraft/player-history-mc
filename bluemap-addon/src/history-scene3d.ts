@@ -15,6 +15,7 @@ import {
 import {
   type BuiltEquipmentModel,
   EquipmentModelLoader,
+  type LoadedArmorModel,
 } from "./equipment-model-loader.js";
 import { eventDetails } from "./telemetry.js";
 import type {
@@ -37,6 +38,11 @@ interface Limb {
   group: Object3D;
   mesh: Mesh;
   overlay: Mesh;
+}
+
+interface ResolvedItem {
+  key: string;
+  color?: number;
 }
 
 interface PlayerAvatar {
@@ -102,6 +108,55 @@ const SKIN = {
   leftLeg: skinBox(16, 48, 4, 12, 4),
   leftPants: skinBox(0, 48, 4, 12, 4),
 } as const;
+
+type ArmorSlot = "head" | "chest" | "legs" | "feet";
+type ArmorParent = "head" | "torso" | "rightArm" | "leftArm" | "rightLeg" | "leftLeg";
+
+interface ArmorPartSpec {
+  parent: ArmorParent;
+  uv: SkinBox;
+  position: readonly [number, number, number];
+  scale: number;
+  name: string;
+}
+
+interface ArmorFallbackSpec {
+  parent: ArmorParent;
+  size: readonly [number, number, number];
+  position: readonly [number, number, number];
+  name: string;
+}
+
+const ARMOR_PARTS: Record<ArmorSlot, readonly ArmorPartSpec[]> = {
+  head: [{ parent: "head", uv: SKIN.head, position: [0, 0, 0], scale: 1.14, name: "helmet" }],
+  chest: [
+    { parent: "torso", uv: SKIN.body, position: [0, 0, 0], scale: 1.08, name: "chestplate" },
+    { parent: "rightArm", uv: SKIN.rightArm, position: [0, -0.375, 0], scale: 1.08, name: "right-arm-armor" },
+    { parent: "leftArm", uv: SKIN.rightArm, position: [0, -0.375, 0], scale: 1.08, name: "left-arm-armor" },
+  ],
+  legs: [
+    { parent: "torso", uv: SKIN.body, position: [0, 0, 0], scale: 1.04, name: "leggings-waist" },
+    { parent: "rightLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.08, name: "right-leg-armor" },
+    { parent: "leftLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.08, name: "left-leg-armor" },
+  ],
+  feet: [
+    { parent: "rightLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.1, name: "right-boot" },
+    { parent: "leftLeg", uv: SKIN.rightLeg, position: [0, -0.375, 0], scale: 1.1, name: "left-boot" },
+  ],
+};
+
+const ARMOR_FALLBACKS: Record<ArmorSlot, readonly ArmorFallbackSpec[]> = {
+  head: [{ parent: "head", size: [0.59, 0.59, 0.59], position: [0, 0, 0], name: "helmet" }],
+  chest: [{ parent: "torso", size: [0.59, 0.82, 0.32], position: [0, 0, 0], name: "chestplate" }],
+  legs: [
+    { parent: "rightLeg", size: [0.29, 0.43, 0.29], position: [0, -0.25, 0], name: "right-leg-armor" },
+    { parent: "leftLeg", size: [0.29, 0.43, 0.29], position: [0, -0.25, 0], name: "left-leg-armor" },
+  ],
+  feet: [
+    { parent: "rightLeg", size: [0.3, 0.32, 0.31], position: [0, -0.58, 0.02], name: "right-boot" },
+    { parent: "leftLeg", size: [0.3, 0.32, 0.31], position: [0, -0.58, 0.02], name: "left-boot" },
+  ],
+};
 
 /**
  * Three.js scene used by Player History for things that should exist in world space:
@@ -611,33 +666,30 @@ export class HistoryScene3D {
     state: PlayerState,
     items: readonly HistoryRegistry["items"][number][],
   ): void {
-    const head = this.itemKey(state["equipment:head"], items);
-    const chest = this.itemKey(state["equipment:chest"], items);
-    const legs = this.itemKey(state["equipment:legs"], items);
-    const feet = this.itemKey(state["equipment:feet"], items);
+    const head = this.itemVisual(state["equipment:head"], items);
+    const chest = this.itemVisual(state["equipment:chest"], items);
+    const legs = this.itemVisual(state["equipment:legs"], items);
+    const feet = this.itemVisual(state["equipment:feet"], items);
     const main =
-      this.itemKey(state.heldItem, items) ?? this.itemKey(state["equipment:mainhand"], items);
-    const offhand = this.itemKey(state["equipment:offhand"], items);
+      this.itemVisual(state.heldItem, items) ??
+      this.itemVisual(state["equipment:mainhand"], items);
+    const offhand = this.itemVisual(state["equipment:offhand"], items);
     const signature = JSON.stringify([head, chest, legs, feet, main, offhand]);
     if (signature === avatar.equipmentSignature) return;
 
     this.clearEquipment(avatar);
     avatar.equipmentSignature = signature;
 
-    if (head && this.isArmor(head, "head"))
-      this.addEquipmentBox(avatar, avatar.head, head, [0.59, 0.59, 0.59], [0, 0, 0], "helmet");
-    if (chest && this.isArmor(chest, "chest"))
-      this.addEquipmentBox(avatar, avatar.torso, chest, [0.59, 0.82, 0.32], [0, 0, 0], "chestplate");
-    if (legs && this.isArmor(legs, "legs")) {
-      this.addEquipmentBox(avatar, avatar.rightLeg.group, legs, [0.29, 0.43, 0.29], [0, -0.25, 0], "right-leg-armor");
-      this.addEquipmentBox(avatar, avatar.leftLeg.group, legs, [0.29, 0.43, 0.29], [0, -0.25, 0], "left-leg-armor");
-    }
-    if (feet && this.isArmor(feet, "feet")) {
-      this.addEquipmentBox(avatar, avatar.rightLeg.group, feet, [0.3, 0.32, 0.31], [0, -0.58, 0.02], "right-boot");
-      this.addEquipmentBox(avatar, avatar.leftLeg.group, feet, [0.3, 0.32, 0.31], [0, -0.58, 0.02], "left-boot");
-    }
-    if (main) this.addHeldItem(avatar, avatar.rightArm.group, main, "main-hand");
-    if (offhand) this.addHeldItem(avatar, avatar.leftArm.group, offhand, "off-hand");
+    if (head && this.isArmor(head.key, "head"))
+      this.addArmor(avatar, head, "head", signature);
+    if (chest && this.isArmor(chest.key, "chest"))
+      this.addArmor(avatar, chest, "chest", signature);
+    if (legs && this.isArmor(legs.key, "legs"))
+      this.addArmor(avatar, legs, "legs", signature);
+    if (feet && this.isArmor(feet.key, "feet"))
+      this.addArmor(avatar, feet, "feet", signature);
+    if (main) this.addHeldItem(avatar, avatar.rightArm.group, main.key, "main-hand");
+    if (offhand) this.addHeldItem(avatar, avatar.leftArm.group, offhand.key, "off-hand");
   }
 
   private clearEquipment(avatar: PlayerAvatar): void {
@@ -648,6 +700,130 @@ export class HistoryScene3D {
     avatar.equipmentMaterials.length = 0;
     avatar.equipmentGeometries.length = 0;
     avatar.equipmentSignature = "";
+  }
+
+  private addArmor(
+    avatar: PlayerAvatar,
+    item: ResolvedItem,
+    slot: ArmorSlot,
+    signature: string,
+  ): void {
+    const fallbacks = ARMOR_FALLBACKS[slot].map((spec) =>
+      this.addEquipmentBox(
+        avatar,
+        this.armorParent(avatar, spec.parent),
+        item.key,
+        spec.size,
+        spec.position,
+        spec.name,
+      ),
+    );
+    if (this.equipmentModels && item.key !== "minecraft:elytra")
+      void this.upgradeArmor(avatar, item, slot, fallbacks, signature, 0);
+  }
+
+  private async upgradeArmor(
+    avatar: PlayerAvatar,
+    item: ResolvedItem,
+    slot: ArmorSlot,
+    fallbacks: Mesh[],
+    signature: string,
+    attempt: number,
+  ): Promise<void> {
+    const armor = await this.equipmentModels?.armor(item.key);
+    if (
+      avatar.equipmentSignature !== signature ||
+      fallbacks.some((fallback) => !fallback.parent)
+    )
+      return;
+    if (!armor) {
+      if (attempt < 8)
+        setTimeout(() => {
+          if (
+            avatar.equipmentSignature === signature &&
+            fallbacks.every((fallback) => fallback.parent)
+          )
+            void this.upgradeArmor(avatar, item, slot, fallbacks, signature, attempt + 1);
+        }, 5_000);
+      return;
+    }
+    if (armor.layer !== (slot === "legs" ? 2 : 1)) return;
+
+    for (const fallback of fallbacks) this.removeEquipmentMesh(avatar, fallback);
+    this.addTexturedArmor(avatar, item, slot, armor);
+  }
+
+  private addTexturedArmor(
+    avatar: PlayerAvatar,
+    item: ResolvedItem,
+    slot: ArmorSlot,
+    armor: LoadedArmorModel,
+  ): void {
+    const base = this.armorMaterial(
+      avatar,
+      armor.texture,
+      item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff),
+    );
+    this.addArmorParts(avatar, slot, base, 0);
+    if (armor.overlayTexture)
+      this.addArmorParts(
+        avatar,
+        slot,
+        this.armorMaterial(avatar, armor.overlayTexture, 0xffffff),
+        0.008,
+      );
+  }
+
+  private armorMaterial(
+    avatar: PlayerAvatar,
+    texture: Texture,
+    color: number,
+  ): Material {
+    const material = new this.api.Three.MeshBasicMaterial({
+      color,
+      map: texture,
+      transparent: true,
+      alphaTest: 0.05,
+      side: this.api.Three.DoubleSide,
+      depthTest: true,
+      depthWrite: true,
+    });
+    avatar.equipmentMaterials.push(material);
+    return material;
+  }
+
+  private addArmorParts(
+    avatar: PlayerAvatar,
+    slot: ArmorSlot,
+    material: Material,
+    grow: number,
+  ): void {
+    for (const spec of ARMOR_PARTS[slot]) {
+      const geometry = this.armorGeometry(
+        spec.uv.width / 16,
+        spec.uv.height / 16,
+        spec.uv.depth / 16,
+        spec.uv,
+      );
+      const mesh = new this.api.Three.Mesh(geometry, material);
+      mesh.name = spec.name;
+      mesh.position.set(...spec.position);
+      const scale = spec.scale + grow;
+      mesh.scale.set(scale, scale, scale);
+      this.decoratePlayerPart(mesh, Number(avatar.root.userData.historyPlayer));
+      this.armorParent(avatar, spec.parent).add(mesh);
+      avatar.equipmentParts.push(mesh);
+      avatar.equipmentGeometries.push(geometry);
+    }
+  }
+
+  private armorParent(avatar: PlayerAvatar, parent: ArmorParent): Object3D {
+    if (parent === "head") return avatar.head;
+    if (parent === "torso") return avatar.torso;
+    if (parent === "rightArm") return avatar.rightArm.group;
+    if (parent === "leftArm") return avatar.leftArm.group;
+    if (parent === "rightLeg") return avatar.rightLeg.group;
+    return avatar.leftLeg.group;
   }
 
   private addEquipmentBox(
@@ -742,16 +918,7 @@ export class HistoryScene3D {
       return;
     }
 
-    fallback.parent.remove(fallback);
-    avatar.equipmentParts = avatar.equipmentParts.filter((part) => part !== fallback);
-    avatar.equipmentMaterials = avatar.equipmentMaterials.filter(
-      (material) => material !== fallback.material,
-    );
-    avatar.equipmentGeometries = avatar.equipmentGeometries.filter(
-      (geometry) => geometry !== fallback.geometry,
-    );
-    fallback.material.dispose();
-    fallback.geometry.dispose();
+    this.removeEquipmentMesh(avatar, fallback);
 
     model.root.name = name;
     model.root.position.set(0, -0.78, 0.08);
@@ -782,14 +949,36 @@ export class HistoryScene3D {
     for (const geometry of model.geometries) geometry.dispose();
   }
 
-  private itemKey(
+  private removeEquipmentMesh(avatar: PlayerAvatar, mesh: Mesh): void {
+    mesh.parent?.remove(mesh);
+    avatar.equipmentParts = avatar.equipmentParts.filter((part) => part !== mesh);
+    avatar.equipmentMaterials = avatar.equipmentMaterials.filter(
+      (material) => material !== mesh.material,
+    );
+    avatar.equipmentGeometries = avatar.equipmentGeometries.filter(
+      (geometry) => geometry !== mesh.geometry,
+    );
+    mesh.material.dispose();
+    mesh.geometry.dispose();
+  }
+
+  private itemVisual(
     value: unknown,
     items: readonly HistoryRegistry["items"][number][],
-  ): string | undefined {
+  ): ResolvedItem | undefined {
     if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-    const item = (value as { item?: unknown }).item;
-    if (typeof item !== "number" || item <= 0) return undefined;
-    return items.find((entry) => entry.id === item)?.key;
+    const data = value as { item?: unknown; color?: unknown };
+    if (typeof data.item !== "number" || data.item <= 0) return undefined;
+    const key = items.find((entry) => entry.id === data.item)?.key;
+    if (!key) return undefined;
+    const color =
+      typeof data.color === "number" &&
+      Number.isInteger(data.color) &&
+      data.color >= 0 &&
+      data.color <= 0xffffff
+        ? data.color
+        : undefined;
+    return { key, ...(color !== undefined ? { color } : {}) };
   }
 
   private isArmor(item: string, slot: "head" | "chest" | "legs" | "feet"): boolean {
@@ -840,19 +1029,48 @@ export class HistoryScene3D {
     const cached = this.geometries.get(key);
     if (cached) return cached;
 
-    const T = this.api.Three;
-    const geometry = new T.BoxGeometry(width, height, depth);
-    const uv = geometry.attributes?.uv;
+    const geometry = new this.api.Three.BoxGeometry(width, height, depth);
+    this.setBoxUvs(geometry, skin, 64);
+    this.geometries.set(key, geometry);
+    return geometry;
+  }
+
+  private armorGeometry(
+    width: number,
+    height: number,
+    depth: number,
+    skin: SkinBox,
+  ): Geometry {
+    const geometry = new this.api.Three.BoxGeometry(width, height, depth);
+    this.setBoxUvs(geometry, skin, 32);
+    return geometry;
+  }
+
+  private setBoxUvs(
+    geometry: Geometry,
+    skin: SkinBox,
+    textureHeight: number,
+  ): void {
+    const uv = (
+      geometry as Geometry & {
+        attributes?: {
+          uv?: {
+            set(values: Float32Array): void;
+            needsUpdate: boolean;
+          };
+        };
+      }
+    ).attributes?.uv;
     if (!uv) {
       throw new Error("BlueMap Three.js BoxGeometry has no UV attribute");
     }
 
     const { u, v, width: pixelWidth, height: pixelHeight, depth: pixelDepth } = skin;
     const rect = (x1: number, y1: number, x2: number, y2: number) => [
-      [x1 / 64, 1 - y2 / 64],
-      [x2 / 64, 1 - y2 / 64],
-      [x2 / 64, 1 - y1 / 64],
-      [x1 / 64, 1 - y1 / 64],
+      [x1 / 64, 1 - y2 / textureHeight],
+      [x2 / 64, 1 - y2 / textureHeight],
+      [x2 / 64, 1 - y1 / textureHeight],
+      [x1 / 64, 1 - y1 / textureHeight],
     ] as const;
 
     const top = rect(
@@ -906,9 +1124,6 @@ export class HistoryScene3D {
     ];
     uv.set(new Float32Array(ordered.flat(2)));
     uv.needsUpdate = true;
-
-    this.geometries.set(key, geometry);
-    return geometry;
   }
 
 }
