@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, stat, watch } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,14 @@ async function projectVersion() {
   const properties = await readFile(gradleProperties, "utf8");
   const match = properties.match(/^modVersion=(.+)$/m);
   if (!match?.[1]?.trim()) throw new Error("gradle.properties is missing modVersion");
-  return match[1].trim();
+
+  const shortSha = execFileSync("git", ["rev-parse", "--short=8", "HEAD"], {
+    cwd: join(root, ".."),
+    encoding: "utf8",
+  }).trim();
+  if (!shortSha) throw new Error("Could not resolve the current Git commit");
+
+  return `${match[1].trim()}-dev.${shortSha}`;
 }
 
 export const outputDirectory = join(root, "dist");
