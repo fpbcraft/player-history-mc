@@ -248,7 +248,7 @@ test("3D history scene creates skinned articulated players", () => {
   assert.equal(rightArm.children.length, 3, "held item is attached to the arm");
   const rightLeg = model.children[4] as O;
   assert.ok(Math.abs(rightLeg.position.y - 0.7375) < 0.0001);
-  assert.equal(rightLeg.position.z, 0.25);
+  assert.equal(rightLeg.position.z, -0.25);
 });
 
 test("3D equipment slots render nonstandard item ids without filename heuristics", () => {

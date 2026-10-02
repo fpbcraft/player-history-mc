@@ -658,7 +658,8 @@ export class HistoryScene3D {
 
     if (sneaking) {
       // Vanilla HumanoidModel crouch: body.xRot=.5; arms +=.4; head/body/
-      // arms move down 4.2/3.2 px; legs move down .2 px and back 4 px.
+      // arms move down 4.2/3.2 px; legs move down .2 px and 4 px along
+      // Minecraft model +Z. The BlueMap avatar faces -Z, so that offset is negative here.
       torsoPitch = 0.5;
       rightArm += 0.4;
       leftArm += 0.4;
@@ -666,8 +667,8 @@ export class HistoryScene3D {
       avatar.torso.position.set(0, 1.5 - 3.2 / 16, 0);
       avatar.rightArm.group.position.set(-0.375, 1.5 - 3.2 / 16, 0);
       avatar.leftArm.group.position.set(0.375, 1.5 - 3.2 / 16, 0);
-      avatar.rightLeg.group.position.set(-0.125, 0.75 - 0.2 / 16, 4 / 16);
-      avatar.leftLeg.group.position.set(0.125, 0.75 - 0.2 / 16, 4 / 16);
+      avatar.rightLeg.group.position.set(-0.125, 0.75 - 0.2 / 16, -4 / 16);
+      avatar.leftLeg.group.position.set(0.125, 0.75 - 0.2 / 16, -4 / 16);
     }
 
     if (swimming) {

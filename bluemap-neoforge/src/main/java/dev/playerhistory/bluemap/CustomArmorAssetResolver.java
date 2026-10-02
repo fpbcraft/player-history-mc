@@ -435,12 +435,9 @@ final class CustomArmorAssetResolver {
       vertex[1] -= root.bone().pivot()[1];
       vertex[2] -= root.bone().pivot()[2];
 
-      // Gecko/Minecraft humanoid model space faces toward -Z, while the
-      // BlueMap Three.js avatar uses +Z as its visible/front face (matching
-      // skinview3d's BoxGeometry UV convention). Reflect local Z once at the
-      // integration boundary so custom equipment faces the same direction as
-      // the player skin without changing Gecko's internal bake semantics.
-      vertex[2] = -vertex[2];
+      // Gecko/Minecraft humanoid geometry and the BlueMap player avatar both
+      // use -Z as forward here. Keep local Z unchanged; reflecting it makes
+      // asymmetric custom armor render backwards on the player.
     }
 
     JsonElement uvValue = cube.get("uv");

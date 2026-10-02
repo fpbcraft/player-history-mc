@@ -125,7 +125,7 @@ final class CustomArmorAssetResolverTest {
   }
 
   @Test
-  void reflectsGeckoForwardAxisIntoViewerSpace() {
+  void keepsGeckoForwardAxisInViewerSpace() {
     var root =
         JsonParser.parseString(
                 """
@@ -152,10 +152,10 @@ final class CustomArmorAssetResolverTest {
     assertNotNull(model);
     var part = model.parts().getFirst();
 
-    // Gecko/Minecraft model front is -Z. The BlueMap avatar front is +Z,
-    // so an asymmetric cube in front of the body must land on positive Z.
-    assertEquals(0.1875f, axisMin(part.positions(), 2), 0.0001f);
-    assertEquals(0.3125f, axisMax(part.positions(), 2), 0.0001f);
+    // Gecko/Minecraft model front is -Z, and the BlueMap avatar uses the same
+    // convention. An asymmetric cube in front of the body must stay on negative Z.
+    assertEquals(-0.3125f, axisMin(part.positions(), 2), 0.0001f);
+    assertEquals(-0.1875f, axisMax(part.positions(), 2), 0.0001f);
   }
 
   @Test
