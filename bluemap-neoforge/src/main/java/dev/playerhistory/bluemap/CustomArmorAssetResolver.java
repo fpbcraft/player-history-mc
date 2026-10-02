@@ -285,8 +285,10 @@ final class CustomArmorAssetResolver {
             new Bone(
                 name,
                 bone.has("parent") ? bone.get("parent").getAsString() : null,
-                vec(bone.getAsJsonArray("pivot"), new float[] {0, 0, 0}),
-                vec(bone.getAsJsonArray("rotation"), new float[] {0, 0, 0}),
+                modelPoint(vec(bone.getAsJsonArray("pivot"), new float[] {0, 0, 0})),
+                modelRotation(vec(bone.getAsJsonArray("rotation"), new float[] {0, 0, 0})),
+                bone.has("mirror") && bone.get("mirror").getAsBoolean(),
+                bone.has("inflate") ? bone.get("inflate").getAsFloat() : 0,
                 bone.getAsJsonArray("cubes")));
       }
 
@@ -363,26 +365,39 @@ final class CustomArmorAssetResolver {
     float[] origin = vec(cube.getAsJsonArray("origin"), null);
     float[] size = vec(cube.getAsJsonArray("size"), null);
     if (origin == null || size == null || !cube.has("uv")) return;
-    float inflate = cube.has("inflate") ? cube.get("inflate").getAsFloat() : 0;
-    float[] min = {
-      origin[0] - inflate, origin[1] - inflate, origin[2] - inflate
-    };
-    float[] max = {
-      origin[0] + size[0] + inflate,
-      origin[1] + size[1] + inflate,
-      origin[2] + size[2] + inflate
-    };
 
+    float inflate =
+        cube.has("inflate") ? cube.get("inflate").getAsFloat() : bone.inflate();
+    boolean mirror =
+        cube.has("mirror") ? cube.get("mirror").getAsBoolean() : bone.mirror();
+
+    // Match GeckoLib GeometryCube#bake: Bedrock X is mirrored into Minecraft
+    // model space, while Y/Z keep their sign. Units become blocks here.
+    float ox = -(origin[0] + size[0]) / 16f;
+    float oy = origin[1] / 16f;
+    float oz = origin[2] / 16f;
+    float sx = size[0] / 16f;
+    float sy = size[1] / 16f;
+    float sz = size[2] / 16f;
+    float inf = inflate / 16f;
+
+    // Same vertex set/order as GeckoLib's VertexSet.
     float[][] vertices = {
-      {min[0], min[1], min[2]}, {max[0], min[1], min[2]},
-      {max[0], max[1], min[2]}, {min[0], max[1], min[2]},
-      {min[0], min[1], max[2]}, {max[0], min[1], max[2]},
-      {max[0], max[1], max[2]}, {min[0], max[1], max[2]}
+      {ox - inf, oy - inf, oz - inf},
+      {ox - inf, oy - inf, oz + sz + inf},
+      {ox - inf, oy + sy + inf, oz - inf},
+      {ox - inf, oy + sy + inf, oz + sz + inf},
+      {ox + sx + inf, oy + sy + inf, oz - inf},
+      {ox + sx + inf, oy + sy + inf, oz + sz + inf},
+      {ox + sx + inf, oy - inf, oz - inf},
+      {ox + sx + inf, oy - inf, oz + sz + inf}
     };
 
-    float[] cubePivot = vec(cube.getAsJsonArray("pivot"), bone.pivot());
-    float[] cubeRotation = vec(cube.getAsJsonArray("rotation"), new float[] {0, 0, 0});
-    for (float[] vertex : vertices) rotate(vertex, cubePivot, cubeRotation);
+    float[] rawCubePivot = vec(cube.getAsJsonArray("pivot"), null);
+    float[] cubePivot = rawCubePivot == null ? bone.pivot() : modelPoint(rawCubePivot);
+    float[] cubeRotation =
+        modelRotation(vec(cube.getAsJsonArray("rotation"), new float[] {0, 0, 0}));
+    rotateAll(vertices, cubePivot, cubeRotation);
 
     Bone current = bone;
     for (int depth = 0; current != null && depth < 32; depth++) {
@@ -392,15 +407,21 @@ final class CustomArmorAssetResolver {
     }
 
     for (float[] vertex : vertices) {
-      vertex[0] = (vertex[0] - root.bone().pivot()[0]) / 16f;
-      vertex[1] = (vertex[1] - root.bone().pivot()[1]) / 16f;
-      vertex[2] = (vertex[2] - root.bone().pivot()[2]) / 16f;
+      vertex[0] -= root.bone().pivot()[0];
+      vertex[1] -= root.bone().pivot()[1];
+      vertex[2] -= root.bone().pivot()[2];
     }
 
     float[] uv = uv(cube.get("uv"));
     if (uv == null) return;
-    boolean mirror = cube.has("mirror") && cube.get("mirror").getAsBoolean();
-    out.box(vertices, size, uv[0], uv[1], textureWidth, textureHeight, mirror);
+    out.box(
+        vertices,
+        size,
+        uv[0],
+        uv[1],
+        textureWidth,
+        textureHeight,
+        mirror);
   }
 
   private static float[] uv(JsonElement value) {
@@ -418,12 +439,19 @@ final class CustomArmorAssetResolver {
     };
   }
 
+  private static float[] modelPoint(float[] value) {
+    return new float[] {-value[0] / 16f, value[1] / 16f, value[2] / 16f};
+  }
+
+  private static float[] modelRotation(float[] value) {
+    return new float[] {-value[0], -value[1], value[2]};
+  }
+
   private static void rotateAll(float[][] vertices, float[] pivot, float[] degrees) {
     for (float[] vertex : vertices) rotate(vertex, pivot, degrees);
   }
 
   private static void rotate(float[] point, float[] pivot, float[] degrees) {
-    if (degrees == null) return;
     double x = point[0] - pivot[0];
     double y = point[1] - pivot[1];
     double z = point[2] - pivot[2];
@@ -432,21 +460,23 @@ final class CustomArmorAssetResolver {
     double ry = Math.toRadians(degrees[1]);
     double rz = Math.toRadians(degrees[2]);
 
-    double cy = Math.cos(rx), sy = Math.sin(rx);
-    double y1 = y * cy - z * sy;
-    double z1 = y * sy + z * cy;
+    double cos = Math.cos(rx), sin = Math.sin(rx);
+    double y1 = y * cos - z * sin;
+    double z1 = y * sin + z * cos;
     y = y1;
     z = z1;
 
-    double cx = Math.cos(ry), sx = Math.sin(ry);
-    double x1 = x * cx + z * sx;
-    double z2 = -x * sx + z * cx;
+    cos = Math.cos(ry);
+    sin = Math.sin(ry);
+    double x1 = x * cos + z * sin;
+    double z2 = -x * sin + z * cos;
     x = x1;
     z = z2;
 
-    double cz = Math.cos(rz), sz = Math.sin(rz);
-    double x2 = x * cz - y * sz;
-    double y2 = x * sz + y * cz;
+    cos = Math.cos(rz);
+    sin = Math.sin(rz);
+    double x2 = x * cos - y * sin;
+    double y2 = x * sin + y * cos;
 
     point[0] = (float) (x2 + pivot[0]);
     point[1] = (float) (y2 + pivot[1]);
@@ -454,7 +484,13 @@ final class CustomArmorAssetResolver {
   }
 
   private record Bone(
-      String name, String parent, float[] pivot, float[] rotation, JsonArray cubes) {}
+      String name,
+      String parent,
+      float[] pivot,
+      float[] rotation,
+      boolean mirror,
+      float inflate,
+      JsonArray cubes) {}
   private record Root(Bone bone, String part) {}
 
   private static final class MeshBuilder {
@@ -473,13 +509,36 @@ final class CustomArmorAssetResolver {
         int textureWidth,
         int textureHeight,
         boolean mirror) {
-      float dx = size[0], dy = size[1], dz = size[2];
-      face(v, new int[] {1, 5, 6, 2}, rect(u + dz + dx, w + dz, dz, dy, textureWidth, textureHeight, mirror));
-      face(v, new int[] {4, 0, 3, 7}, rect(u, w + dz, dz, dy, textureWidth, textureHeight, mirror));
-      face(v, new int[] {3, 2, 6, 7}, rect(u + dz, w, dx, dz, textureWidth, textureHeight, mirror));
-      face(v, new int[] {4, 5, 1, 0}, rect(u + dz + dx, w, dx, dz, textureWidth, textureHeight, mirror));
-      face(v, new int[] {5, 4, 7, 6}, rect(u + dz + dx + dz, w + dz, dx, dy, textureWidth, textureHeight, mirror));
-      face(v, new int[] {0, 1, 2, 3}, rect(u + dz, w + dz, dx, dy, textureWidth, textureHeight, mirror));
+      float dx = (float) Math.floor(size[0]);
+      float dy = (float) Math.floor(size[1]);
+      float dz = (float) Math.floor(size[2]);
+
+      // Vertex order and box-UV windows mirror GeckoLib's VertexSet and
+      // GeometryQuadUvs.ofBoxUv exactly.
+      face(
+          v,
+          mirror ? new int[] {4, 5, 7, 6} : new int[] {3, 2, 0, 1},
+          uvRect(u + dz + dx, w + dz, dz, dy, textureWidth, textureHeight, mirror));
+      face(
+          v,
+          mirror ? new int[] {3, 2, 0, 1} : new int[] {4, 5, 7, 6},
+          uvRect(u, w + dz, dz, dy, textureWidth, textureHeight, mirror));
+      face(
+          v,
+          new int[] {2, 4, 6, 0},
+          uvRect(u + dz, w + dz, dx, dy, textureWidth, textureHeight, mirror));
+      face(
+          v,
+          new int[] {5, 3, 1, 7},
+          uvRect(u + dz + dx + dz, w + dz, dx, dy, textureWidth, textureHeight, mirror));
+      face(
+          v,
+          new int[] {3, 5, 4, 2},
+          uvRect(u + dz, w, dx, dz, textureWidth, textureHeight, mirror));
+      face(
+          v,
+          new int[] {0, 6, 7, 1},
+          uvRect(u + dz + dx, w + dz, dx, -dz, textureWidth, textureHeight, mirror));
     }
 
     private void face(float[][] vertices, int[] corners, float[][] uv) {
@@ -494,19 +553,28 @@ final class CustomArmorAssetResolver {
       }
     }
 
-    private static float[][] rect(
-        float x, float y, float width, float height, int textureWidth, int textureHeight, boolean mirror) {
-      float left = x / textureWidth;
-      float right = (x + width) / textureWidth;
-      float top = 1f - y / textureHeight;
-      float bottom = 1f - (y + height) / textureHeight;
-      if (mirror) {
-        float swap = left;
-        left = right;
-        right = swap;
+    private static float[][] uvRect(
+        float u,
+        float v,
+        float width,
+        float height,
+        int textureWidth,
+        int textureHeight,
+        boolean mirror) {
+      float u0 = u / textureWidth;
+      float u1 = (u + width) / textureWidth;
+      float v0 = 1f - v / textureHeight;
+      float v1 = 1f - (v + height) / textureHeight;
+
+      // GeckoLib reverses U for ordinary box UVs and keeps it forward for mirror.
+      if (!mirror) {
+        float swap = u0;
+        u0 = u1;
+        u1 = swap;
       }
+
       return new float[][] {
-        {left, bottom}, {right, bottom}, {right, top}, {left, top}
+        {u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}
       };
     }
 
