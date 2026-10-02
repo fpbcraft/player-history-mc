@@ -54,7 +54,7 @@ const HeaderTools = () => (
       </div>
     </div>
     <button type="button" name="heat" hidden aria-hidden="true" tabIndex={-1} />
-    <details class="history-event-control">    <details class="history-event-control">
+    <details class="history-event-control">
       <summary aria-label="Event filters" title="Event filters">
         <HistoryIcon name="events" />
       </summary>
