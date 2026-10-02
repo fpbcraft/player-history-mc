@@ -33,12 +33,14 @@ publishes the JARs. The workflow can also be run manually from the default branc
 patch/minor/major bump, or provide an exact SemVer. Manual releases build successfully before
 the workflow creates the tag and release, and refuse to reuse an existing tag/version.
 
-Non-release CI/local builds use `dev.<short-sha>`, so development artifacts are immutable
-without pretending to belong to a released semantic version.
+Non-release CI/local builds derive their base from the latest stable release tag reachable
+from the branch and append `-dev.<short-sha>`. For example, work based on `v1.0.0` produces
+`1.0.0-dev.a1b2c3d4`. This keeps development artifacts immutable while remaining a valid
+NeoForge/Maven version.
 
 The local proxy rebuilds TypeScript and CSS and refreshes the browser without rebuilding a JAR or restarting Minecraft. See [BlueMap installation and live frontend development](docs/bluemap-addon.md) for hosted targets, phone testing and options.
 
-The private npm package is intentionally not independently versioned. Normal builds use only the short Git commit, for example `dev.a1b2c3d4`, and the embedded viewer receives the same version. Published releases use the exact release tag version. Manual semantic bumps derive from the highest stable release tag, so there is no separate repository version baseline to keep synchronized. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
+The private npm package is intentionally not independently versioned. Normal builds use the latest reachable stable release as their base plus the short Git commit, for example `1.0.0-dev.a1b2c3d4`, and the embedded viewer receives the same version. Published releases use the exact release tag version. Manual semantic bumps derive from the highest stable release tag, so there is no separate repository version baseline to keep synchronized. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
 
 ## Documentation
 
