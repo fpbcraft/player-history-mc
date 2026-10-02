@@ -16,7 +16,6 @@ import javax.imageio.ImageIO;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.ArmorItem;
 
 /**
  * Publishes resolved resource models only for item ids that have actually appeared in
@@ -37,7 +36,6 @@ final class EquipmentAssetPublisher {
   private volatile Path root;
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
-  private volatile CustomArmorAssetResolver customArmor;
   private volatile CustomArmorAssetResolver customArmor;
   private volatile long nextScan;
 
@@ -67,7 +65,6 @@ final class EquipmentAssetPublisher {
     processed.clear();
     BlueMap3DItemModelBridge current = bridge;
     bridge = null;
-    customArmor = null;
     customArmor = null;
     if (current != null) current.close();
   }
@@ -100,7 +97,6 @@ final class EquipmentAssetPublisher {
         currentBridge =
             BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
         bridge = currentBridge;
-        customArmor = new CustomArmorAssetResolver(currentBridge, log);
         customArmor = new CustomArmorAssetResolver(currentBridge, log);
       } catch (ClassNotFoundException error) {
         log.accept("BlueMap3D is unavailable; Player History will keep simple equipment models");
@@ -212,28 +208,19 @@ final class EquipmentAssetPublisher {
     try {
       var published = new ArrayList<ArmorLayer>();
       for (var layer : layers) {
-        ResourceLocation texture = layer.texture(inner);
-        BufferedImage image = currentBridge.texture(texture.toString());
+        ResourceLocation textureFile = layer.texture(inner);
+        String texture = textureId(textureFile);
+        BufferedImage image = currentBridge.texture(texture);
         if (image == null) continue;
-        String path = texturePath(texture.toString().replaceFirst("^([^:]+):textures/", "$1:"));
+        String path = texturePath(texture);
         writePng(currentRoot, path, image);
 
         String overlayPath = null;
         if (layer.dyeable()) {
-          ResourceLocation overlay =
-              ResourceLocation.fromNamespaceAndPath(
-                  texture.getNamespace(),
-                  texture.getPath().replace(".png", "_overlay.png"));
-          BufferedImage overlayImage =
-              currentBridge.texture(
-                  overlay.toString().replaceFirst("^([^:]+):textures/", "$1:").replace(".png", ""));
+          String overlay = texture + "_overlay";
+          BufferedImage overlayImage = currentBridge.texture(overlay);
           if (overlayImage != null) {
-            overlayPath =
-                texturePath(
-                    overlay
-                        .toString()
-                        .replaceFirst("^([^:]+):textures/", "$1:")
-                        .replace(".png", ""));
+            overlayPath = texturePath(overlay);
             writePng(currentRoot, overlayPath, overlayImage);
           }
         }
@@ -283,6 +270,13 @@ final class EquipmentAssetPublisher {
     writeAtomic(target, JsonFiles.GSON.toJson(model));
   }
 
+
+  private static String textureId(ResourceLocation file) {
+    String path = file.getPath();
+    if (path.startsWith("textures/")) path = path.substring("textures/".length());
+    if (path.endsWith(".png")) path = path.substring(0, path.length() - ".png".length());
+    return file.getNamespace() + ":" + path;
+  }
 
   private static String texturePath(String texture) throws IOException {
     ResourceLocation id = ResourceLocation.tryParse(texture);
