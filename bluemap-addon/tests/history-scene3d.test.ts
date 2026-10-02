@@ -251,6 +251,31 @@ test("3D history scene creates skinned articulated players", () => {
   assert.equal(rightLeg.position.z, 0.25);
 });
 
+test("3D equipment slots render nonstandard item ids without filename heuristics", () => {
+  const scene = new HistoryScene3D(runtime(), "https://map.example/player-history/skins/");
+  scene.setPlayers(
+    [{ player: 1, time: 1000, world: 0, x: 0, y: 64 * 32, z: 0, flags: 0 }],
+    new Map([[1, "Alex"]]),
+    [{ id: 1, uuid: "", name: "Alex" }],
+  );
+  const playersRoot = scene.root.children?.[2] as O;
+  const avatar = playersRoot.children[0] as O;
+  const model = avatar.children[0] as O;
+  const torso = model.children[1] as O;
+
+  scene.setPlayerVitals(
+    1,
+    { "equipment:chest": { item: 1, count: 1 } },
+    [{ id: 1, key: "paladins:netherite_prior_robe_chest" }],
+  );
+
+  assert.equal(
+    torso.children.length,
+    3,
+    "an occupied chest equipment slot gets an equipment representation",
+  );
+});
+
 test("3D player head uses full vanilla look pitch around the neck pivot", () => {
   const scene = new HistoryScene3D(runtime(), "https://map.example/player-history/skins/");
   scene.setPlayers(
