@@ -45,6 +45,7 @@ public final class BlueMapIntegration {
   private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
   private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
   private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
+  private final EquipmentAssetPublisher equipment = new EquipmentAssetPublisher(log);
   private final ServerOverlayPublisher serverOverlays = new ServerOverlayPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
@@ -71,6 +72,7 @@ public final class BlueMapIntegration {
                     api = null;
                     objectHistory.webRoot(null);
                     skins.disable();
+                    equipment.disable();
                     serverOverlays.stop();
                   });
     } catch (Exception ex) {
@@ -90,6 +92,7 @@ public final class BlueMapIntegration {
 
   private void stop(ServerStoppingEvent event) {
     objectHistory.reset();
+    equipment.disable();
     serverOverlays.stop();
     server = null;
     worldRoot = null;
@@ -100,6 +103,7 @@ public final class BlueMapIntegration {
     objectHistory.tick(
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
     skins.tick(event.getServer(), worldRoot);
+    equipment.tick(worldRoot);
     serverOverlays.tick(event.getServer());
   }
 
@@ -167,6 +171,7 @@ public final class BlueMapIntegration {
               .normalize();
       objectHistory.webRoot(webRoot);
       skins.configure(api, webRoot);
+      equipment.configure(webRoot, worldRoot);
       Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
       if (server != null) serverOverlays.start(server, webRoot);

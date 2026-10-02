@@ -89,6 +89,7 @@ export class BlueMapAdapter {
     this.scene3d = new HistoryScene3D(
       api,
       new URL("player-history/skins/", document.baseURI).href,
+      new URL("player-history/equipment/", document.baseURI).href,
     );
     this.root.add(this.players, this.trails, this.events, this.hoverDot, this.scene3d.root);
     app.popupMarkerSet.add(this.root);

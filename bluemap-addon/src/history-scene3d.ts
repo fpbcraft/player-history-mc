@@ -12,6 +12,10 @@ import {
   formatTimestamp,
   playerColor,
 } from "./event-presentation.js";
+import {
+  type BuiltEquipmentModel,
+  EquipmentModelLoader,
+} from "./equipment-model-loader.js";
 import { eventDetails } from "./telemetry.js";
 import type {
   HistoryEvent,
@@ -117,10 +121,12 @@ export class HistoryScene3D {
   private eventGeometry: Geometry | undefined;
   private readonly geometries = new Map<string, Geometry>();
   private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
+  private readonly equipmentModels: EquipmentModelLoader | undefined;
 
   constructor(
     private readonly api: BlueMapRuntime,
     private readonly skinBase: string,
+    equipmentBase?: string,
   ) {
     this.root = new api.Three.Group();
     this.root.name = "player-history-3d";
@@ -135,6 +141,9 @@ export class HistoryScene3D {
     this.root.add(this.trailsRoot, this.eventsRoot, this.playersRoot);
 
     this.textureLoader = new api.Three.TextureLoader();
+    this.equipmentModels = equipmentBase
+      ? new EquipmentModelLoader(api, equipmentBase)
+      : undefined;
   }
 
   raycastObjects(): Object3D[] {
@@ -331,6 +340,7 @@ export class HistoryScene3D {
       avatar.outerMaterial.dispose();
     }
     this.players.clear();
+    this.equipmentModels?.dispose();
     for (const geometry of this.geometries.values()) geometry.dispose();
     this.geometries.clear();
     if (this.root.parent) this.root.parent.remove(this.root);
@@ -648,7 +658,7 @@ export class HistoryScene3D {
     position: readonly [number, number, number],
     name: string,
     pitch = 0,
-  ): void {
+  ): Mesh {
     const T = this.api.Three;
     const geometry = new T.BoxGeometry(size[0], size[1], size[2]);
     const material = new T.MeshBasicMaterial({
@@ -664,6 +674,7 @@ export class HistoryScene3D {
     avatar.equipmentParts.push(mesh);
     avatar.equipmentMaterials.push(material);
     avatar.equipmentGeometries.push(geometry);
+    return mesh;
   }
 
   private addHeldItem(
@@ -677,7 +688,98 @@ export class HistoryScene3D {
     else if (item.endsWith("_sword")) size = [0.08, 0.68, 0.05];
     else if (/(pickaxe|_axe|shovel|_hoe)$/.test(item)) size = [0.1, 0.58, 0.1];
     else if (item.includes("bow")) size = [0.08, 0.55, 0.12];
-    this.addEquipmentBox(avatar, parent, item, size, [0, -0.82, 0.08], name, -0.35);
+    const fallback = this.addEquipmentBox(
+      avatar,
+      parent,
+      item,
+      size,
+      [0, -0.82, 0.08],
+      name,
+      -0.35,
+    );
+    if (this.equipmentModels) {
+      void this.upgradeHeldItem(
+        avatar,
+        parent,
+        item,
+        name,
+        fallback,
+        avatar.equipmentSignature,
+        0,
+      );
+    }
+  }
+
+  private async upgradeHeldItem(
+    avatar: PlayerAvatar,
+    parent: Object3D,
+    item: string,
+    name: string,
+    fallback: Mesh,
+    signature: string,
+    attempt: number,
+  ): Promise<void> {
+    const model = await this.equipmentModels?.build(item);
+    if (avatar.equipmentSignature !== signature || !fallback.parent) {
+      if (model) this.disposeBuiltEquipmentModel(model);
+      return;
+    }
+    if (!model) {
+      if (attempt < 8) {
+        setTimeout(() => {
+          if (avatar.equipmentSignature === signature && fallback.parent)
+            void this.upgradeHeldItem(
+              avatar,
+              parent,
+              item,
+              name,
+              fallback,
+              signature,
+              attempt + 1,
+            );
+        }, 5_000);
+      }
+      return;
+    }
+
+    fallback.parent.remove(fallback);
+    avatar.equipmentParts = avatar.equipmentParts.filter((part) => part !== fallback);
+    avatar.equipmentMaterials = avatar.equipmentMaterials.filter(
+      (material) => material !== fallback.material,
+    );
+    avatar.equipmentGeometries = avatar.equipmentGeometries.filter(
+      (geometry) => geometry !== fallback.geometry,
+    );
+    fallback.material.dispose();
+    fallback.geometry.dispose();
+
+    model.root.name = name;
+    model.root.position.set(0, -0.78, 0.08);
+    model.root.scale.set(0.72, 0.72, 0.72);
+    this.setEuler(model.root, -0.35, 0, name === "off-hand" ? 0.16 : -0.16);
+    this.decorateEquipmentModel(avatar, model);
+    parent.add(model.root);
+    avatar.equipmentParts.push(model.root, ...model.parts);
+    avatar.equipmentMaterials.push(...model.materials);
+    avatar.equipmentGeometries.push(...model.geometries);
+  }
+
+  private decorateEquipmentModel(
+    avatar: PlayerAvatar,
+    model: BuiltEquipmentModel,
+  ): void {
+    const player = Number(avatar.root.userData.historyPlayer);
+    for (const part of [model.root, ...model.parts]) {
+      this.decoratePlayerPart(part, player);
+      part.userData.historyTooltip = avatar.root.userData.historyTooltip;
+      part.userData.historyTime = avatar.root.userData.historyTime;
+      part.userData.historyPoint = avatar.root.userData.historyPoint;
+    }
+  }
+
+  private disposeBuiltEquipmentModel(model: BuiltEquipmentModel): void {
+    for (const material of model.materials) material.dispose();
+    for (const geometry of model.geometries) geometry.dispose();
   }
 
   private itemKey(
