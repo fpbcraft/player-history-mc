@@ -116,14 +116,10 @@ const armorSlots = new Set(["head", "chest", "legs", "feet"]);
 const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const model = value as Record<string, unknown>;
-  if (
-    model.format !== 1 ||
-    model.item !== item ||
-    !safeRelativePath(model.texture)
-  )
-    return null;
+  if (model.format !== 1 || model.item !== item) return null;
 
   if (model.kind === "custom") {
+    if (!safeRelativePath(model.texture)) return null;
     if (!Array.isArray(model.parts)) return null;
     const parts: PublishedCustomArmorPart[] = [];
     for (const raw of model.parts) {
