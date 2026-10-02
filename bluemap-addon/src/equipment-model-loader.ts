@@ -258,7 +258,7 @@ export class EquipmentModelLoader {
     private readonly api: BlueMapRuntime,
     private readonly base: string,
     private readonly fetcher: ModelFetcher = (input) => fetch(input),
-    private readonly build = "",
+    private readonly assetVersion = "",
   ) {
     this.textureLoader = new api.Three.TextureLoader();
   }
@@ -361,7 +361,7 @@ export class EquipmentModelLoader {
         .join("/") +
       ".json";
     const url = new URL(relative, this.base);
-    if (this.build) url.searchParams.set("v", this.build);
+    if (this.assetVersion) url.searchParams.set("v", this.assetVersion);
     const promise = this.fetcher(url)
       .then(async (response) =>
         response.ok ? parseArmorModel(await response.json(), item) : null,
@@ -391,7 +391,7 @@ export class EquipmentModelLoader {
         .join("/") +
       ".json";
     const url = new URL(relative, this.base);
-    if (this.build) url.searchParams.set("v", this.build);
+    if (this.assetVersion) url.searchParams.set("v", this.assetVersion);
     const promise = this.fetcher(url)
       .then(async (response) =>
         response.ok ? parseModel(await response.json(), item) : null,
@@ -407,7 +407,7 @@ export class EquipmentModelLoader {
 
   private loadTexture(relative: string): Promise<Texture | null> {
     const parsed = new URL(relative, this.base);
-    if (this.build) parsed.searchParams.set("v", this.build);
+    if (this.assetVersion) parsed.searchParams.set("v", this.assetVersion);
     const url = parsed.href;
     const cached = this.textures.get(url);
     if (cached) return cached;
