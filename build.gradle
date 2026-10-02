@@ -16,7 +16,21 @@ if (releaseVersion) {
     if (!(gitSha ==~ /[0-9a-fA-F]{7,40}/)) {
         throw new GradleException("Could not determine Git SHA for immutable development version")
     }
-    buildVersion = "dev.${gitSha.take(8).toLowerCase()}"
+    def tagOutput = ['git', 'tag', '--merged', 'HEAD', '--list', 'v*']
+            .execute(null, rootDir)
+            .text
+            .readLines()
+            .findAll { it ==~ /v\d+\.\d+\.\d+/ }
+    if (tagOutput.isEmpty()) {
+        throw new GradleException("Could not determine stable release tag for development version")
+    }
+    def baseVersion = tagOutput
+            .collect { tag -> tag.substring(1).tokenize('.').collect { it as int } }
+            .max { left, right ->
+                left[0] <=> right[0] ?: left[1] <=> right[1] ?: left[2] <=> right[2]
+            }
+            .join('.')
+    buildVersion = "${baseVersion}-dev.${gitSha.take(8).toLowerCase()}"
 }
 
 allprojects {
