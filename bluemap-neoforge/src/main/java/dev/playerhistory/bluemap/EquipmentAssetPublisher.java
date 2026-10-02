@@ -13,7 +13,9 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import javax.imageio.ImageIO;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ArmorItem;
 
 /**
  * Publishes resolved resource models only for item ids that have actually appeared in
@@ -201,25 +203,22 @@ final class EquipmentAssetPublisher {
     ArmorAsset armor = armorAsset(id);
     if (armor == null) return;
 
-    BufferedImage base = currentBridge.texture(armor.texture());
-    if (base == null) return;
-
     try {
-      String texturePath = texturePath(armor.texture());
-      writePng(currentRoot, texturePath, base);
-
-      String overlayPath = null;
-      BufferedImage overlay = currentBridge.texture(armor.overlayTexture());
-      if (overlay != null) {
-        overlayPath = texturePath(armor.overlayTexture());
-        writePng(currentRoot, overlayPath, overlay);
+      var publishedLayers = new ArrayList<PublishedArmorLayer>();
+      for (ArmorTextureLayer layer : armor.layers()) {
+        BufferedImage image = currentBridge.texture(layer.texture());
+        if (image == null) continue;
+        String texturePath = texturePath(layer.texture());
+        writePng(currentRoot, texturePath, image);
+        publishedLayers.add(new PublishedArmorLayer(texturePath, layer.dyeable()));
       }
+      if (publishedLayers.isEmpty()) return;
 
       writeArmorDescriptor(
           currentRoot,
           id,
           JsonFiles.GSON.toJson(
-              new ArmorModel(FORMAT, item, "layer", armor.layer(), texturePath, overlayPath)));
+              new ArmorModel(FORMAT, item, "layer", armor.layer(), publishedLayers)));
     } catch (IOException error) {
       log.accept("Could not publish armor textures for " + item + ": " + error);
       processed.remove(item);
@@ -265,6 +264,22 @@ final class EquipmentAssetPublisher {
   }
 
   private static ArmorAsset armorAsset(ResourceLocation item) {
+    var registered = BuiltInRegistries.ITEM.get(item);
+    if (registered instanceof ArmorItem armor) {
+      boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
+      var layers = new ArrayList<ArmorTextureLayer>();
+      for (var materialLayer : armor.getMaterial().value().layers()) {
+        String texture = logicalTexture(materialLayer.texture(inner));
+        if (texture != null) {
+          layers.add(new ArmorTextureLayer(texture, materialLayer.dyeable()));
+        }
+      }
+      if (!layers.isEmpty()) return new ArmorAsset(inner ? 2 : 1, List.copyOf(layers));
+    }
+
+    // Last-resort convention for equipables that emulate vanilla armor without
+    // extending ArmorItem. Equipment slot detection itself lives in the recorded
+    // state and never depends on these names.
     String path = item.getPath();
     String suffix;
     int layer;
@@ -289,11 +304,23 @@ final class EquipmentAssetPublisher {
     String directory = slash >= 0 ? material.substring(0, slash + 1) : "";
     String name = slash >= 0 ? material.substring(slash + 1) : material;
     if ("golden".equals(name)) name = "gold";
-    material = directory + name;
-
     String texture =
-        item.getNamespace() + ":models/armor/" + material + "_layer_" + layer;
-    return new ArmorAsset(layer, texture, texture + "_overlay");
+        item.getNamespace()
+            + ":models/armor/"
+            + directory
+            + name
+            + "_layer_"
+            + layer;
+    return new ArmorAsset(
+        layer,
+        List.of(new ArmorTextureLayer(texture, name.contains("leather"))));
+  }
+
+  private static String logicalTexture(ResourceLocation resource) {
+    String path = resource.getPath();
+    if (path.startsWith("textures/")) path = path.substring("textures/".length());
+    if (path.endsWith(".png")) path = path.substring(0, path.length() - 4);
+    return resource.getNamespace() + ":" + path;
   }
 
   private static String texturePath(String texture) throws IOException {
@@ -357,15 +384,18 @@ final class EquipmentAssetPublisher {
 
   private record GroupKey(String texture, int tint) {}
 
-  private record ArmorAsset(int layer, String texture, String overlayTexture) {}
+  private record ArmorAsset(int layer, List<ArmorTextureLayer> layers) {}
+
+  private record ArmorTextureLayer(String texture, boolean dyeable) {}
 
   private record ArmorModel(
       int format,
       String item,
       String kind,
       int layer,
-      String texture,
-      String overlayTexture) {}
+      List<PublishedArmorLayer> layers) {}
+
+  private record PublishedArmorLayer(String texture, boolean dyeable) {}
 
   private record CustomArmorModel(
       int format, String item, String kind, String texture, List<CustomArmorPart> parts) {}
