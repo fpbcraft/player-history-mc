@@ -1,4 +1,6 @@
 import { mkdir, readFile, rm, stat, watch } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
@@ -6,12 +8,23 @@ import { build, context } from "esbuild";
 const root = dirname(fileURLToPath(import.meta.url));
 const source = join(root, "src");
 const gradleProperties = join(root, "..", "gradle.properties");
+const repositoryRoot = join(root, "..");
+const execFileAsync = promisify(execFile);
 
 async function projectVersion() {
+  const override = process.env.PLAYER_HISTORY_VERSION?.trim();
+  if (override) return override;
+
   const properties = await readFile(gradleProperties, "utf8");
   const match = properties.match(/^modVersion=(.+)$/m);
   if (!match?.[1]?.trim()) throw new Error("gradle.properties is missing modVersion");
-  return match[1].trim();
+
+  const { stdout } = await execFileAsync("git", ["rev-parse", "--short=8", "HEAD"], {
+    cwd: repositoryRoot,
+  });
+  const sha = stdout.trim();
+  if (!sha) throw new Error("Could not resolve git commit for development version");
+  return `${match[1].trim()}-dev.g${sha}`;
 }
 
 export const outputDirectory = join(root, "dist");
