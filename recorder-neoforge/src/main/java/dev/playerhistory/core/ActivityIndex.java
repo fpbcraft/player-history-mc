@@ -21,7 +21,8 @@ public final class ActivityIndex {
     }
     bins.subMap(start, true, start + duration, false).clear();
     for (Point point : points) {
-      if ((point.flags() & Point.CONTEXT) != 0
+      if (!point.online()
+          || (point.flags() & Point.CONTEXT) != 0
           || point.time() < start
           || point.time() >= start + duration) continue;
       long minute = Math.floorDiv(point.time(), 60_000L) * 60_000L;
