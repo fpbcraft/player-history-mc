@@ -340,23 +340,18 @@ final class EquipmentAssetPublisher {
 
   private record GroupKey(String texture, int tint) {}
 
-  private record ArmorAsset(int layer, List<ArmorTextureLayer> layers) {}
+  private record ArmorLayer(String texture, String overlayTexture, boolean dyeable) {}
 
-  private record ArmorTextureLayer(String texture, boolean dyeable) {}
+  private record CustomArmorPart(String parent, String slot, float[] positions, float[] uvs) {}
 
   private record ArmorModel(
       int format,
       String item,
       String kind,
-      int layer,
-      List<PublishedArmorLayer> layers) {}
-
-  private record PublishedArmorLayer(String texture, boolean dyeable) {}
-
-  private record CustomArmorModel(
-      int format, String item, String kind, String texture, List<CustomArmorPart> parts) {}
-
-  private record CustomArmorPart(String parent, String slot, float[] positions, float[] uvs) {}
+      Integer layer,
+      List<ArmorLayer> layers,
+      String texture,
+      List<CustomArmorPart> parts) {}
 
   private record ItemModel(int format, String item, List<ModelGroup> groups, String fingerprint) {}
 
