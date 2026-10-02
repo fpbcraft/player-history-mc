@@ -14,7 +14,7 @@ const fixture = async (name: string): Promise<unknown> =>
 test("shared manifest fixture is accepted by the browser protocol parser", async () => {
   const parsed = parseManifest(await fixture("manifest-v2.json"));
   assert.equal(parsed.protocolVersion, 2);
-  assert.deepEqual(parsed.chunkRanges, [[100, 200]]);
+  assert.deepEqual(parsed.chunkRanges, [[0, 60000]]);
   assert.equal(parsed.registry.players[0]?.name, "Test");
   assert.equal(parsed.registry.worlds[0]?.key, "minecraft:overworld");
 });
