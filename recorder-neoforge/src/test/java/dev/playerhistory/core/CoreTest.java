@@ -85,7 +85,7 @@ class CoreTest {
   void retentionKeepsCurrentFiles() throws Exception {
     Files.writeString(root.resolve("100.bin"), "");
     Files.writeString(root.resolve("200.bin"), "");
-    HistoryStore.prune(root, 200);
+    RetentionFiles.pruneHistoryTree(root, 200);
     assertFalse(Files.exists(root.resolve("100.bin")));
     assertTrue(Files.exists(root.resolve("200.bin")));
   }
