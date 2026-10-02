@@ -120,9 +120,13 @@ export class ObjectReplayEngine {
       history.sort((left, right) => left.time - right.time);
       const cumulative = new Array<number>(history.length).fill(0);
       for (let i = 1; i < history.length; i++) {
-        const from = history[i - 1]!;
-        const to = history[i]!;
-        cumulative[i] = cumulative[i - 1]! + segmentTravel(from, to, this.positionScale, this.quaternionScale);
+        const from = history[i - 1];
+        const to = history[i];
+        const previousTravel = cumulative[i - 1];
+        if (!from || !to || previousTravel === undefined) continue;
+        cumulative[i] =
+          previousTravel +
+          segmentTravel(from, to, this.positionScale, this.quaternionScale);
       }
       this.travel.set(id, cumulative);
     }
