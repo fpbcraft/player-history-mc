@@ -20,11 +20,25 @@ interface PublishedItemModel {
   groups: PublishedGroup[];
 }
 
+interface PublishedArmorModel {
+  format: 1;
+  item: string;
+  layer: 1 | 2;
+  texture: string;
+  overlayTexture?: string | null;
+}
+
 export interface BuiltEquipmentModel {
   root: Object3D;
   parts: Object3D[];
   geometries: Geometry[];
   materials: Material[];
+}
+
+export interface LoadedArmorModel {
+  layer: 1 | 2;
+  texture: Texture;
+  overlayTexture?: Texture;
 }
 
 type JsonResponse = {
@@ -45,6 +59,33 @@ const isNumberArray = (value: unknown, multiple: number): value is number[] =>
   value.length % multiple === 0 &&
   value.every(Number.isFinite);
 
+const safeRelativePath = (value: unknown): value is string =>
+  typeof value === "string" &&
+  !value.startsWith("/") &&
+  !value.includes("..");
+
+const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const model = value as Record<string, unknown>;
+  if (
+    model.format !== 1 ||
+    model.item !== item ||
+    (model.layer !== 1 && model.layer !== 2) ||
+    !safeRelativePath(model.texture) ||
+    (model.overlayTexture != null && !safeRelativePath(model.overlayTexture))
+  )
+    return null;
+  return {
+    format: 1,
+    item,
+    layer: model.layer,
+    texture: model.texture,
+    ...(typeof model.overlayTexture === "string"
+      ? { overlayTexture: model.overlayTexture }
+      : {}),
+  };
+};
+
 const parseModel = (value: unknown, item: string): PublishedItemModel | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const model = value as Record<string, unknown>;
@@ -62,9 +103,7 @@ const parseModel = (value: unknown, item: string): PublishedItemModel | null => 
       return null;
     if (
       group.texture != null &&
-      (typeof group.texture !== "string" ||
-        group.texture.startsWith("/") ||
-        group.texture.includes(".."))
+      !safeRelativePath(group.texture)
     )
       return null;
     groups.push({
@@ -88,6 +127,7 @@ const parseModel = (value: unknown, item: string): PublishedItemModel | null => 
  */
 export class EquipmentModelLoader {
   private readonly models = new Map<string, Promise<PublishedItemModel | null>>();
+  private readonly armorModels = new Map<string, Promise<PublishedArmorModel | null>>();
   private readonly textures = new Map<string, Promise<Texture | null>>();
   private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
 
@@ -105,6 +145,22 @@ export class EquipmentModelLoader {
     }
     this.textures.clear();
     this.models.clear();
+    this.armorModels.clear();
+  }
+
+  async armor(item: string): Promise<LoadedArmorModel | null> {
+    const model = await this.armorModel(item);
+    if (!model) return null;
+    const texture = await this.loadTexture(model.texture);
+    if (!texture) return null;
+    const overlayTexture = model.overlayTexture
+      ? await this.loadTexture(model.overlayTexture)
+      : null;
+    return {
+      layer: model.layer,
+      texture,
+      ...(overlayTexture ? { overlayTexture } : {}),
+    };
   }
 
   async build(item: string): Promise<BuiltEquipmentModel | null> {
@@ -151,6 +207,34 @@ export class EquipmentModelLoader {
       for (const geometry of geometries) geometry.dispose();
       return null;
     }
+  }
+
+  private armorModel(item: string): Promise<PublishedArmorModel | null> {
+    const id = resourceId(item);
+    if (!id) return Promise.resolve(null);
+    const cached = this.armorModels.get(item);
+    if (cached) return cached;
+
+    const relative =
+      "armor/" +
+      encodeURIComponent(id.namespace) +
+      "/" +
+      id.path
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/") +
+      ".json";
+    const promise = this.fetcher(new URL(relative, this.base))
+      .then(async (response) =>
+        response.ok ? parseArmorModel(await response.json(), item) : null,
+      )
+      .catch(() => null)
+      .then((model) => {
+        if (!model) this.armorModels.delete(item);
+        return model;
+      });
+    this.armorModels.set(item, promise);
+    return promise;
   }
 
   private model(item: string): Promise<PublishedItemModel | null> {
