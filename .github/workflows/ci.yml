@@ -23,6 +23,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: bluemap-addon/package-lock.json
+
+      - name: Check release tooling
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
