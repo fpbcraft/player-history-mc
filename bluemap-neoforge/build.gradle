@@ -11,6 +11,7 @@ neoForge { version = '21.1.248'; mods { playerhistory_bluemap { sourceSet source
 tasks.register('buildViewer', Exec) {
  workingDir rootProject.file('bluemap-addon')
  commandLine 'node', 'build.mjs'
+ environment 'PLAYER_HISTORY_VERSION', project.version.toString()
  inputs.dir('../bluemap-addon/src')
  inputs.file('../bluemap-addon/package.json')
  inputs.file('../bluemap-addon/package-lock.json')
