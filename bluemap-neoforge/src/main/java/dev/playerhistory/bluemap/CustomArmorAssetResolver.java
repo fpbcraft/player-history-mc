@@ -74,6 +74,13 @@ final class CustomArmorAssetResolver {
         missing.add(key);
         return null;
       }
+      log.accept(
+          "Resolved custom equipment "
+              + item
+              + " from "
+              + geoPath
+              + " using "
+              + texturePath);
       cache.put(key, model);
       return model;
     } catch (RuntimeException error) {
@@ -144,7 +151,9 @@ final class CustomArmorAssetResolver {
       geoByNamespace.computeIfAbsent(namespace, ignored -> new ArrayList<>()).add(path);
       return true;
     }
-    if (path.contains("/textures/armor/") && path.endsWith(".png")) {
+    if (path.contains("/textures/armor/")
+        && !path.contains("/textures/armor/trim/")
+        && path.endsWith(".png")) {
       armorTexturesByNamespace
           .computeIfAbsent(namespace, ignored -> new ArrayList<>())
           .add(path);
