@@ -20,13 +20,43 @@ interface PublishedItemModel {
   groups: PublishedGroup[];
 }
 
-interface PublishedArmorModel {
-  format: 1;
-  item: string;
-  layer: 1 | 2;
+export type ArmorParent =
+  | "head"
+  | "torso"
+  | "rightArm"
+  | "leftArm"
+  | "rightLeg"
+  | "leftLeg";
+export type ArmorSlot = "head" | "chest" | "legs" | "feet";
+
+interface PublishedArmorLayer {
   texture: string;
   overlayTexture?: string | null;
+  dyeable?: boolean;
 }
+
+export interface PublishedArmorPart {
+  parent: ArmorParent;
+  slot: ArmorSlot;
+  positions: number[];
+  uvs: number[];
+}
+
+type PublishedArmorModel =
+  | {
+      format: 1 | 2;
+      item: string;
+      kind: "layers";
+      layer: 1 | 2;
+      layers: PublishedArmorLayer[];
+    }
+  | {
+      format: 2;
+      item: string;
+      kind: "custom";
+      texture: string;
+      parts: PublishedArmorPart[];
+    };
 
 export interface BuiltEquipmentModel {
   root: Object3D;
@@ -35,11 +65,21 @@ export interface BuiltEquipmentModel {
   materials: Material[];
 }
 
-export interface LoadedArmorModel {
-  layer: 1 | 2;
-  texture: Texture;
-  overlayTexture?: Texture;
-}
+export type LoadedArmorModel =
+  | {
+      kind: "layers";
+      layer: 1 | 2;
+      layers: {
+        texture: Texture;
+        overlayTexture?: Texture;
+        dyeable: boolean;
+      }[];
+    }
+  | {
+      kind: "custom";
+      texture: Texture;
+      parts: PublishedArmorPart[];
+    };
 
 type JsonResponse = {
   ok: boolean;
@@ -66,26 +106,111 @@ const safeRelativePath = (value: unknown): value is string =>
   !value.startsWith("/") &&
   !value.includes("..");
 
-const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | null => {
+const ARMOR_PARENTS = new Set<ArmorParent>([
+  "head",
+  "torso",
+  "rightArm",
+  "leftArm",
+  "rightLeg",
+  "leftLeg",
+]);
+const ARMOR_SLOTS = new Set<ArmorSlot>(["head", "chest", "legs", "feet"]);
+
+const parseArmorLayer = (value: unknown): PublishedArmorLayer | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const model = value as Record<string, unknown>;
+  const layer = value as Record<string, unknown>;
   if (
-    model.format !== 1 ||
-    model.item !== item ||
-    (model.layer !== 1 && model.layer !== 2) ||
-    !safeRelativePath(model.texture) ||
-    (model.overlayTexture != null && !safeRelativePath(model.overlayTexture))
+    !safeRelativePath(layer.texture) ||
+    (layer.overlayTexture != null && !safeRelativePath(layer.overlayTexture))
   )
     return null;
   return {
-    format: 1,
-    item,
-    layer: model.layer,
-    texture: model.texture,
-    ...(typeof model.overlayTexture === "string"
-      ? { overlayTexture: model.overlayTexture }
+    texture: layer.texture,
+    ...(typeof layer.overlayTexture === "string"
+      ? { overlayTexture: layer.overlayTexture }
       : {}),
+    ...(typeof layer.dyeable === "boolean" ? { dyeable: layer.dyeable } : {}),
   };
+};
+
+const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const model = value as Record<string, unknown>;
+  if (model.item !== item) return null;
+
+  // #42 published one base texture and optional overlay directly.
+  if (
+    model.format === 1 &&
+    model.kind === undefined &&
+    (model.layer === 1 || model.layer === 2) &&
+    safeRelativePath(model.texture) &&
+    (model.overlayTexture == null || safeRelativePath(model.overlayTexture))
+  ) {
+    return {
+      format: 1,
+      item,
+      kind: "layers",
+      layer: model.layer,
+      layers: [
+        {
+          texture: model.texture,
+          ...(typeof model.overlayTexture === "string"
+            ? { overlayTexture: model.overlayTexture }
+            : {}),
+          dyeable: typeof model.overlayTexture === "string",
+        },
+      ],
+    };
+  }
+
+  if (model.format !== 2) return null;
+  if (model.kind === "layers") {
+    if ((model.layer !== 1 && model.layer !== 2) || !Array.isArray(model.layers))
+      return null;
+    const layers = model.layers.map(parseArmorLayer);
+    if (!layers.length || layers.some((layer) => !layer)) return null;
+    return {
+      format: 2,
+      item,
+      kind: "layers",
+      layer: model.layer,
+      layers: layers as PublishedArmorLayer[],
+    };
+  }
+
+  if (model.kind === "custom") {
+    if (!safeRelativePath(model.texture) || !Array.isArray(model.parts)) return null;
+    const parts: PublishedArmorPart[] = [];
+    for (const raw of model.parts) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const part = raw as Record<string, unknown>;
+      if (
+        typeof part.parent !== "string" ||
+        !ARMOR_PARENTS.has(part.parent as ArmorParent) ||
+        typeof part.slot !== "string" ||
+        !ARMOR_SLOTS.has(part.slot as ArmorSlot) ||
+        !isNumberArray(part.positions, 18) ||
+        !isNumberArray(part.uvs, 12) ||
+        part.positions.length / 3 !== part.uvs.length / 2
+      )
+        return null;
+      parts.push({
+        parent: part.parent as ArmorParent,
+        slot: part.slot as ArmorSlot,
+        positions: part.positions,
+        uvs: part.uvs,
+      });
+    }
+    if (!parts.length) return null;
+    return {
+      format: 2,
+      item,
+      kind: "custom",
+      texture: model.texture,
+      parts,
+    };
+  }
+  return null;
 };
 
 const parseModel = (value: unknown, item: string): PublishedItemModel | null => {
@@ -103,11 +228,7 @@ const parseModel = (value: unknown, item: string): PublishedItemModel | null => 
       group.positions.length / 3 !== group.uvs.length / 2
     )
       return null;
-    if (
-      group.texture != null &&
-      !safeRelativePath(group.texture)
-    )
-      return null;
+    if (group.texture != null && !safeRelativePath(group.texture)) return null;
     groups.push({
       ...(typeof group.texture === "string" ? { texture: group.texture } : {}),
       tint: group.tint as number,
@@ -124,8 +245,8 @@ const parseModel = (value: unknown, item: string): PublishedItemModel | null => 
 };
 
 /**
- * Loads server-published BlueMap3D item geometry and turns it directly into Three.js meshes.
- * Minecraft resource-pack semantics have already been resolved server-side by BlueMap3D.
+ * Loads server-published equipment geometry. Minecraft/resource-pack semantics and
+ * custom-equipment discovery are resolved server-side; the browser only builds meshes.
  */
 export class EquipmentModelLoader {
   private readonly models = new Map<string, Promise<PublishedItemModel | null>>();
@@ -137,6 +258,7 @@ export class EquipmentModelLoader {
     private readonly api: BlueMapRuntime,
     private readonly base: string,
     private readonly fetcher: ModelFetcher = (input) => fetch(input),
+    private readonly assetVersion = "",
   ) {
     this.textureLoader = new api.Three.TextureLoader();
   }
@@ -153,16 +275,28 @@ export class EquipmentModelLoader {
   async armor(item: string): Promise<LoadedArmorModel | null> {
     const model = await this.armorModel(item);
     if (!model) return null;
-    const texture = await this.loadTexture(model.texture);
-    if (!texture) return null;
-    const overlayTexture = model.overlayTexture
-      ? await this.loadTexture(model.overlayTexture)
+
+    if (model.kind === "custom") {
+      const texture = await this.loadTexture(model.texture);
+      return texture ? { kind: "custom", texture, parts: model.parts } : null;
+    }
+
+    const layers: Extract<LoadedArmorModel, { kind: "layers" }>["layers"] = [];
+    for (const layer of model.layers) {
+      const texture = await this.loadTexture(layer.texture);
+      if (!texture) continue;
+      const overlayTexture = layer.overlayTexture
+        ? await this.loadTexture(layer.overlayTexture)
+        : null;
+      layers.push({
+        texture,
+        ...(overlayTexture ? { overlayTexture } : {}),
+        dyeable: layer.dyeable === true,
+      });
+    }
+    return layers.length
+      ? { kind: "layers", layer: model.layer, layers }
       : null;
-    return {
-      layer: model.layer,
-      texture,
-      ...(overlayTexture ? { overlayTexture } : {}),
-    };
   }
 
   async build(item: string): Promise<BuiltEquipmentModel | null> {
@@ -226,7 +360,9 @@ export class EquipmentModelLoader {
         .map(encodeURIComponent)
         .join("/") +
       ".json";
-    const promise = this.fetcher(new URL(relative, this.base))
+    const url = new URL(relative, this.base);
+    if (this.assetVersion) url.searchParams.set("v", this.assetVersion);
+    const promise = this.fetcher(url)
       .then(async (response) =>
         response.ok ? parseArmorModel(await response.json(), item) : null,
       )
@@ -255,12 +391,13 @@ export class EquipmentModelLoader {
         .join("/") +
       ".json";
     const url = new URL(relative, this.base);
+    if (this.assetVersion) url.searchParams.set("v", this.assetVersion);
     const promise = this.fetcher(url)
-      .then(async (response) => (response.ok ? parseModel(await response.json(), item) : null))
+      .then(async (response) =>
+        response.ok ? parseModel(await response.json(), item) : null,
+      )
       .catch(() => null)
       .then((model) => {
-        // A model can be requested before the publisher sees a newly registered item.
-        // Do not turn that transient 404 into a permanent browser cache entry.
         if (!model) this.models.delete(item);
         return model;
       });
@@ -269,7 +406,9 @@ export class EquipmentModelLoader {
   }
 
   private loadTexture(relative: string): Promise<Texture | null> {
-    const url = new URL(relative, this.base).href;
+    const parsed = new URL(relative, this.base);
+    if (this.assetVersion) parsed.searchParams.set("v", this.assetVersion);
+    const url = parsed.href;
     const cached = this.textures.get(url);
     if (cached) return cached;
 

@@ -207,7 +207,151 @@ test("equipment loader rejects malformed descriptors and retries missing models"
 });
 
 
-test("equipment loader loads armor base and overlay textures", async () => {
+
+test("equipment loader loads legacy armor descriptors", async () => {
+  textureUrls.length = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 1,
+        item: "minecraft:leather_helmet",
+        layer: 1,
+        texture: "textures/minecraft/models/armor/leather_layer_1.png",
+        overlayTexture:
+          "textures/minecraft/models/armor/leather_layer_1_overlay.png",
+      }),
+    }),
+  );
+
+  const armor = await loader.armor("minecraft:leather_helmet");
+  assert.ok(armor);
+  assert.equal(armor.kind, "layers");
+  if (armor.kind !== "layers") throw new Error("expected layered armor");
+  assert.equal(armor.layer, 1);
+  assert.equal(armor.layers.length, 1);
+  assert.equal(armor.layers[0]?.dyeable, true);
+  assert.ok(armor.layers[0]?.overlayTexture);
+});
+
+test("equipment loader loads generic armor material layers", async () => {
+  textureUrls.length = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 2,
+        item: "example:cleric_chest",
+        kind: "layers",
+        layer: 1,
+        layers: [
+          {
+            texture: "textures/example/models/armor/cleric_layer_1.png",
+            dyeable: false,
+          },
+          {
+            texture: "textures/example/models/armor/cleric_overlay_layer_1.png",
+            dyeable: true,
+          },
+        ],
+      }),
+    }),
+  );
+
+  const armor = await loader.armor("example:cleric_chest");
+  assert.ok(armor);
+  assert.equal(armor.kind, "layers");
+  if (armor.kind !== "layers") throw new Error("expected layered armor");
+  assert.equal(armor.layers.length, 2);
+  assert.equal(armor.layers[0]?.dyeable, false);
+  assert.equal(armor.layers[1]?.dyeable, true);
+});
+
+test("equipment loader loads custom humanoid equipment geometry", async () => {
+  textureUrls.length = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 2,
+        item: "example:mage_robe_chest",
+        kind: "custom",
+        texture: "textures/example/armor/mage_robe.png",
+        parts: [
+          {
+            parent: "torso",
+            slot: "chest",
+            positions: [
+              0, 0, 0, 1, 0, 0, 1, 1, 0,
+              0, 0, 0, 1, 1, 0, 0, 1, 0,
+            ],
+            uvs: [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1],
+          },
+        ],
+      }),
+    }),
+  );
+
+  const armor = await loader.armor("example:mage_robe_chest");
+  assert.ok(armor);
+  assert.equal(armor.kind, "custom");
+  if (armor.kind !== "custom") throw new Error("expected custom armor");
+  assert.equal(armor.parts.length, 1);
+  assert.equal(armor.parts[0]?.parent, "torso");
+  assert.equal(armor.parts[0]?.slot, "chest");
+  assert.deepEqual(textureUrls, [
+    "https://map.example/player-history/equipment/textures/example/armor/mage_robe.png",
+  ]);
+});
+
+test("equipment loader rejects unsafe or invalid armor descriptors", async () => {
+  let pass = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () =>
+        pass++ === 0
+          ? {
+              format: 2,
+              item: "example:bad",
+              kind: "layers",
+              layer: 1,
+              layers: [{ texture: "../secret.png" }],
+            }
+          : {
+              format: 2,
+              item: "example:bad",
+              kind: "custom",
+              texture: "textures/example/armor/bad.png",
+              parts: [
+                {
+                  parent: "cape",
+                  slot: "chest",
+                  positions: [
+                    0, 0, 0, 1, 0, 0, 1, 1, 0,
+                    0, 0, 0, 1, 1, 0, 0, 1, 0,
+                  ],
+                  uvs: [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1],
+                },
+              ],
+            },
+    }),
+  );
+
+  assert.equal(await loader.armor("example:bad"), null);
+  assert.equal(await loader.armor("example:bad"), null);
+});
+
+
+test("equipment loader cache-busts descriptors and textures by build", async () => {
   textureUrls.length = 0;
   const requested: string[] = [];
   const loader = new EquipmentModelLoader(
@@ -218,45 +362,28 @@ test("equipment loader loads armor base and overlay textures", async () => {
       return {
         ok: true,
         json: async () => ({
-          format: 1,
-          item: "minecraft:leather_helmet",
+          format: 2,
+          item: "example:armor_chest",
+          kind: "layers",
           layer: 1,
-          texture: "textures/minecraft/models/armor/leather_layer_1.png",
-          overlayTexture:
-            "textures/minecraft/models/armor/leather_layer_1_overlay.png",
+          layers: [
+            {
+              texture: "textures/example/models/armor/test_layer_1.png",
+              dyeable: false,
+            },
+          ],
         }),
       };
     },
+    "1.0.0-dev.deadbeef",
   );
 
-  const armor = await loader.armor("minecraft:leather_helmet");
+  const armor = await loader.armor("example:armor_chest");
   assert.ok(armor);
-  assert.equal(armor.layer, 1);
-  assert.ok(armor.texture);
-  assert.ok(armor.overlayTexture);
   assert.deepEqual(requested, [
-    "https://map.example/player-history/equipment/armor/minecraft/leather_helmet.json",
+    "https://map.example/player-history/equipment/armor/example/armor_chest.json?v=1.0.0-dev.deadbeef",
   ]);
   assert.deepEqual(textureUrls, [
-    "https://map.example/player-history/equipment/textures/minecraft/models/armor/leather_layer_1.png",
-    "https://map.example/player-history/equipment/textures/minecraft/models/armor/leather_layer_1_overlay.png",
+    "https://map.example/player-history/equipment/textures/example/models/armor/test_layer_1.png?v=1.0.0-dev.deadbeef",
   ]);
-});
-
-test("equipment loader rejects unsafe armor texture paths", async () => {
-  const loader = new EquipmentModelLoader(
-    runtime(),
-    "https://map.example/player-history/equipment/",
-    async () => ({
-      ok: true,
-      json: async () => ({
-        format: 1,
-        item: "minecraft:diamond_leggings",
-        layer: 2,
-        texture: "../secret.png",
-      }),
-    }),
-  );
-
-  assert.equal(await loader.armor("minecraft:diamond_leggings"), null);
 });

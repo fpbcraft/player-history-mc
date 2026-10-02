@@ -13,7 +13,10 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import javax.imageio.ImageIO;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.Equipable;
 
 /**
  * Publishes resolved resource models only for item ids that have actually appeared in
@@ -24,6 +27,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 final class EquipmentAssetPublisher {
   private static final int FORMAT = 1;
+  private static final int ARMOR_FORMAT = 2;
   private static final long SCAN_INTERVAL_MS = 30_000;
 
   private final Consumer<String> log;
@@ -34,6 +38,7 @@ final class EquipmentAssetPublisher {
   private volatile Path root;
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
+  private volatile CustomArmorAssetResolver customArmor;
   private volatile long nextScan;
 
   EquipmentAssetPublisher(Consumer<String> log) {
@@ -62,6 +67,7 @@ final class EquipmentAssetPublisher {
     processed.clear();
     BlueMap3DItemModelBridge current = bridge;
     bridge = null;
+    customArmor = null;
     if (current != null) current.close();
   }
 
@@ -93,6 +99,7 @@ final class EquipmentAssetPublisher {
         currentBridge =
             BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
         bridge = currentBridge;
+        customArmor = new CustomArmorAssetResolver(currentBridge, log);
       } catch (ClassNotFoundException error) {
         log.accept("BlueMap3D is unavailable; Player History will keep simple equipment models");
         nextScan = Long.MAX_VALUE;
@@ -187,68 +194,82 @@ final class EquipmentAssetPublisher {
       BlueMap3DItemModelBridge currentBridge,
       String item,
       ResourceLocation id) {
-    ArmorAsset armor = armorAsset(id);
-    if (armor == null) return;
+    var registered = BuiltInRegistries.ITEM.get(id);
+    CustomArmorAssetResolver resolver = customArmor;
+    CustomArmorAssetResolver.Model custom =
+        registered instanceof Equipable && resolver != null ? resolver.resolve(id) : null;
+    if (custom != null) {
+      publishCustomArmor(currentRoot, currentBridge, item, id, custom);
+      return;
+    }
 
-    BufferedImage base = currentBridge.texture(armor.texture());
-    if (base == null) return;
+    if (!(registered instanceof ArmorItem armor)) return;
+    boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
+    var layers = armor.getMaterial().value().layers();
+    if (layers.isEmpty()) return;
 
     try {
-      String texturePath = texturePath(armor.texture());
-      writePng(currentRoot, texturePath, base);
+      var published = new ArrayList<ArmorLayer>();
+      for (var layer : layers) {
+        ResourceLocation textureFile = layer.texture(inner);
+        String texture = textureId(textureFile);
+        BufferedImage image = currentBridge.texture(texture);
+        if (image == null) continue;
+        String path = texturePath(texture);
+        writePng(currentRoot, path, image);
 
-      String overlayPath = null;
-      BufferedImage overlay = currentBridge.texture(armor.overlayTexture());
-      if (overlay != null) {
-        overlayPath = texturePath(armor.overlayTexture());
-        writePng(currentRoot, overlayPath, overlay);
+        published.add(new ArmorLayer(path, null, layer.dyeable()));
       }
-
-      Path target =
-          safeResolve(
-              currentRoot,
-              "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
-      Files.createDirectories(target.getParent());
-      writeAtomic(
-          target,
-          JsonFiles.GSON.toJson(
-              new ArmorModel(FORMAT, item, armor.layer(), texturePath, overlayPath)));
+      if (published.isEmpty()) return;
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(ARMOR_FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
     } catch (IOException error) {
       log.accept("Could not publish armor textures for " + item + ": " + error);
       processed.remove(item);
     }
   }
 
-  private static ArmorAsset armorAsset(ResourceLocation item) {
-    String path = item.getPath();
-    String suffix;
-    int layer;
-    if (path.endsWith("_helmet")) {
-      suffix = "_helmet";
-      layer = 1;
-    } else if (path.endsWith("_chestplate")) {
-      suffix = "_chestplate";
-      layer = 1;
-    } else if (path.endsWith("_leggings")) {
-      suffix = "_leggings";
-      layer = 2;
-    } else if (path.endsWith("_boots")) {
-      suffix = "_boots";
-      layer = 1;
-    } else {
-      return null;
+  private void publishCustomArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id,
+      CustomArmorAssetResolver.Model custom) {
+    BufferedImage image = currentBridge.texture(custom.texture());
+    if (image == null) return;
+    try {
+      String texturePath = texturePath(custom.texture());
+      writePng(currentRoot, texturePath, image);
+      var parts = new ArrayList<CustomArmorPart>();
+      for (var part : custom.parts())
+        parts.add(
+            new CustomArmorPart(part.parent(), part.slot(), part.positions(), part.uvs()));
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(ARMOR_FORMAT, item, "custom", null, null, texturePath, parts));
+    } catch (IOException error) {
+      log.accept("Could not publish custom armor geometry for " + item + ": " + error);
+      processed.remove(item);
     }
+  }
 
-    String material = path.substring(0, path.length() - suffix.length());
-    int slash = material.lastIndexOf('/');
-    String directory = slash >= 0 ? material.substring(0, slash + 1) : "";
-    String name = slash >= 0 ? material.substring(slash + 1) : material;
-    if ("golden".equals(name)) name = "gold";
-    material = directory + name;
+  private static void writeArmorDescriptor(Path root, ResourceLocation id, ArmorModel model)
+      throws IOException {
+    Path target =
+        safeResolve(root, "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
+    Files.createDirectories(target.getParent());
+    writeAtomic(target, JsonFiles.GSON.toJson(model));
+  }
 
-    String texture =
-        item.getNamespace() + ":models/armor/" + material + "_layer_" + layer;
-    return new ArmorAsset(layer, texture, texture + "_overlay");
+
+  private static String textureId(ResourceLocation file) {
+    String path = file.getPath();
+    if (path.startsWith("textures/")) path = path.substring("textures/".length());
+    if (path.endsWith(".png")) path = path.substring(0, path.length() - ".png".length());
+    return file.getNamespace() + ":" + path;
   }
 
   private static String texturePath(String texture) throws IOException {
@@ -312,10 +333,18 @@ final class EquipmentAssetPublisher {
 
   private record GroupKey(String texture, int tint) {}
 
-  private record ArmorAsset(int layer, String texture, String overlayTexture) {}
+  private record ArmorLayer(String texture, String overlayTexture, boolean dyeable) {}
+
+  private record CustomArmorPart(String parent, String slot, float[] positions, float[] uvs) {}
 
   private record ArmorModel(
-      int format, String item, int layer, String texture, String overlayTexture) {}
+      int format,
+      String item,
+      String kind,
+      Integer layer,
+      List<ArmorLayer> layers,
+      String texture,
+      List<CustomArmorPart> parts) {}
 
   private record ItemModel(int format, String item, List<ModelGroup> groups, String fingerprint) {}
 

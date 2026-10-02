@@ -198,7 +198,12 @@ export class HistoryScene3D {
 
     this.textureLoader = new api.Three.TextureLoader();
     this.equipmentModels = equipmentBase
-      ? new EquipmentModelLoader(api, equipmentBase)
+      ? new EquipmentModelLoader(
+          api,
+          equipmentBase,
+          (input) => fetch(input),
+          PLAYER_HISTORY_SKIN_BUILD,
+        )
       : undefined;
   }
 
@@ -726,14 +731,10 @@ export class HistoryScene3D {
     this.clearEquipment(avatar);
     avatar.equipmentSignature = signature;
 
-    if (head && this.isArmor(head.key, "head"))
-      this.addArmor(avatar, head, "head", signature);
-    if (chest && this.isArmor(chest.key, "chest"))
-      this.addArmor(avatar, chest, "chest", signature);
-    if (legs && this.isArmor(legs.key, "legs"))
-      this.addArmor(avatar, legs, "legs", signature);
-    if (feet && this.isArmor(feet.key, "feet"))
-      this.addArmor(avatar, feet, "feet", signature);
+    if (head) this.addArmor(avatar, head, "head", signature);
+    if (chest) this.addArmor(avatar, chest, "chest", signature);
+    if (legs) this.addArmor(avatar, legs, "legs", signature);
+    if (feet) this.addArmor(avatar, feet, "feet", signature);
     if (main) this.addHeldItem(avatar, avatar.rightArm.group, main.key, "main-hand");
     if (offhand) this.addHeldItem(avatar, avatar.leftArm.group, offhand.key, "off-hand");
   }
@@ -793,8 +794,14 @@ export class HistoryScene3D {
         }, 5_000);
       return;
     }
-    if (armor.layer !== (slot === "legs" ? 2 : 1)) return;
+    if (armor.kind === "custom") {
+      if (!armor.parts.some((part) => part.slot === slot)) return;
+      for (const fallback of fallbacks) this.removeEquipmentMesh(avatar, fallback);
+      this.addCustomArmor(avatar, slot, armor);
+      return;
+    }
 
+    if (armor.layer !== (slot === "legs" ? 2 : 1)) return;
     for (const fallback of fallbacks) this.removeEquipmentMesh(avatar, fallback);
     this.addTexturedArmor(avatar, item, slot, armor);
   }
@@ -803,21 +810,59 @@ export class HistoryScene3D {
     avatar: PlayerAvatar,
     item: ResolvedItem,
     slot: ArmorSlot,
-    armor: LoadedArmorModel,
+    armor: Extract<LoadedArmorModel, { kind: "layers" }>,
   ): void {
-    const base = this.armorMaterial(
-      avatar,
-      armor.texture,
-      item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff),
-    );
-    this.addArmorParts(avatar, slot, base, 0);
-    if (armor.overlayTexture)
+    for (const [index, layer] of armor.layers.entries()) {
+      const color =
+        layer.dyeable
+          ? item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff)
+          : 0xffffff;
       this.addArmorParts(
         avatar,
         slot,
-        this.armorMaterial(avatar, armor.overlayTexture, 0xffffff),
-        0.008,
+        this.armorMaterial(avatar, layer.texture, color),
+        index * 0.008,
       );
+      if (layer.overlayTexture)
+        this.addArmorParts(
+          avatar,
+          slot,
+          this.armorMaterial(avatar, layer.overlayTexture, 0xffffff),
+          index * 0.008 + 0.004,
+        );
+    }
+  }
+
+  private addCustomArmor(
+    avatar: PlayerAvatar,
+    slot: ArmorSlot,
+    armor: Extract<LoadedArmorModel, { kind: "custom" }>,
+  ): void {
+    const material = this.armorMaterial(avatar, armor.texture, 0xffffff);
+    for (const part of armor.parts) {
+      if (part.slot !== slot) continue;
+      const geometry = new this.api.Three.BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new this.api.Three.Float32BufferAttribute(
+          new Float32Array(part.positions),
+          3,
+        ),
+      );
+      geometry.setAttribute(
+        "uv",
+        new this.api.Three.Float32BufferAttribute(new Float32Array(part.uvs), 2),
+      );
+      const mesh = new this.api.Three.Mesh(geometry, material);
+      mesh.name = `custom-armor-${slot}`;
+      this.decoratePlayerPart(
+        mesh,
+        Number(avatar.root.userData.historyPlayer),
+      );
+      this.armorParent(avatar, part.parent).add(mesh);
+      avatar.equipmentParts.push(mesh);
+      avatar.equipmentGeometries.push(geometry);
+    }
   }
 
   private armorMaterial(
@@ -1025,13 +1070,6 @@ export class HistoryScene3D {
         ? data.color
         : undefined;
     return { key, ...(color !== undefined ? { color } : {}) };
-  }
-
-  private isArmor(item: string, slot: "head" | "chest" | "legs" | "feet"): boolean {
-    if (slot === "head") return /(_helmet|turtle_helmet|pumpkin|_head|_skull)$/.test(item);
-    if (slot === "chest") return /(_chestplate|elytra)$/.test(item);
-    if (slot === "legs") return item.endsWith("_leggings");
-    return item.endsWith("_boots");
   }
 
   private equipmentColor(item: string): number {
