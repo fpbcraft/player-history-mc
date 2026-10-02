@@ -9,3 +9,4 @@ outputs/
 bluemap-addon/dist/
 node_modules/
 bluemap-addon/node_modules/
+**/bin/
