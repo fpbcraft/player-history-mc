@@ -30,6 +30,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
   private final Object models;
   private final Method quadsForModel;
   private final Method texture;
+  private final Method readAsset;
   private final Consumer<String> log;
 
   private Method positions;
@@ -38,11 +39,17 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
   private Method tint;
 
   private BlueMap3DItemModelBridge(
-      Object assets, Object models, Method quadsForModel, Method texture, Consumer<String> log) {
+      Object assets,
+      Object models,
+      Method quadsForModel,
+      Method texture,
+      Method readAsset,
+      Consumer<String> log) {
     this.assets = assets;
     this.models = models;
     this.quadsForModel = quadsForModel;
     this.texture = texture;
+    this.readAsset = readAsset;
     this.log = log;
   }
 
@@ -75,9 +82,11 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
             .findFirst()
             .orElseThrow(() -> new NoSuchMethodException("ResourcePackSource.quadsForModel"));
     Method texture = sourceType.getMethod("texture", String.class);
+    Method readAsset = indexType.getMethod("read", String.class);
 
     log.accept("Player equipment models connected to BlueMap3D resource packs at " + blueMapRoot);
-    return new BlueMap3DItemModelBridge(assets, models, quadsForModel, texture, log);
+    return new BlueMap3DItemModelBridge(
+        assets, models, quadsForModel, texture, readAsset, log);
   }
 
   List<Quad> model(String itemId) {
@@ -106,6 +115,15 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
     } catch (ReflectiveOperationException | RuntimeException error) {
       log.accept("Could not resolve equipment model " + itemId + ": " + rootCause(error));
       return List.of();
+    }
+  }
+
+  byte[] asset(String path) {
+    try {
+      Object value = readAsset.invoke(assets, path);
+      return value instanceof byte[] bytes ? bytes.clone() : null;
+    } catch (ReflectiveOperationException | RuntimeException error) {
+      return null;
     }
   }
 
