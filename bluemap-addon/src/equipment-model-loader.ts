@@ -50,7 +50,9 @@ type ModelFetcher = (input: RequestInfo | URL) => Promise<JsonResponse>;
 
 const resourceId = (value: string): { namespace: string; path: string } | null => {
   const match = /^([a-z0-9_.-]+):([a-z0-9_./-]+)$/.exec(value);
-  return match ? { namespace: match[1]!, path: match[2]! } : null;
+  const namespace = match?.[1];
+  const path = match?.[2];
+  return namespace && path ? { namespace, path } : null;
 };
 
 const isNumberArray = (value: unknown, multiple: number): value is number[] =>
