@@ -372,7 +372,11 @@ export class EquipmentModelLoader {
     this.wearableConfig = undefined;
   }
 
-  async wearable(slot: string, item: string): Promise<WearableTransform | null> {
+  async wearable(
+    slot: string,
+    item: string,
+    includeSlotFallback = true,
+  ): Promise<WearableTransform | null> {
     const config = await this.wearables();
     if (!config) return null;
     const exact = config.items[item];
@@ -380,7 +384,7 @@ export class EquipmentModelLoader {
     for (const [pattern, transform] of Object.entries(config.items)) {
       if (pattern.includes("*") && wildcardMatch(pattern, item)) return transform;
     }
-    return config.slots[slot] ?? null;
+    return includeSlotFallback ? (config.slots[slot] ?? null) : null;
   }
 
   async armor(item: string): Promise<LoadedArmorModel | null> {
