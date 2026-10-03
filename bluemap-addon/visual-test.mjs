@@ -59,25 +59,37 @@ if (!browser) {
 }
 
 const profile = await mkdtemp(join(tmpdir(), "player-history-visual-"));
+let chromeDiagnostics = "";
 const chrome = spawn(
   browser,
   [
     "--headless=new",
     "--no-sandbox",
     "--disable-dev-shm-usage",
+    "--disable-gpu",
     "--hide-scrollbars",
+    "--remote-debugging-address=127.0.0.1",
     `--remote-debugging-port=${debugPort}`,
     `--user-data-dir=${profile}`,
     "about:blank",
   ],
-  { stdio: "ignore" },
+  { stdio: ["ignore", "ignore", "pipe"] },
 );
+chrome.stderr.setEncoding("utf8");
+chrome.stderr.on("data", (chunk) => {
+  chromeDiagnostics += chunk;
+});
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 async function waitForDebugger() {
   let lastError;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (chrome.exitCode !== null) {
+      throw new Error(
+        `Chrome exited before opening the debugger (code ${chrome.exitCode}).\n${chromeDiagnostics}`,
+      );
+    }
     try {
       const response = await fetch(`http://${host}:${debugPort}/json/version`);
       if (response.ok) return;
@@ -86,7 +98,9 @@ async function waitForDebugger() {
     }
     await delay(100);
   }
-  throw lastError ?? new Error("Chrome debugger did not start");
+  throw new Error(
+    `Chrome debugger did not start: ${String(lastError ?? "unknown error")}\n${chromeDiagnostics}`,
+  );
 }
 
 class Cdp {
@@ -229,6 +243,9 @@ try {
     }),
   ]);
   await new Promise((resolve) => server.close(resolve));
+  if (chromeDiagnostics) {
+    await writeFile(join(outputRoot, "chrome.log"), chromeDiagnostics);
+  }
   await rm(profile, {
     recursive: true,
     force: true,
