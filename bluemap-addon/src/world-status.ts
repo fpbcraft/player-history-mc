@@ -82,10 +82,6 @@ class WorldStatusController {
   private snapshot?: WorldStatusSnapshot;
   private fetchedAt = 0;
   private loading = false;
-  private pollTimer: number | undefined;
-  private applyTimer: number | undefined;
-  private observer?: MutationObserver;
-  private timeDisplay?: HTMLElement;
   private enabled = true;
   private manualStrength: number | null = null;
 
@@ -107,11 +103,11 @@ class WorldStatusController {
       true,
     );
 
-    this.observer = new MutationObserver(() => {
+    const observer = new MutationObserver(() => {
       this.ensureLightingSwitch();
       this.ensureTimeDisplay();
     });
-    this.observer.observe(document.getElementById("app") ?? document.body, {
+    observer.observe(document.getElementById("app") ?? document.body, {
       childList: true,
       subtree: true,
     });
@@ -121,8 +117,8 @@ class WorldStatusController {
     if (this.enabled) this.manualStrength = this.baseSunlight();
 
     void this.poll();
-    this.pollTimer = window.setInterval(() => void this.poll(), POLL_MS);
-    this.applyTimer = window.setInterval(() => {
+    window.setInterval(() => void this.poll(), POLL_MS);
+    window.setInterval(() => {
       this.applyLighting();
       this.updateTimeDisplay();
     }, APPLY_MS);
@@ -194,7 +190,6 @@ class WorldStatusController {
       const position = bar.querySelector(".pos-input");
       bar.insertBefore(display, dayNight ?? position ?? null);
     }
-    this.timeDisplay = display;
     return display;
   }
 
