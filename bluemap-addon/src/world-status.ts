@@ -158,10 +158,9 @@ class WorldStatusController {
         this.integration = (await integration.json()) as IntegrationMapping;
       }
 
-      const response = await fetch(
-        new URL("player-history/world-status.json", document.baseURI),
-        { cache: "no-store" },
-      );
+      const statusUrl = new URL("player-history/world-status.json", document.baseURI);
+      statusUrl.searchParams.set("_ph", String(Date.now()));
+      const response = await fetch(statusUrl, { cache: "no-store" });
       if (!response.ok) throw new Error(`world-status.json HTTP ${response.status}`);
       const snapshot = (await response.json()) as WorldStatusSnapshot;
       if (snapshot.version !== 1) throw new Error("Unsupported world status version");
