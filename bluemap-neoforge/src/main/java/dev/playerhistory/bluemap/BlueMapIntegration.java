@@ -1,6 +1,7 @@
 package dev.playerhistory.bluemap;
 
 import com.google.gson.Gson;
+import dev.playerhistory.core.LogSink;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
@@ -42,7 +43,7 @@ public final class BlueMapIntegration {
   private volatile Path worldRoot;
   private volatile MinecraftServer server;
   private final Map<String, Object> levels = new HashMap<>();
-  private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
+  private final LogSink log = LogSink.slf4j(LoggerFactory.getLogger("PlayerHistoryBlueMap"));
   private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
   private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
   private final EquipmentAssetPublisher equipment = new EquipmentAssetPublisher(log);
@@ -76,7 +77,7 @@ public final class BlueMapIntegration {
                     serverOverlays.stop();
                   });
     } catch (Exception ex) {
-      log.accept("Cannot connect to BlueMap API: " + ex);
+      log.warn("Cannot connect to BlueMap API: " + ex);
     }
   }
 
@@ -157,7 +158,7 @@ public final class BlueMapIntegration {
     } catch (ReflectiveOperationException | java.io.IOException error) {
       // BlueMap has no public unregister API. Failure here is non-fatal, but keeping
       // stale versioned URLs can cause an older cached custom element to win at startup.
-      log.accept("Could not remove stale Player History web registrations: " + error);
+      log.warn("Could not remove stale Player History web registrations: " + error);
     }
   }
 
@@ -195,7 +196,7 @@ public final class BlueMapIntegration {
             && !(Files.isSymbolicLink(link) && Files.readSymbolicLink(link).equals(dataset))) {
           Path backup = root.resolve("legacy-data-" + System.currentTimeMillis());
           Files.move(link, backup);
-          log.accept(
+          log.info(
               "Preserved previous public history at "
                   + backup
                   + "; remove it explicitly when migration is confirmed.");
@@ -228,9 +229,9 @@ public final class BlueMapIntegration {
           "registerStyle",
           new Class<?>[] {String.class},
           "player-history/player-history-" + version + ".css");
-      log.accept("History viewer installed; public dataset: " + dataset);
+      log.info("History viewer installed; public dataset: " + dataset);
     } catch (Exception ex) {
-      log.accept(
+      log.warn(
           "Cannot install history viewer: "
               + ex
               + ". See docs/bluemap-addon.md for manual directory-link setup.");
