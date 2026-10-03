@@ -1,12 +1,13 @@
 package dev.playerhistory.bluemap;
 
+import dev.playerhistory.core.LogSink;
+
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.lang.reflect.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.resources.ResourceLocation;
@@ -31,7 +32,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
   private final Method quadsForModel;
   private final Method texture;
   private final Method readAsset;
-  private final Consumer<String> log;
+  private final LogSink log;
 
   private Method positions;
   private Method uvs;
@@ -44,7 +45,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
       Method quadsForModel,
       Method texture,
       Method readAsset,
-      Consumer<String> log) {
+      LogSink log) {
     this.assets = assets;
     this.models = models;
     this.quadsForModel = quadsForModel;
@@ -53,7 +54,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
     this.log = log;
   }
 
-  static BlueMap3DItemModelBridge open(Path serverRoot, Consumer<String> log) throws Exception {
+  static BlueMap3DItemModelBridge open(Path serverRoot, LogSink log) throws Exception {
     Class<?> indexType = Class.forName("dev.duzo.bluemap3d.bake.AssetIndex");
     Method open =
         Arrays.stream(indexType.getDeclaredMethods())
@@ -84,7 +85,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
     Method texture = sourceType.getMethod("texture", String.class);
     Method readAsset = indexType.getMethod("read", String.class);
 
-    log.accept("Player equipment models connected to BlueMap3D resource packs at " + blueMapRoot);
+    log.info("Player equipment models connected to BlueMap3D resource packs at " + blueMapRoot);
     return new BlueMap3DItemModelBridge(
         assets, models, quadsForModel, texture, readAsset, log);
   }
@@ -113,7 +114,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
       }
       return List.copyOf(result);
     } catch (ReflectiveOperationException | RuntimeException error) {
-      log.accept("Could not resolve equipment model " + itemId + ": " + rootCause(error));
+      log.warn("Could not resolve equipment model " + itemId + ": " + rootCause(error));
       return List.of();
     }
   }
@@ -186,7 +187,7 @@ final class BlueMap3DItemModelBridge implements AutoCloseable {
       try {
         closeable.close();
       } catch (Exception error) {
-        log.accept("Could not close BlueMap3D equipment resource index: " + error);
+        log.warn("Could not close BlueMap3D equipment resource index: " + error);
       }
     }
   }
