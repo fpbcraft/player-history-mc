@@ -185,18 +185,30 @@ async function capture({ name, scenario, width, height }) {
     await waitForFixture(cdp);
     await delay(100);
 
+    const expectedOverlay = {
+      players: "#history-players",
+      range: ".history-range-popover",
+      chat: "#history-chat-panel",
+    }[scenario];
     const state = await cdp.evaluate(`(()=>{
       const panel=document.querySelector("bluemap-player-replay > section");
       const rect=panel.getBoundingClientRect();
+      const overlay=${JSON.stringify(expectedOverlay)} ? document.querySelector(${JSON.stringify(expectedOverlay)}) : null;
       return {
         ready: document.documentElement.dataset.visualReady === "true",
         panelVisible: !panel.hidden && rect.width > 0 && rect.height > 0,
         panelInsideViewport: rect.left >= -1 && rect.right <= innerWidth + 1,
+        overlayVisible: !overlay || (!overlay.hidden && getComputedStyle(overlay).display !== "none"),
         players: document.querySelector('[data-control="player-count"]')?.textContent,
         status: document.querySelector(".history-status")?.textContent,
       };
     })()`);
-    if (!state.ready || !state.panelVisible || !state.panelInsideViewport) {
+    if (
+      !state.ready ||
+      !state.panelVisible ||
+      !state.panelInsideViewport ||
+      !state.overlayVisible
+    ) {
       throw new Error(`Visual fixture layout check failed: ${JSON.stringify(state)}`);
     }
     if (state.players !== "3") throw new Error(`Expected three fixture players: ${JSON.stringify(state)}`);
