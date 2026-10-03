@@ -72,3 +72,14 @@ test("live replay still respects player selection and map dimension", () => {
   assert.deepEqual(replay.positions([2], 0, 1_500), []);
   assert.deepEqual(replay.positions([1], 1, 1_500), []);
 });
+
+
+test("presence-style single-point snapshots interpolate from the previous publication", () => {
+  const replay = new LiveReplaySession(1_000);
+  replay.update([point(10_000, 0)], 10_000, 1_000);
+  replay.update([point(11_000, 320)], 11_000, 2_000);
+
+  assert.equal(replay.positions([1], 0, 2_000)[0]?.x, 0);
+  assert.equal(replay.positions([1], 0, 2_500)[0]?.x, 160);
+  assert.equal(replay.positions([1], 0, 3_000)[0]?.x, 320);
+});
