@@ -17,16 +17,14 @@ controlBar.innerHTML = `
   <div class="player-history-server-time">22:53</div>
   <button
     class="player-history-game-time-sync active"
-    aria-label="Server-time lighting sync on"
-    aria-pressed="true"
+    role="switch"
+    aria-label="Sync map lighting to server time: on"
+    aria-checked="true"
     data-state="on"
   >
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle class="time-sync-clock" cx="9" cy="13" r="5.5"></circle>
-      <path class="time-sync-hands" d="M9 9.5v3.8l2.7 1.6"></path>
-      <circle class="time-sync-sun" cx="17.5" cy="6" r="2"></circle>
-      <path class="time-sync-rays" d="M17.5 1.8v1.2M17.5 9v1.2M13.3 6h1.2M20.5 6h1.2M14.6 3.1l.8.8M19.6 8.1l.8.8M20.4 3.1l-.8.8M15.4 8.1l-.8.8"></path>
-    </svg>
+    <span class="time-sync-track" aria-hidden="true">
+      <span class="time-sync-thumb"></span>
+    </span>
   </button>
   <div class="day-night-switch thin-hide" aria-label="Day/night">◐</div>
   <div class="pos-input">X: -862&nbsp;&nbsp; Z: -262</div>
