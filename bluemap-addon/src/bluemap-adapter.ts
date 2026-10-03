@@ -391,27 +391,29 @@ export class BlueMapAdapter {
           this.followPlayer(point.player);
         };
 
-        image = document.createElement("img");
-        image.alt = "";
-        image.draggable = false;
-        image.onerror = () => {
-          image.onerror = null;
-          image.src = FALLBACK_HEAD;
+        const createdImage = document.createElement("img");
+        createdImage.alt = "";
+        createdImage.draggable = false;
+        createdImage.onerror = () => {
+          createdImage.onerror = null;
+          createdImage.src = FALLBACK_HEAD;
         };
-        button.append(image);
+        image = createdImage;
+        button.append(createdImage);
         this.playerButtons.set(point.player, button);
-        this.playerHeadImages.set(point.player, image);
+        this.playerHeadImages.set(point.player, createdImage);
         this.playerBar.append(button);
       }
 
       const name = names.get(point.player) ?? String(point.player);
       const source = this.playerHeadUrl(point.player, players);
-      if (image.dataset.historySource !== source) {
-        image.dataset.historySource = source;
-        image.src = source;
-        image.onerror = () => {
-          image.onerror = null;
-          image.src = FALLBACK_HEAD;
+      const currentImage = image;
+      if (currentImage.dataset.historySource !== source) {
+        currentImage.dataset.historySource = source;
+        currentImage.src = source;
+        currentImage.onerror = () => {
+          currentImage.onerror = null;
+          currentImage.src = FALLBACK_HEAD;
         };
       }
       button.title = name;
