@@ -16,7 +16,6 @@
   white-space: nowrap;
 }
 
-
 .control-bar .player-history-game-time-sync {
   display: grid;
   place-items: center;
@@ -28,18 +27,63 @@
   box-sizing: border-box;
   background: var(--theme-bg);
   color: var(--theme-fg-light);
-  font: 700 1.05em/1 system-ui;
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.48;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.control-bar .player-history-game-time-sync svg {
+  width: 1.35em;
+  height: 1.35em;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.control-bar .player-history-game-time-sync .time-sync-sun {
+  fill: currentColor;
+  stroke-width: 1.25;
+}
+
+.control-bar .player-history-game-time-sync .time-sync-rays {
+  stroke-width: 1.35;
 }
 
 .control-bar .player-history-game-time-sync:hover,
 .control-bar .player-history-game-time-sync:focus-visible {
   color: var(--theme-fg);
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .control-bar .player-history-game-time-sync.active {
-  color: var(--theme-fg);
+  background: color-mix(in srgb, var(--theme-bg-light, #333) 82%, #80b8ed 18%);
+  color: #d9ecff;
   opacity: 1;
+  box-shadow: inset 0 -2px #80b8ed;
+}
+
+@media (max-width: 600px) {
+  /* The native coordinate editor consumes most of the mobile control bar. Keep the
+     essential navigation controls and server clock visible instead. */
+  .control-bar .pos-input {
+    display: none !important;
+  }
+
+  .control-bar .player-history-server-time {
+    min-width: 4em;
+    padding-inline: 0.4em;
+    color: var(--theme-fg);
+  }
+
+  .control-bar .player-history-game-time-sync {
+    width: 2em;
+    min-width: 2em;
+  }
 }
