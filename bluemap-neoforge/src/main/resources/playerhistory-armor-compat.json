@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "geometryAliases": {
+    "armory_rpgs:astral_robe": "tirisfal_robe",
+    "armory_rpgs:scarlet_robe": "tirisfal_robe",
+    "armory_rpgs:glacier_robe": "tirisfal_robe",
+    "armory_rpgs:smouldering_robe": "tempest_robe",
+    "armory_rpgs:rimeweave_robe": "tempest_robe",
+
+    "rogues:assassin_armor": "rogue_armor",
+    "rogues:netherite_assassin_armor": "rogue_armor",
+    "rogues:berserker_armor": "warrior_armor",
+    "rogues:netherite_berserker_armor": "warrior_armor",
+
+    "archers:netherite_ranger_armor": "ranger_armor",
+
+    "paladins:crusader_armor": "paladin_armor",
+    "paladins:netherite_crusader_armor": "paladin_armor",
+    "paladins:priest_robe": "priest_robes",
+    "paladins:prior_robe": "priest_robes",
+    "paladins:netherite_prior_robe": "priest_robes",
+
+    "wizards:wizard_robe": "wizard_robes",
+    "wizards:arcane_robe": "wizard_robes",
+    "wizards:fire_robe": "wizard_robes",
+    "wizards:frost_robe": "wizard_robes",
+    "wizards:netherite_arcane_robe": "wizard_robes",
+    "wizards:netherite_fire_robe": "wizard_robes",
+    "wizards:netherite_frost_robe": "wizard_robes"
+  },
+  "textureAliases": {}
+}
