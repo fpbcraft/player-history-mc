@@ -70,6 +70,8 @@ export class BlueMapAdapter {
   stateDetails?: (player: number, time: number) => Promise<string>;
   private playerIconMode = false;
   private following: number | null = null;
+  private liveMode = false;
+  private readonly playerUuids = new Map<number, string>();
   private popupOverride:
     | {
         marker: BlueMapPopupMarker;
@@ -354,7 +356,12 @@ export class BlueMapAdapter {
 
   private followPlayer(player: number): void {
     const c = this.app.mapViewer.controlsManager?.controls;
-    const target = this.scene3d.playerTarget(player);
+    const uuid = this.playerUuids.get(player);
+    const nativeTarget =
+      this.liveMode && uuid
+        ? this.app.playerMarkerManager?.getPlayerMarker?.(uuid)
+        : undefined;
+    const target = nativeTarget ?? this.scene3d.playerTarget(player);
     if (!c?.followPlayerMarker || !target) return;
     if (this.following === player && c.data?.followingPlayer != null) {
       c.stopFollowingPlayerMarker?.();
@@ -394,7 +401,13 @@ export class BlueMapAdapter {
     positions: HistoryPoint[],
     names: Map<number, string>,
     players: HistoryRegistry["players"] = [],
+    liveMode = false,
   ): void {
+    this.liveMode = liveMode;
+    this.playerUuids.clear();
+    for (const player of players) {
+      if (player.uuid) this.playerUuids.set(player.id, player.uuid);
+    }
     this.scene3d.setPlayers(positions, names, players);
     const c = this.app.mapViewer.controlsManager?.controls;
     if (
