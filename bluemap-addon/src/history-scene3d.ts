@@ -801,6 +801,20 @@ export class HistoryScene3D {
     )
       return;
     if (!armor) {
+      const transform = await this.equipmentModels?.wearable(slot, item.key);
+      const wearable = transform ? await this.equipmentModels?.build(item.key) : null;
+      if (
+        avatar.equipmentSignature !== signature ||
+        fallbacks.some((fallback) => !fallback.parent)
+      ) {
+        if (wearable) this.disposeBuiltEquipmentModel(wearable);
+        return;
+      }
+      if (transform && wearable) {
+        for (const fallback of fallbacks) this.removeEquipmentMesh(avatar, fallback);
+        this.attachWearableModel(avatar, wearable, transform, `wearable-${slot}`);
+        return;
+      }
       if (attempt < 24)
         setTimeout(() => {
           if (
@@ -1024,6 +1038,15 @@ export class HistoryScene3D {
       return;
     }
 
+    this.attachWearableModel(avatar, model, transform, name);
+  }
+
+  private attachWearableModel(
+    avatar: PlayerAvatar,
+    model: BuiltEquipmentModel,
+    transform: import("./equipment-model-loader.js").WearableTransform,
+    name: string,
+  ): void {
     model.root.name = name;
     model.root.position.set(...transform.position);
     model.root.scale.set(transform.scale, transform.scale, transform.scale);
