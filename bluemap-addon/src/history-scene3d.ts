@@ -45,6 +45,12 @@ interface ResolvedItem {
   color?: number;
 }
 
+interface WearableVisual {
+  slot: string;
+  index: number;
+  item: ResolvedItem;
+}
+
 interface PlayerAvatar {
   root: Object3D;
   model: Object3D;
@@ -727,7 +733,8 @@ export class HistoryScene3D {
       this.itemVisual(state.heldItem, items) ??
       this.itemVisual(state["equipment:mainhand"], items);
     const offhand = this.itemVisual(state["equipment:offhand"], items);
-    const signature = JSON.stringify([head, chest, legs, feet, main, offhand]);
+    const wearables = this.wearableVisuals(state, items);
+    const signature = JSON.stringify([head, chest, legs, feet, main, offhand, wearables]);
     if (signature === avatar.equipmentSignature) return;
 
     this.clearEquipment(avatar);
@@ -739,6 +746,14 @@ export class HistoryScene3D {
     if (feet) this.addArmor(avatar, feet, "feet", signature);
     if (main) this.addHeldItem(avatar, avatar.rightArm.group, main.key, "main-hand");
     if (offhand) this.addHeldItem(avatar, avatar.leftArm.group, offhand.key, "off-hand");
+    for (const wearable of wearables)
+      this.addWearable(
+        avatar,
+        wearable.item,
+        wearable.slot,
+        `curio-${wearable.slot}-${wearable.index}`,
+        signature,
+      );
   }
 
   private clearEquipment(avatar: PlayerAvatar): void {
@@ -975,6 +990,56 @@ export class HistoryScene3D {
     return mesh;
   }
 
+  private addWearable(
+    avatar: PlayerAvatar,
+    item: ResolvedItem,
+    slot: string,
+    name: string,
+    signature: string,
+  ): void {
+    if (!this.equipmentModels) return;
+    void this.upgradeWearable(avatar, item, slot, name, signature, 0);
+  }
+
+  private async upgradeWearable(
+    avatar: PlayerAvatar,
+    item: ResolvedItem,
+    slot: string,
+    name: string,
+    signature: string,
+    attempt: number,
+  ): Promise<void> {
+    const transform = await this.equipmentModels?.wearable(slot, item.key);
+    const model = transform ? await this.equipmentModels?.build(item.key) : null;
+    if (avatar.equipmentSignature !== signature) {
+      if (model) this.disposeBuiltEquipmentModel(model);
+      return;
+    }
+    if (!transform || !model) {
+      if (attempt < 24)
+        setTimeout(() => {
+          if (avatar.equipmentSignature === signature)
+            void this.upgradeWearable(avatar, item, slot, name, signature, attempt + 1);
+        }, 5_000);
+      return;
+    }
+
+    model.root.name = name;
+    model.root.position.set(...transform.position);
+    model.root.scale.set(transform.scale, transform.scale, transform.scale);
+    this.setEuler(
+      model.root,
+      (transform.rotationDegrees[0] * Math.PI) / 180,
+      (transform.rotationDegrees[1] * Math.PI) / 180,
+      (transform.rotationDegrees[2] * Math.PI) / 180,
+    );
+    this.decorateEquipmentModel(avatar, model);
+    this.armorParent(avatar, transform.parent).add(model.root);
+    avatar.equipmentParts.push(model.root, ...model.parts);
+    avatar.equipmentMaterials.push(...model.materials);
+    avatar.equipmentGeometries.push(...model.geometries);
+  }
+
   private addHeldItem(
     avatar: PlayerAvatar,
     parent: Object3D,
@@ -1082,6 +1147,24 @@ export class HistoryScene3D {
     );
     mesh.material.dispose();
     mesh.geometry.dispose();
+  }
+
+  private wearableVisuals(
+    state: PlayerState,
+    items: readonly HistoryRegistry["items"][number][],
+  ): WearableVisual[] {
+    const result: WearableVisual[] = [];
+    for (const [key, value] of Object.entries(state).sort(([left], [right]) =>
+      left.localeCompare(right),
+    )) {
+      if (!key.startsWith("curio:")) continue;
+      const match = /^curio:(.+):(\d+)$/.exec(key);
+      if (!match?.[1] || match[2] === undefined) continue;
+      const item = this.itemVisual(value, items);
+      if (!item) continue;
+      result.push({ slot: match[1], index: Number(match[2]), item });
+    }
+    return result;
   }
 
   private itemVisual(
