@@ -39,8 +39,8 @@ export const scriptOutput = join(outputDirectory, "player-history.js");
 export const developmentScriptOutput = join(outputDirectory, ".player-history.js.next");
 export const styleOutput = join(outputDirectory, "player-history.css");
 
-// Equipment/Curios rendering adds intentional runtime validation and attachment code.
-const maximumBundleSize = 272 * 1024;
+// Equipment/Curios rendering and the live world-status controller are intentional browser features.
+const maximumBundleSize = 280 * 1024;
 const execFileAsync = promisify(execFile);
 
 export async function copyStyles() {
