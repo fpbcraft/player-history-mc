@@ -74,8 +74,8 @@ test("state details list visible Curios slots", () => {
     },
     { curios: true },
   );
-  assert.match(text, /Back #1: Sophisticatedbackpacks:diamond Backpack/);
-  assert.match(text, /Head #1: Create:goggles/);
+  assert.match(text, /Back #1: Sophisticatedbackpacks:Diamond Backpack/);
+  assert.match(text, /Head #1: Create:Goggles/);
 });
 
 test("chat display includes Minecraft-style status and death messages", () => {
