@@ -37,6 +37,13 @@ export interface MarkerSet {
   remove(marker: unknown): void;
 }
 
+export interface BlueMapPopupMarker {
+  element?: HTMLElement;
+  cube?: { visible: boolean };
+  visible?: boolean;
+  onMapInteraction?: (event: unknown) => void;
+}
+
 export interface Geometry {
   setAttribute(name: string, value: unknown): void;
   setIndex?(value: unknown): void;
@@ -174,7 +181,7 @@ export interface BlueMapRuntime {
 
 export interface BlueMapApp {
   popupMarkerSet: MarkerSet;
-  popupMarker?: unknown;
+  popupMarker?: BlueMapPopupMarker;
   mapViewer: {
     markers: unknown;
     camera: unknown;
