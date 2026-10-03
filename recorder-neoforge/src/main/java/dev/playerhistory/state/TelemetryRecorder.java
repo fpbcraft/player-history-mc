@@ -24,6 +24,7 @@ public final class TelemetryRecorder {
   private final LongSupplier now;
   private StateTracker tracker = new StateTracker();
   private final Map<UUID, Integer> online = new HashMap<>();
+  private final CuriosEquipmentReader curios = new CuriosEquipmentReader();
 
   public TelemetryRecorder(
       Supplier<HistoryStore> store,
@@ -183,6 +184,8 @@ public final class TelemetryRecorder {
               EquipmentSlot.LEGS,
               EquipmentSlot.FEET))
         values.put("equipment:" + slot.getName(), item(p.getItemBySlot(slot)));
+    if (on("curios"))
+      curios.visible(p).forEach((key, stack) -> values.put(key, item(stack)));
     if (on("inventory"))
       for (int slot = 0; slot < p.getInventory().getContainerSize(); slot++)
         values.put("slot:" + slot, item(p.getInventory().getItem(slot)));

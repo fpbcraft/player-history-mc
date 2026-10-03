@@ -47,3 +47,48 @@ Clicking an event or trail opens its tooltip without moving the timeline. Event 
 Item pickup/drop, block place/break and container-open are hidden by default in new viewer preferences. The Events menu enables them individually; saved preferences take precedence. Chat is enabled by default and also appears as readable recent messages.
 
 The History panel remains fully expanded while open. Desktop playback controls share the timeline row; mobile places the same controls below the timeline in back, play, forward, NOW and speed order. Mobile spacing and widths are reduced to leave more of the map visible.
+
+
+## Modded equipment compatibility
+
+Player History resolves ordinary armor through Minecraft/NeoForge's armor material and per-item armor texture APIs. It also recognizes resource-backed custom humanoid geometry and segmented armor textures used by several armor mods.
+
+Renderer-specific relationships that cannot be inferred from resource filenames are data-driven. Built-in mappings ship in the viewer JAR. Server owners can add or override mappings with `config/playerhistory_bluemap-equipment.json`:
+
+```json
+{
+  "geometryAliases": {
+    "examplemod:crimson_armor": "shared_knight_armor"
+  },
+  "textureAliases": {
+    "examplemod:crimson_armor": "shared_crimson_texture"
+  },
+  "defaultArmorColors": {
+    "examplemod:crimson_armor": "0x7A3E36"
+  },
+  "wearableSlots": {
+    "back": {
+      "parent": "torso",
+      "position": [0.0, -0.36, -0.28],
+      "rotationDegrees": [0.0, 180.0, 0.0],
+      "scale": 0.78
+    }
+  },
+  "wearableItems": {
+    "examplemod:*_backpack": {
+      "parent": "torso",
+      "position": [0.0, -0.36, -0.28],
+      "rotationDegrees": [0.0, 180.0, 0.0],
+      "scale": 0.78
+    }
+  }
+}
+```
+
+Armor alias keys are `<namespace>:<item-family>`; values are resource-family names without `geo/`, `textures/armor/` or file extensions. Item families strip the standard `_helmet`, `_chestplate`, `_leggings`, `_boots`, `_head`, `_chest`, `_legs` and `_feet` suffixes. `defaultArmorColors` supplies the undyed RGB color for dyeable armor whose client renderer uses a material-specific default; values may be decimal or hex strings such as `"0xA06540"`.
+
+Curios integration is optional and reflective: the recorder records visible Curios as `curio:<slot>:<index>` when Curios is installed, including cosmetic-slot overrides. The viewer first checks `wearableItems` (exact IDs and `*` wildcard patterns), then falls back to the matching Curios identifier in `wearableSlots`. Supported parents are `head`, `torso`, `rightArm`, `leftArm`, `rightLeg`, and `leftLeg`. Positions are player-model units and rotations are degrees. Built-ins include common Curios attachment points, Create Engineer's Goggles, and Sophisticated Backpacks.
+
+Use compatibility mappings only when a mod deliberately reuses a differently named geometry/texture or needs a nonstandard wearable attachment. Do not add mappings for armor that exposes the correct texture through NeoForge's `ArmorItem#getArmorTexture`; Player History honors that hook directly. A server restart or BlueMap integration restart reloads the override file.
+
+When a newly observed armor item has not yet been published, the bridge retries unresolved armor descriptors every five seconds. The browser keeps the gray fallback only until a usable descriptor appears. This avoids permanently caching a transient miss while still leaving unsupported client-code-only embellishments as a graceful fallback.

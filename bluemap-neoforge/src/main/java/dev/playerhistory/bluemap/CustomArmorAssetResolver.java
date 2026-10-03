@@ -41,27 +41,20 @@ final class CustomArmorAssetResolver {
       Set.of(
           "wood", "wooden", "stone", "chain", "chainmail", "iron", "gold", "golden",
           "diamond", "netherite", "leather", "copper");
-  // Client armor renderers can deliberately reuse geometry under a different
-  // texture/item family. Dedicated servers do not run those client registrations,
-  // so keep the small set of known resource-only aliases explicit here.
-  private static final Map<String, String> GEOMETRY_FAMILY_ALIASES =
-      Map.ofEntries(
-          Map.entry("armory_rpgs:astral_robe", "tirisfal_robe"),
-          Map.entry("armory_rpgs:scarlet_robe", "tirisfal_robe"),
-          Map.entry("armory_rpgs:glacier_robe", "tirisfal_robe"),
-          Map.entry("armory_rpgs:smouldering_robe", "tempest_robe"),
-          Map.entry("armory_rpgs:rimeweave_robe", "tempest_robe"));
-
   private final BlueMap3DItemModelBridge assets;
   private final Consumer<String> log;
+  private final EquipmentCompatibilityConfig.Data compatibility;
   private final Map<String, List<String>> geoByNamespace = new HashMap<>();
   private final Map<String, List<String>> armorTexturesByNamespace = new HashMap<>();
   private final Map<String, Model> cache = new HashMap<>();
-  private final Set<String> missing = new HashSet<>();
 
-  CustomArmorAssetResolver(BlueMap3DItemModelBridge assets, Consumer<String> log) {
+  CustomArmorAssetResolver(
+      BlueMap3DItemModelBridge assets,
+      Consumer<String> log,
+      EquipmentCompatibilityConfig.Data compatibility) {
     this.assets = assets;
     this.log = log;
+    this.compatibility = compatibility;
     indexInstalledMods();
   }
 
@@ -69,19 +62,16 @@ final class CustomArmorAssetResolver {
     String key = item.toString();
     Model cached = cache.get(key);
     if (cached != null) return cached;
-    if (missing.contains(key)) return null;
 
     String family = family(item.getPath());
     String texturePath = chooseTexture(item.getNamespace(), family);
     String geoPath = chooseGeo(item.getNamespace(), family);
     if (texturePath == null || geoPath == null) {
-      missing.add(key);
       return null;
     }
 
     byte[] geometryBytes = assets.asset(geoPath);
     if (geometryBytes == null) {
-      missing.add(key);
       return null;
     }
 
@@ -91,7 +81,6 @@ final class CustomArmorAssetResolver {
               new String(geometryBytes, StandardCharsets.UTF_8), JsonObject.class);
       Model model = parseGeometry(root, textureId(texturePath));
       if (model == null || model.parts().isEmpty()) {
-        missing.add(key);
         return null;
       }
       log.accept(
@@ -105,7 +94,6 @@ final class CustomArmorAssetResolver {
       return model;
     } catch (RuntimeException error) {
       log.accept("Could not parse custom equipment geometry " + geoPath + ": " + error);
-      missing.add(key);
       return null;
     }
   }
@@ -252,16 +240,17 @@ final class CustomArmorAssetResolver {
   }
 
   private String chooseTexture(String namespace, String family) {
-    String exact = "assets/" + namespace + "/textures/armor/" + family + ".png";
+    String textureFamily = compatibility.textureFamily(namespace, family);
+    String exact = "assets/" + namespace + "/textures/armor/" + textureFamily + ".png";
     if (assets.asset(exact) != null) return exact;
     return best(
-        family,
+        textureFamily,
         armorTexturesByNamespace.getOrDefault(namespace, List.of()),
         candidate -> stem(candidate, ".png"));
   }
 
   private String chooseGeo(String namespace, String family) {
-    String geometryFamily = geometryFamily(namespace, family);
+    String geometryFamily = compatibility.geometryFamily(namespace, family);
     List<String> candidates = geoByNamespace.getOrDefault(namespace, List.of());
     String exact = "assets/" + namespace + "/geo/" + geometryFamily + ".geo.json";
     if (candidates.contains(exact) && isHumanoid(exact)) return exact;
@@ -270,10 +259,6 @@ final class CustomArmorAssetResolver {
     for (String candidate : candidates) if (isHumanoid(candidate)) humanoid.add(candidate);
     if (humanoid.size() == 1) return humanoid.getFirst();
     return best(geometryFamily, humanoid, candidate -> stem(candidate, ".geo.json"));
-  }
-
-  static String geometryFamily(String namespace, String family) {
-    return GEOMETRY_FAMILY_ALIASES.getOrDefault(namespace + ":" + family, family);
   }
 
   private boolean isHumanoid(String path) {

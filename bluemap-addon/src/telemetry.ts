@@ -178,6 +178,17 @@ export const describeState = (
       lines.push(`▣ ${readableName(slot)}: ${describeItem(state[`equipment:${slot}`], registry)}`);
     }
   }
+  if (capabilities.curios) {
+    const curios = Object.entries(state)
+      .filter(([key]) => key.startsWith("curio:"))
+      .sort(([left], [right]) => left.localeCompare(right));
+    for (const [key, value] of curios) {
+      const match = /^curio:(.+):(\d+)$/.exec(key);
+      const slot = match?.[1] ?? key.slice("curio:".length);
+      const index = match?.[2] ? ` #${Number(match[2]) + 1}` : "";
+      lines.push(`◇ ${readableName(slot)}${index}: ${describeItem(value, registry)}`);
+    }
+  }
   if (capabilities.effects) {
     const effects = asObject(state.effects);
     const labels = effects
