@@ -369,7 +369,7 @@ bluemap-player-replay .history-status {
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
-.history-player-followbar[hidden] {
+.history-player-followbar:empty {
   display: none;
 }
 .history-player-follow {
