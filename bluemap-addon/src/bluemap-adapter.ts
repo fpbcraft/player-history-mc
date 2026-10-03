@@ -56,6 +56,9 @@ export class BlueMapAdapter {
   readonly hoverListeners: AbortController;
   readonly raycaster: Raycaster;
   readonly scene3d: HistoryScene3D;
+  readonly playerBar: HTMLDivElement;
+  readonly playerButtons = new Map<number, HTMLButtonElement>();
+  readonly playerHeadImages = new Map<number, HTMLImageElement>();
   readonly eventMarkers = new Map<string, HtmlMarker>();
   nextEventId = 0;
   hoverActive = false;
@@ -67,6 +70,7 @@ export class BlueMapAdapter {
   heat: Mesh | null = null;
   stateDetails?: (player: number, time: number) => Promise<string>;
   private playerIconMode = false;
+  private followingPlayer: number | null = null;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
   private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
 
@@ -75,6 +79,11 @@ export class BlueMapAdapter {
     this.api = api;
     if (!api?.MarkerSet || !api?.HtmlMarker || !api?.Three || !app?.mapViewer?.markers)
       throw Error("Unsupported BlueMap web API");
+
+    // Keep BlueMap's shared popup set because Player History mounts overlays
+    // into it, but detach the stock block-coordinate popup itself.
+    if (app.popupMarker) app.popupMarkerSet.remove(app.popupMarker);
+
     this.root = new api.MarkerSet("player-history-replay", {
       label: "Historical replay",
       toggleable: false,
@@ -90,9 +99,18 @@ export class BlueMapAdapter {
       api,
       new URL("player-history/skins/", document.baseURI).href,
       new URL("player-history/equipment/", document.baseURI).href,
+      (player) => this.followPlayer(player),
     );
     this.root.add(this.players, this.trails, this.events, this.hoverDot, this.scene3d.root);
     app.popupMarkerSet.add(this.root);
+
+    this.playerBar = document.createElement("div");
+    this.playerBar.className = "history-player-followbar";
+    this.playerBar.setAttribute("role", "toolbar");
+    this.playerBar.setAttribute("aria-label", "Players");
+    this.playerBar.hidden = true;
+    document.body.append(this.playerBar);
+
     this.tooltip = document.createElement("div");
     this.tooltip.className = "history-map-tooltip";
     this.tooltip.setAttribute("role", "tooltip");
@@ -299,12 +317,126 @@ export class BlueMapAdapter {
     controls.updateCamera?.();
     return true;
   }
+  private playerHeadUrl(
+    player: number,
+    players: HistoryRegistry["players"] = [],
+  ): string {
+    const uuid = players.find((entry) => entry.id === player)?.uuid;
+    const root = this.app.mapViewer.map?.data?.mapDataRoot;
+    return uuid && root ? `${root}/assets/playerheads/${uuid}.png` : FALLBACK_HEAD;
+  }
+
+  private syncFollowingState(): void {
+    if (this.followingPlayer === null) return;
+    const controls = this.app.mapViewer.controlsManager?.controls;
+    const target = this.scene3d.playerTarget(this.followingPlayer);
+    if (!target) {
+      controls?.stopFollowingPlayerMarker?.();
+      this.followingPlayer = null;
+      return;
+    }
+    if (controls?.data && controls.data.followingPlayer == null)
+      this.followingPlayer = null;
+  }
+
+  private syncFollowUi(): void {
+    for (const [player, button] of this.playerButtons) {
+      button.setAttribute("aria-pressed", String(player === this.followingPlayer));
+    }
+    for (const marker of this.players.markers.values()) {
+      const player = Number(marker.element.dataset.player);
+      marker.element.setAttribute(
+        "aria-pressed",
+        String(Number.isFinite(player) && player === this.followingPlayer),
+      );
+    }
+  }
+
+  followPlayer(player: number): boolean {
+    const controls = this.app.mapViewer.controlsManager?.controls;
+    const target = this.scene3d.playerTarget(player);
+    if (!controls?.followPlayerMarker || !target) return false;
+
+    if (this.followingPlayer === player && controls.data?.followingPlayer != null) {
+      controls.stopFollowingPlayerMarker?.();
+      this.followingPlayer = null;
+      this.syncFollowUi();
+      return true;
+    }
+
+    controls.followPlayerMarker(target);
+    this.followingPlayer = player;
+    this.syncFollowUi();
+    return true;
+  }
+
+  private updatePlayerBar(
+    positions: readonly HistoryPoint[],
+    names: ReadonlyMap<number, string>,
+    players: HistoryRegistry["players"],
+  ): void {
+    const keep = new Set<number>();
+    for (const point of positions) {
+      if (keep.has(point.player)) continue;
+      keep.add(point.player);
+
+      let button = this.playerButtons.get(point.player);
+      let image = this.playerHeadImages.get(point.player);
+      if (!button || !image) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "history-player-follow";
+        button.onclick = (event) => {
+          event.stopPropagation();
+          this.followPlayer(point.player);
+        };
+
+        image = document.createElement("img");
+        image.alt = "";
+        image.draggable = false;
+        image.onerror = () => {
+          image.onerror = null;
+          image.src = FALLBACK_HEAD;
+        };
+        button.append(image);
+        this.playerButtons.set(point.player, button);
+        this.playerHeadImages.set(point.player, image);
+        this.playerBar.append(button);
+      }
+
+      const name = names.get(point.player) ?? String(point.player);
+      const source = this.playerHeadUrl(point.player, players);
+      if (image.dataset.historySource !== source) {
+        image.dataset.historySource = source;
+        image.src = source;
+        image.onerror = () => {
+          image.onerror = null;
+          image.src = FALLBACK_HEAD;
+        };
+      }
+      button.title = name;
+      button.setAttribute("aria-label", `Follow ${name}`);
+    }
+
+    for (const [player, button] of this.playerButtons) {
+      if (keep.has(player)) continue;
+      button.remove();
+      this.playerButtons.delete(player);
+      this.playerHeadImages.delete(player);
+    }
+
+    this.playerBar.hidden = keep.size === 0;
+    this.syncFollowUi();
+  }
+
   setPlayers(
     positions: HistoryPoint[],
     names: Map<number, string>,
     players: HistoryRegistry["players"] = [],
   ): void {
     this.scene3d.setPlayers(positions, names, players);
+    this.syncFollowingState();
+    this.updatePlayerBar(positions, names, players);
 
     const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
     if (
@@ -339,11 +471,7 @@ export class BlueMapAdapter {
         const head = document.createElement("img");
         head.alt = "Player skin head";
         head.draggable = false;
-        const uuid = players.find((player) => player.id === p.player)?.uuid;
-        const root = this.app.mapViewer.map?.data?.mapDataRoot;
-        head.src = uuid && root
-          ? `${root}/assets/playerheads/${uuid}.png`
-          : FALLBACK_HEAD;
+        head.src = this.playerHeadUrl(p.player, players);
         head.onerror = () => {
           head.onerror = null;
           head.src = FALLBACK_HEAD;
@@ -352,6 +480,17 @@ export class BlueMapAdapter {
         marker.element.append(createVitals(), head);
         marker.element.dataset.historyHead = head.src;
         marker.element.tabIndex = 0;
+        marker.element.setAttribute("role", "button");
+        marker.element.onclick = (event) => {
+          event?.stopPropagation?.();
+          this.followPlayer(p.player);
+        };
+        marker.element.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            marker?.element.click();
+          }
+        };
         this.focusTooltip(marker.element);
         this.players.add(marker);
       }
@@ -365,6 +504,10 @@ export class BlueMapAdapter {
         marker.element.dataset.historyTooltip,
       );
       marker.element.style.borderColor = playerColor(p.player);
+      marker.element.setAttribute(
+        "aria-pressed",
+        String(p.player === this.followingPlayer),
+      );
       marker.position.set(p.x / 32, p.y / 32, p.z / 32);
     }
 
@@ -606,6 +749,9 @@ export class BlueMapAdapter {
     this.hoverListeners.abort();
     if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
     this.tooltip.remove();
+    this.playerBar.remove();
+    this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
+    this.followingPlayer = null;
     this.clearHeatmap();
     this.scene3d.dispose();
     this.clear(this.players);
