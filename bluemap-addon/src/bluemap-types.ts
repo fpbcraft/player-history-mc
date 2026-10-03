@@ -37,6 +37,10 @@ export interface MarkerSet {
   remove(marker: unknown): void;
 }
 
+export interface BlueMapPlayerMarker {
+  element: HTMLElement;
+}
+
 export interface BlueMapPopupMarker {
   element?: HTMLElement;
   cube?: { visible: boolean };
@@ -183,7 +187,7 @@ export interface BlueMapApp {
   popupMarkerSet: MarkerSet;
   popupMarker?: BlueMapPopupMarker;
   playerMarkerManager?: {
-    getPlayerMarker?(uuid: string): unknown;
+    getPlayerMarker?(uuid: string): BlueMapPlayerMarker | undefined;
   };
   mapViewer: {
     markers: unknown;
