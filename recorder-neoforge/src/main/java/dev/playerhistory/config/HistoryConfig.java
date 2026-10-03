@@ -84,6 +84,7 @@ public final class HistoryConfig {
             "effects",
             "held-item",
             "equipment",
+            "curios",
             "block-break",
             "block-place",
             "container-open",
