@@ -786,7 +786,7 @@ export class HistoryScene3D {
     )
       return;
     if (!armor) {
-      if (attempt < 8)
+      if (attempt < 24)
         setTimeout(() => {
           if (
             avatar.equipmentSignature === signature &&
@@ -815,10 +815,7 @@ export class HistoryScene3D {
     armor: Extract<LoadedArmorModel, { kind: "layers" }>,
   ): void {
     for (const [index, layer] of armor.layers.entries()) {
-      const color =
-        layer.dyeable
-          ? item.color ?? (item.key.includes("leather") ? 0xa06540 : 0xffffff)
-          : 0xffffff;
+      const color = layer.dyeable ? (item.color ?? 0xa06540) : 0xffffff;
       const addLayer = (material: Material, extra = 0) => {
         if (layer.deformation !== undefined) {
           this.addDeformedArmorParts(
