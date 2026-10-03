@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm --prefix bluemap-addon ci",
+  "buildCommand": "npm --prefix bluemap-addon run build",
+  "outputDirectory": "bluemap-addon/dist",
+  "rewrites": [
+    {
+      "source": "/player-history/player-history.js",
+      "destination": "/player-history.js"
+    },
+    {
+      "source": "/player-history/player-history-:version.js",
+      "destination": "/player-history.js"
+    },
+    {
+      "source": "/player-history/player-history.css",
+      "destination": "/player-history.css"
+    },
+    {
+      "source": "/player-history/player-history-:version.css",
+      "destination": "/player-history.css"
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://map.fpbcraft.com/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    }
+  ]
+}
