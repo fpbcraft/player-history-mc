@@ -297,25 +297,18 @@ final class CustomArmorAssetResolverTest {
   }
 
   @Test
-  void resolvesKnownSharedArmorGeometryFamilies() {
-    assertEquals(
-        "tirisfal_robe",
-        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "astral_robe"));
-    assertEquals(
-        "tirisfal_robe",
-        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "scarlet_robe"));
-    assertEquals(
-        "tirisfal_robe",
-        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "glacier_robe"));
-    assertEquals(
-        "tempest_robe",
-        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "smouldering_robe"));
-    assertEquals(
-        "tempest_robe",
-        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "rimeweave_robe"));
-    assertEquals(
-        "unrelated_armor",
-        CustomArmorAssetResolver.geometryFamily("example", "unrelated_armor"));
+  void resolvesBuiltInSharedArmorGeometryFamilies() {
+    var compatibility = ArmorCompatibilityConfig.defaults();
+
+    assertEquals("tirisfal_robe", compatibility.geometryFamily("armory_rpgs", "astral_robe"));
+    assertEquals("tempest_robe", compatibility.geometryFamily("armory_rpgs", "rimeweave_robe"));
+    assertEquals("warrior_armor", compatibility.geometryFamily("rogues", "berserker_armor"));
+    assertEquals("rogue_armor", compatibility.geometryFamily("rogues", "assassin_armor"));
+    assertEquals("ranger_armor", compatibility.geometryFamily("archers", "netherite_ranger_armor"));
+    assertEquals("paladin_armor", compatibility.geometryFamily("paladins", "crusader_armor"));
+    assertEquals("priest_robes", compatibility.geometryFamily("paladins", "prior_robe"));
+    assertEquals("wizard_robes", compatibility.geometryFamily("wizards", "frost_robe"));
+    assertEquals("unrelated_armor", compatibility.geometryFamily("example", "unrelated_armor"));
   }
 
   @Test
