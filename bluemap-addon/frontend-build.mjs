@@ -36,8 +36,8 @@ export const scriptOutput = join(outputDirectory, "player-history.js");
 export const developmentScriptOutput = join(outputDirectory, ".player-history.js.next");
 export const styleOutput = join(outputDirectory, "player-history.css");
 
-// Equipment rendering adds intentional runtime validation and mesh attachment code.
-const maximumBundleSize = 264 * 1024;
+// Equipment/Curios rendering adds intentional runtime validation and attachment code.
+const maximumBundleSize = 272 * 1024;
 const execFileAsync = promisify(execFile);
 
 export async function copyStyles() {
