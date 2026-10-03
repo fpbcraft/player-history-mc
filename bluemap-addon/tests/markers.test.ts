@@ -73,6 +73,12 @@ class Element {
   setAttribute(name, value) {
     this.attributes[name] = value;
   }
+  set ariaPressed(value) {
+    this.attributes["aria-pressed"] = value;
+  }
+  get ariaPressed() {
+    return this.attributes["aria-pressed"];
+  }
   getBoundingClientRect() {
     return { left: 0, top: 0, right: 100, width: 100, height: 100 };
   }
