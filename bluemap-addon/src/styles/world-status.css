@@ -15,3 +15,31 @@
   cursor: default;
   white-space: nowrap;
 }
+
+
+.control-bar .player-history-game-time-sync {
+  display: grid;
+  place-items: center;
+  width: 2.15em;
+  min-width: 2.15em;
+  min-height: 2em;
+  padding: 0;
+  border: 0;
+  box-sizing: border-box;
+  background: var(--theme-bg);
+  color: var(--theme-fg-light);
+  font: 700 1.05em/1 system-ui;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.control-bar .player-history-game-time-sync:hover,
+.control-bar .player-history-game-time-sync:focus-visible {
+  color: var(--theme-fg);
+  opacity: 0.9;
+}
+
+.control-bar .player-history-game-time-sync.active {
+  color: var(--theme-fg);
+  opacity: 1;
+}
