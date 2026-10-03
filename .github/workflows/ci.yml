@@ -57,3 +57,31 @@ jobs:
             recorder-neoforge/build/libs/*.jar
             bluemap-neoforge/build/libs/*.jar
           if-no-files-found: error
+
+  visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: bluemap-addon/package-lock.json
+
+      - name: Install viewer dependencies
+        working-directory: bluemap-addon
+        run: npm ci
+      - name: Capture deterministic viewer screenshots
+        working-directory: bluemap-addon
+        run: npm run visual:test
+      - name: Upload viewer visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: player-history-visual-${{ github.run_id }}
+          path: bluemap-addon/visual-output/
+          if-no-files-found: warn
