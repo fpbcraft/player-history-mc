@@ -2,7 +2,7 @@ package dev.playerhistory.object;
 
 import dev.playerhistory.core.ChunkChannelIO;
 import dev.playerhistory.core.JsonFiles;
-import LogSink;
+import dev.playerhistory.core.LogSink;
 import dev.playerhistory.core.PublishedChunkIndex;
 import dev.playerhistory.core.RetentionFiles;
 import dev.playerhistory.core.TemporaryChunkFiles;
