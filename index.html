@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Player History visual tests</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+    body { margin: 0; background: #0d1117; color: #e6edf3; }
+    main { width: min(980px, calc(100% - 32px)); margin: 40px auto 72px; }
+    h1 { margin-bottom: 6px; }
+    .intro { color: #8b949e; margin: 0 0 30px; }
+    .preview { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 18px 20px; margin: 12px 0; border: 1px solid #30363d; border-radius: 10px; background: #161b22; }
+    .preview h2 { margin: 5px 0; font-size: 18px; }
+    .preview h2 a, .open { color: #58a6ff; text-decoration: none; }
+    .preview p { margin: 0; color: #8b949e; font-size: 13px; }
+    .kind { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .open { white-space: nowrap; }
+    code { color: #c9d1d9; }
+    @media (max-width: 640px) { .preview { align-items: flex-start; flex-direction: column; gap: 10px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Player History visual tests</h1>
+    <p class="intro">Deterministic browser screenshots published by CI for main and recent pull requests.</p>
+    
+      <article class="preview">
+        <div>
+          <span class="kind">PR #52</span>
+          <h2><a href="./pr/52/">PR #52</a></h2>
+          <p><code>f90e445f</code> · 2026-10-03T15:28:19.457Z</p>
+        </div>
+        <a class="open" href="./pr/52/">Open screenshots →</a>
+      </article>
+  </main>
+</body>
+</html>
