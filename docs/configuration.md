@@ -35,6 +35,7 @@ effects = true
 posture = true
 held-item = true
 equipment = true
+curios = true
 inventory = false
 block-break = true
 block-place = true
@@ -72,6 +73,7 @@ checkpoint-interval-minutes = 10
 | posture | Sprint/sneak/swim/elytra/sleep/fire/frozen state |
 | held-item | Selected slot and main-hand stack |
 | equipment | Main/offhand, helmet, chestplate, leggings, boots; independent of inventory |
+| curios | Visible Curios stacks, including cosmetic overrides, keyed by Curios slot identifier and index; no hard Curios dependency |
 | inventory | Inventory checkpoint plus changed slot keys, including empty slots |
 | block-break / block-place | Uncancelled block events, block ID and exact block coordinates |
 | container-open | Menu type and player position; container block position/first loot generation are explicitly unavailable |
