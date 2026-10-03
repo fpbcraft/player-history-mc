@@ -802,7 +802,7 @@ export class HistoryScene3D {
     )
       return;
     if (!armor) {
-      const transform = await this.equipmentModels?.wearable(slot, item.key);
+      const transform = await this.equipmentModels?.wearable(slot, item.key, false);
       const wearable = transform ? await this.equipmentModels?.build(item.key) : null;
       if (
         avatar.equipmentSignature !== signature ||
