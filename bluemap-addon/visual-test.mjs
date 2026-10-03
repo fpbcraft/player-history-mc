@@ -128,10 +128,25 @@ class Cdp {
   }
 }
 
+async function waitForFixture(cdp) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      const ready = await cdp.evaluate(
+        'document.documentElement?.dataset.visualReady === "true"',
+      );
+      if (ready) return;
+    } catch {
+      // The execution context can disappear briefly while navigation commits.
+    }
+    await delay(50);
+  }
+  throw new Error("Visual fixture did not become ready");
+}
+
 async function capture({ name, scenario, width, height }) {
   const pageUrl = `http://${host}:${port}/?scenario=${encodeURIComponent(scenario)}`;
   const targetResponse = await fetch(
-    `http://${host}:${debugPort}/json/new?${encodeURIComponent(pageUrl)}`,
+    `http://${host}:${debugPort}/json/new?${encodeURIComponent("about:blank")}`,
     { method: "PUT" },
   );
   if (!targetResponse.ok) throw new Error(`Could not create Chrome target: ${targetResponse.status}`);
@@ -152,14 +167,8 @@ async function capture({ name, scenario, width, height }) {
       deviceScaleFactor: 1,
       mobile: width <= 600,
     });
-    await cdp.send("Page.reload", { ignoreCache: true });
-    await cdp.evaluate(`new Promise((resolve,reject)=>{
-      const timeout=setTimeout(()=>reject(new Error("visual fixture timeout")),5000);
-      const ready=()=>document.documentElement.dataset.visualReady==="true";
-      if(ready()){clearTimeout(timeout);resolve(true);return;}
-      const observer=new MutationObserver(()=>{if(ready()){observer.disconnect();clearTimeout(timeout);resolve(true);}});
-      observer.observe(document.documentElement,{attributes:true,attributeFilter:["data-visual-ready"]});
-    })`);
+    await cdp.send("Page.navigate", { url: pageUrl });
+    await waitForFixture(cdp);
     await delay(100);
 
     const state = await cdp.evaluate(`(()=>{
