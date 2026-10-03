@@ -845,7 +845,8 @@ export class HistoryScene3D {
     armor: Extract<LoadedArmorModel, { kind: "layers" }>,
   ): void {
     for (const [index, layer] of armor.layers.entries()) {
-      const color = layer.dyeable ? (item.color ?? 0xa06540) : 0xffffff;
+      const color =
+        layer.dyeable ? (item.color ?? layer.defaultColor ?? 0xa06540) : 0xffffff;
       const addLayer = (material: Material, extra = 0) => {
         if (layer.deformation !== undefined) {
           this.addDeformedArmorParts(
