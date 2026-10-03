@@ -298,7 +298,7 @@ final class CustomArmorAssetResolverTest {
 
   @Test
   void resolvesBuiltInSharedArmorGeometryFamilies() {
-    var compatibility = ArmorCompatibilityConfig.defaults();
+    var compatibility = EquipmentCompatibilityConfig.defaults();
 
     assertEquals("tirisfal_robe", compatibility.geometryFamily("armory_rpgs", "astral_robe"));
     assertEquals("tempest_robe", compatibility.geometryFamily("armory_rpgs", "rimeweave_robe"));
