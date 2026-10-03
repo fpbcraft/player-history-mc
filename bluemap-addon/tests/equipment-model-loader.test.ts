@@ -482,6 +482,12 @@ test("equipment loader resolves exact, wildcard, and slot wearable transforms", 
   const ring = await loader.wearable("ring", "example:plain_ring");
   assert.ok(ring);
   assert.equal(ring.parent, "rightArm");
+
+  assert.equal(
+    await loader.wearable("ring", "example:plain_ring", false),
+    null,
+    "vanilla equipment slots do not use generic Curios slot transforms",
+  );
   assert.equal(requested.length, 1, "wearable config is cached");
 });
 
