@@ -350,7 +350,7 @@ export class EquipmentModelLoader {
   private readonly models = new Map<string, Promise<PublishedItemModel | null>>();
   private readonly armorModels = new Map<string, Promise<PublishedArmorModel | null>>();
   private readonly textures = new Map<string, Promise<Texture | null>>();
-  private wearableConfig?: Promise<PublishedWearableConfig | null>;
+  private wearableConfig: Promise<PublishedWearableConfig | null> | undefined;
   private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
 
   constructor(
