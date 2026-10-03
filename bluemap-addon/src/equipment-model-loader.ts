@@ -46,6 +46,7 @@ interface PublishedArmorLayer {
   texture: string;
   overlayTexture?: string | null;
   dyeable?: boolean;
+  defaultColor?: number;
   deformation?: number;
   headDeformation?: number;
 }
@@ -88,6 +89,7 @@ export type LoadedArmorModel =
         texture: Texture;
         overlayTexture?: Texture;
         dyeable: boolean;
+        defaultColor?: number;
         deformation?: number;
         headDeformation?: number;
       }[];
@@ -144,6 +146,11 @@ const parseArmorLayer = (value: unknown): PublishedArmorLayer | null => {
   if (
     !safeRelativePath(layer.texture) ||
     (layer.overlayTexture != null && !safeRelativePath(layer.overlayTexture)) ||
+    (layer.defaultColor != null &&
+      (typeof layer.defaultColor !== "number" ||
+        !Number.isInteger(layer.defaultColor) ||
+        layer.defaultColor < 0 ||
+        layer.defaultColor > 0xffffff)) ||
     (layer.deformation != null && !validDeformation(layer.deformation)) ||
     (layer.headDeformation != null && !validDeformation(layer.headDeformation))
   )
@@ -154,6 +161,9 @@ const parseArmorLayer = (value: unknown): PublishedArmorLayer | null => {
       ? { overlayTexture: layer.overlayTexture }
       : {}),
     ...(typeof layer.dyeable === "boolean" ? { dyeable: layer.dyeable } : {}),
+    ...(typeof layer.defaultColor === "number"
+      ? { defaultColor: layer.defaultColor }
+      : {}),
     ...(typeof layer.deformation === "number"
       ? { deformation: layer.deformation }
       : {}),
@@ -407,6 +417,9 @@ export class EquipmentModelLoader {
         texture,
         ...(overlayTexture ? { overlayTexture } : {}),
         dyeable: layer.dyeable === true,
+        ...(layer.defaultColor !== undefined
+          ? { defaultColor: layer.defaultColor }
+          : {}),
         ...(layer.deformation !== undefined
           ? { deformation: layer.deformation }
           : {}),
