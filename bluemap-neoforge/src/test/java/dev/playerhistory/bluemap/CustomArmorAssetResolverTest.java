@@ -126,7 +126,7 @@ final class CustomArmorAssetResolverTest {
   }
 
   @Test
-  void keepsGeckoForwardAxisInViewerSpace() {
+  void reflectsArmorModelApiForwardAxisIntoViewerSpace() {
     var root =
         JsonParser.parseString(
                 """
@@ -153,10 +153,10 @@ final class CustomArmorAssetResolverTest {
     assertNotNull(model);
     var part = model.parts().getFirst();
 
-    // Gecko/Minecraft model front is -Z, and the BlueMap avatar uses the same
-    // convention. An asymmetric cube in front of the body must stay on negative Z.
-    assertEquals(-0.3125f, axisMin(part.positions(), 2), 0.0001f);
-    assertEquals(-0.1875f, axisMax(part.positions(), 2), 0.0001f);
+    // Armor Model API/Minecraft model front is -Z, while the BlueMap avatar's
+    // skin front is the Three.js +Z face. The integration boundary reflects Z.
+    assertEquals(0.1875f, axisMin(part.positions(), 2), 0.0001f);
+    assertEquals(0.3125f, axisMax(part.positions(), 2), 0.0001f);
   }
 
   @Test
@@ -294,6 +294,28 @@ final class CustomArmorAssetResolverTest {
     var waist = model.parts().getFirst();
     assertEquals("torso", waist.parent());
     assertEquals("legs", waist.slot());
+  }
+
+  @Test
+  void resolvesKnownSharedArmorGeometryFamilies() {
+    assertEquals(
+        "tirisfal_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "astral_robe"));
+    assertEquals(
+        "tirisfal_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "scarlet_robe"));
+    assertEquals(
+        "tirisfal_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "glacier_robe"));
+    assertEquals(
+        "tempest_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "smouldering_robe"));
+    assertEquals(
+        "tempest_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "rimeweave_robe"));
+    assertEquals(
+        "unrelated_armor",
+        CustomArmorAssetResolver.geometryFamily("example", "unrelated_armor"));
   }
 
   @Test
