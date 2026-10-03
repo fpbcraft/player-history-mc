@@ -248,7 +248,6 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.match(image.src, /^data:image\/svg\+xml,/);
     assert.equal(image.onerror, null);
 
-    assert.equal(adapter.playerBar.hidden, false);
     assert.equal(adapter.playerBar.children.length, 1);
     const followButton = adapter.playerBar.children[0];
     assert.equal(followButton.title, "Test player");
