@@ -47,3 +47,27 @@ Clicking an event or trail opens its tooltip without moving the timeline. Event 
 Item pickup/drop, block place/break and container-open are hidden by default in new viewer preferences. The Events menu enables them individually; saved preferences take precedence. Chat is enabled by default and also appears as readable recent messages.
 
 The History panel remains fully expanded while open. Desktop playback controls share the timeline row; mobile places the same controls below the timeline in back, play, forward, NOW and speed order. Mobile spacing and widths are reduced to leave more of the map visible.
+
+
+## Modded armor compatibility
+
+Player History resolves ordinary armor through Minecraft/NeoForge's armor material and per-item armor texture APIs. It also recognizes resource-backed custom humanoid geometry and segmented armor textures used by several armor mods.
+
+Renderer-specific relationships that cannot be inferred from resource filenames are data-driven. Built-in mappings ship in the viewer JAR. Server owners can add or override mappings with `config/playerhistory_bluemap-armor.json`:
+
+```json
+{
+  "geometryAliases": {
+    "examplemod:crimson_armor": "shared_knight_armor"
+  },
+  "textureAliases": {
+    "examplemod:crimson_armor": "shared_crimson_texture"
+  }
+}
+```
+
+Keys are `<namespace>:<item-family>`; values are resource-family names without `geo/`, `textures/armor/` or file extensions. Item families strip the standard `_helmet`, `_chestplate`, `_leggings`, `_boots`, `_head`, `_chest`, `_legs` and `_feet` suffixes.
+
+Use compatibility mappings only when a mod deliberately reuses a differently named geometry or texture. Do not add mappings for armor that exposes the correct texture through NeoForge's `ArmorItem#getArmorTexture`; Player History honors that hook directly. A server restart or BlueMap integration restart reloads the override file.
+
+When a newly observed armor item has not yet been published, the bridge retries unresolved armor descriptors every five seconds. The browser keeps the gray fallback only until a usable descriptor appears. This avoids permanently caching a transient miss while still leaving unsupported client-code-only embellishments as a graceful fallback.
