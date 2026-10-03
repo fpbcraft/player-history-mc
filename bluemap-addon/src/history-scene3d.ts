@@ -190,6 +190,7 @@ export class HistoryScene3D {
     private readonly api: BlueMapRuntime,
     private readonly skinBase: string,
     equipmentBase?: string,
+    private readonly onPlayerClick?: (player: number) => void,
   ) {
     this.root = new api.Three.Group();
     this.root.name = "player-history-3d";
@@ -220,6 +221,10 @@ export class HistoryScene3D {
 
   setPlayersVisible(visible: boolean): void {
     this.playersRoot.visible = visible;
+  }
+
+  playerTarget(player: number): Object3D | undefined {
+    return this.players.get(player)?.root;
   }
 
   setPlayers(
@@ -1241,6 +1246,12 @@ export class HistoryScene3D {
   private decoratePlayerPart(part: Object3D, id: number): void {
     part.userData.historyKind = "player";
     part.userData.historyPlayer = id;
+    if (this.onPlayerClick) {
+      part.onClick = () => {
+        this.onPlayerClick?.(id);
+        return true;
+      };
+    }
   }
   private geometry(
     key: string,

@@ -56,6 +56,7 @@ export class BlueMapAdapter {
   readonly hoverListeners: AbortController;
   readonly raycaster: Raycaster;
   readonly scene3d: HistoryScene3D;
+  readonly bar: HTMLDivElement;
   readonly eventMarkers = new Map<string, HtmlMarker>();
   nextEventId = 0;
   hoverActive = false;
@@ -67,6 +68,7 @@ export class BlueMapAdapter {
   heat: Mesh | null = null;
   stateDetails?: (player: number, time: number) => Promise<string>;
   private playerIconMode = false;
+  private following: number | null = null;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
   private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
 
@@ -75,6 +77,11 @@ export class BlueMapAdapter {
     this.api = api;
     if (!api?.MarkerSet || !api?.HtmlMarker || !api?.Three || !app?.mapViewer?.markers)
       throw Error("Unsupported BlueMap web API");
+
+    // Keep BlueMap's shared popup set because Player History mounts overlays
+    // into it, but detach the stock block-coordinate popup itself.
+    if (app.popupMarker) app.popupMarkerSet.remove(app.popupMarker);
+
     this.root = new api.MarkerSet("player-history-replay", {
       label: "Historical replay",
       toggleable: false,
@@ -90,9 +97,15 @@ export class BlueMapAdapter {
       api,
       new URL("player-history/skins/", document.baseURI).href,
       new URL("player-history/equipment/", document.baseURI).href,
+      (player) => this.followPlayer(player),
     );
     this.root.add(this.players, this.trails, this.events, this.hoverDot, this.scene3d.root);
     app.popupMarkerSet.add(this.root);
+
+    this.bar = document.createElement("div");
+    this.bar.className = "history-player-followbar";
+    document.body.append(this.bar);
+
     this.tooltip = document.createElement("div");
     this.tooltip.className = "history-map-tooltip";
     this.tooltip.setAttribute("role", "tooltip");
@@ -299,12 +312,75 @@ export class BlueMapAdapter {
     controls.updateCamera?.();
     return true;
   }
+  private playerHeadUrl(
+    player: number,
+    players: HistoryRegistry["players"],
+  ): string {
+    const uuid = players.find((p) => p.id === player)?.uuid;
+    const root = this.app.mapViewer.map?.data?.mapDataRoot;
+    return uuid && root ? `${root}/assets/playerheads/${uuid}.png` : FALLBACK_HEAD;
+  }
+
+  private syncFollowButtons(): void {
+    for (const child of this.bar.children) {
+      const button = child as HTMLButtonElement;
+      button.ariaPressed = String(Number(button.value) === this.following);
+    }
+  }
+
+  private followPlayer(player: number): void {
+    const c = this.app.mapViewer.controlsManager?.controls;
+    const target = this.scene3d.playerTarget(player);
+    if (!c?.followPlayerMarker || !target) return;
+    if (this.following === player && c.data?.followingPlayer != null) {
+      c.stopFollowingPlayerMarker?.();
+      this.following = null;
+    } else {
+      c.followPlayerMarker(target);
+      this.following = player;
+    }
+    this.syncFollowButtons();
+  }
+
+  private updatePlayerBar(
+    positions: readonly HistoryPoint[],
+    names: ReadonlyMap<number, string>,
+    players: HistoryRegistry["players"],
+  ): void {
+    const key = `${this.mapId}:${positions.map((p) => p.player).join(",")}`;
+    if (this.bar.dataset.players !== key) {
+      this.bar.dataset.players = key;
+      this.bar.replaceChildren();
+      for (const { player } of positions) {
+        const button = document.createElement("button");
+        button.value = String(player);
+        button.title = names.get(player) ?? button.value;
+        button.onclick = () => this.followPlayer(player);
+        const image = document.createElement("img");
+        image.src = this.playerHeadUrl(player, players);
+        image.onerror = () => (image.src = FALLBACK_HEAD);
+        button.append(image);
+        this.bar.append(button);
+      }
+    }
+    this.syncFollowButtons();
+  }
+
   setPlayers(
     positions: HistoryPoint[],
     names: Map<number, string>,
     players: HistoryRegistry["players"] = [],
   ): void {
     this.scene3d.setPlayers(positions, names, players);
+    const c = this.app.mapViewer.controlsManager?.controls;
+    if (
+      this.following !== null &&
+      (!c?.data?.followingPlayer || !positions.some((p) => p.player === this.following))
+    ) {
+      c?.stopFollowingPlayerMarker?.();
+      this.following = null;
+    }
+    this.updatePlayerBar(positions, names, players);
 
     const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
     if (
@@ -339,11 +415,7 @@ export class BlueMapAdapter {
         const head = document.createElement("img");
         head.alt = "Player skin head";
         head.draggable = false;
-        const uuid = players.find((player) => player.id === p.player)?.uuid;
-        const root = this.app.mapViewer.map?.data?.mapDataRoot;
-        head.src = uuid && root
-          ? `${root}/assets/playerheads/${uuid}.png`
-          : FALLBACK_HEAD;
+        head.src = this.playerHeadUrl(p.player, players);
         head.onerror = () => {
           head.onerror = null;
           head.src = FALLBACK_HEAD;
@@ -352,6 +424,17 @@ export class BlueMapAdapter {
         marker.element.append(createVitals(), head);
         marker.element.dataset.historyHead = head.src;
         marker.element.tabIndex = 0;
+        marker.element.setAttribute("role", "button");
+        marker.element.onclick = (event) => {
+          event?.stopPropagation?.();
+          this.followPlayer(p.player);
+        };
+        marker.element.onkeydown = (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            marker?.element.click();
+          }
+        };
         this.focusTooltip(marker.element);
         this.players.add(marker);
       }
@@ -606,6 +689,9 @@ export class BlueMapAdapter {
     this.hoverListeners.abort();
     if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
     this.tooltip.remove();
+    this.bar.remove();
+    this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
+    this.following = null;
     this.clearHeatmap();
     this.scene3d.dispose();
     this.clear(this.players);

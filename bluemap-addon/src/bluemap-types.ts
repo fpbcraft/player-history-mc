@@ -80,6 +80,7 @@ export interface Object3D {
   remove(child: Object3D): void;
   clone(recursive?: boolean): Object3D;
   children?: Object3D[];
+  onClick?: (event: unknown) => boolean;
 }
 
 export interface Mesh extends Object3D {
@@ -173,6 +174,7 @@ export interface BlueMapRuntime {
 
 export interface BlueMapApp {
   popupMarkerSet: MarkerSet;
+  popupMarker?: unknown;
   mapViewer: {
     markers: unknown;
     camera: unknown;
@@ -182,6 +184,11 @@ export interface BlueMapApp {
       position?: Position3;
       distance?: number;
       updateCamera?(): void;
+      controls?: {
+        data?: { followingPlayer?: unknown | null };
+        followPlayerMarker?(marker: unknown): void;
+        stopFollowingPlayerMarker?(): void;
+      };
     };
   };
 }
