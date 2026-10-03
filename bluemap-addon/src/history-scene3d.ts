@@ -658,8 +658,9 @@ export class HistoryScene3D {
 
     if (sneaking) {
       // Vanilla HumanoidModel crouch: body.xRot=.5; arms +=.4; head/body/
-      // arms move down 4.2/3.2 px; legs move down .2 px and 4 px along
-      // Minecraft model +Z. The BlueMap avatar faces -Z, so that offset is negative here.
+      // arms move down 4.2/3.2 px; legs move down .2 px and 4 px toward
+      // Minecraft model +Z (the model's back). The BlueMap skin front is +Z,
+      // so that vanilla back offset becomes negative Z in viewer space.
       torsoPitch = 0.5;
       rightArm += 0.4;
       leftArm += 0.4;
