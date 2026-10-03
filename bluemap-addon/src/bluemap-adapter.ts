@@ -73,10 +73,10 @@ export class BlueMapAdapter {
   private popupOverride:
     | {
         marker: BlueMapPopupMarker;
-        onMapInteraction?: (event: unknown) => void;
-        display?: string;
-        cubeVisible?: boolean;
-        visible?: boolean;
+        onMapInteraction: ((event: unknown) => void) | undefined;
+        display: string | undefined;
+        cubeVisible: boolean | undefined;
+        visible: boolean | undefined;
       }
     | undefined;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
@@ -718,10 +718,12 @@ export class BlueMapAdapter {
     this.following = null;
     if (this.popupOverride) {
       const { marker, onMapInteraction, display, cubeVisible, visible } = this.popupOverride;
-      marker.onMapInteraction = onMapInteraction;
+      if (onMapInteraction) marker.onMapInteraction = onMapInteraction;
+      else delete marker.onMapInteraction;
       if (marker.element) marker.element.style.display = display ?? "";
       if (marker.cube && cubeVisible !== undefined) marker.cube.visible = cubeVisible;
-      marker.visible = visible;
+      if (visible !== undefined) marker.visible = visible;
+      else delete marker.visible;
       this.popupOverride = undefined;
     }
     this.clearHeatmap();
