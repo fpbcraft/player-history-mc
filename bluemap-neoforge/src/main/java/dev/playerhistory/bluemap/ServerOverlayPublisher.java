@@ -1,5 +1,7 @@
 package dev.playerhistory.bluemap;
 
+import dev.playerhistory.core.LogSink;
+
 import com.google.gson.Gson;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -15,7 +17,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.Consumer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -38,13 +39,13 @@ final class ServerOverlayPublisher {
       List<ClaimsOverlaySource.ClaimCell> claims) {}
   record Snapshot(int version, long generatedAt, Map<String, DimensionData> dimensions) {}
 
-  private final Consumer<String> log;
+  private final LogSink log;
   private final ClaimsOverlaySource claims;
   private volatile MinecraftServer server;
   private volatile Path output;
   private int ticks;
 
-  ServerOverlayPublisher(Consumer<String> log) {
+  ServerOverlayPublisher(LogSink log) {
     this.log = log;
     this.claims = ClaimsOverlaySource.create(log);
   }
@@ -106,7 +107,7 @@ final class ServerOverlayPublisher {
           destination,
           GSON.toJson(new Snapshot(2, System.currentTimeMillis(), dimensions)));
     } catch (Exception error) {
-      log.accept("Could not publish BlueMap server overlays: " + error);
+      log.warn("Could not publish BlueMap server overlays: " + error);
     }
   }
 
