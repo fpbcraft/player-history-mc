@@ -9,6 +9,15 @@
       "generatedAt": "2026-10-03T18:12:43.467Z"
     },
     {
+      "target": "pr/53",
+      "label": "PR #53",
+      "sha": "2a582700ae29c1ec6f1beffce6b92b4574829631",
+      "runUrl": "https://github.com/fpbcraft/player-history-mc/actions/runs/37143347875",
+      "previewUrl": "https://fpbcraft.github.io/player-history-mc/pr/53/",
+      "generatedAt": "2026-10-03T18:13:12.574Z",
+      "prNumber": 53
+    },
+    {
       "target": "pr/48",
       "label": "PR #48",
       "sha": "b1f175bb19be8c80ef45d7dddf0005ead5cfcdb0",
@@ -16,15 +25,6 @@
       "previewUrl": "https://fpbcraft.github.io/player-history-mc/pr/48/",
       "generatedAt": "2026-10-03T15:34:31.382Z",
       "prNumber": 48
-    },
-    {
-      "target": "pr/53",
-      "label": "PR #53",
-      "sha": "bcb43093e57c00f69b2ad870a85f42e6b034d575",
-      "runUrl": "https://github.com/fpbcraft/player-history-mc/actions/runs/37133514917",
-      "previewUrl": "https://fpbcraft.github.io/player-history-mc/pr/53/",
-      "generatedAt": "2026-10-03T15:31:44.049Z",
-      "prNumber": 53
     },
     {
       "target": "pr/52",
