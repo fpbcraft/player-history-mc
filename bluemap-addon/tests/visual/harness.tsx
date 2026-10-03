@@ -80,7 +80,9 @@ const scenario = new URLSearchParams(location.search).get("scenario") ?? "defaul
 const showMenu = (selector: string, triggerSelector: string) => {
   const menu = requireElement<HTMLElement>(root, selector);
   const trigger = requireElement<HTMLElement>(root, triggerSelector);
+  menu.setAttribute("popover", "manual");
   menu.hidden = false;
+  menu.showPopover?.();
   trigger.setAttribute("aria-expanded", "true");
   requestAnimationFrame(() => {
     const bounds = trigger.getBoundingClientRect();
