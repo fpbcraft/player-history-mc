@@ -290,16 +290,18 @@ class WorldStatusController {
     );
     if (!control) return;
     control.classList.toggle("active", this.enabled);
+    control.dataset.state = this.enabled ? "on" : "off";
     control.setAttribute("aria-pressed", this.enabled ? "true" : "false");
-    control.title = this.enabled
-      ? "Minecraft time lighting sync is on"
-      : "Minecraft time lighting sync is off";
+    const state = this.enabled ? "on" : "off";
+    control.setAttribute("aria-label", `Server-time lighting sync ${state}`);
+    control.title = `Server-time lighting sync is ${state}`;
   }
 
   private ensureLightingSwitch(): HTMLButtonElement | null {
     const bar = document.querySelector<HTMLElement>(".control-bar");
     if (!bar) return null;
 
+    const time = this.ensureTimeDisplay();
     let control = bar.querySelector<HTMLButtonElement>(
       ".player-history-game-time-sync",
     );
@@ -307,19 +309,21 @@ class WorldStatusController {
       control = document.createElement("button");
       control.type = "button";
       control.className = "player-history-game-time-sync";
-      control.setAttribute("aria-label", "Sync map lighting with Minecraft time");
-      control.textContent = "↻";
+      control.innerHTML = `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="time-sync-clock" cx="9" cy="13" r="5.5"></circle>
+          <path class="time-sync-hands" d="M9 9.5v3.8l2.7 1.6"></path>
+          <circle class="time-sync-sun" cx="17.5" cy="6" r="2"></circle>
+          <path class="time-sync-rays" d="M17.5 1.8v1.2M17.5 9v1.2M13.3 6h1.2M20.5 6h1.2M14.6 3.1l.8.8M19.6 8.1l.8.8M20.4 3.1l-.8.8M15.4 8.1l-.8.8"></path>
+        </svg>`;
       control.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         this.setEnabled(!this.enabled, true);
       });
-
-      const dayNight = bar.querySelector(".day-night-switch");
-      const position = bar.querySelector(".pos-input");
-      bar.insertBefore(control, dayNight ?? position ?? null);
     }
 
+    if (time && time.nextElementSibling !== control) time.after(control);
     this.updateLightingSwitch();
     return control;
   }
