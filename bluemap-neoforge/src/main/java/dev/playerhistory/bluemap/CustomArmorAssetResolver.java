@@ -43,7 +43,7 @@ final class CustomArmorAssetResolver {
           "diamond", "netherite", "leather", "copper");
   private final BlueMap3DItemModelBridge assets;
   private final Consumer<String> log;
-  private final ArmorCompatibilityConfig.Data compatibility;
+  private final EquipmentCompatibilityConfig.Data compatibility;
   private final Map<String, List<String>> geoByNamespace = new HashMap<>();
   private final Map<String, List<String>> armorTexturesByNamespace = new HashMap<>();
   private final Map<String, Model> cache = new HashMap<>();
@@ -51,7 +51,7 @@ final class CustomArmorAssetResolver {
   CustomArmorAssetResolver(
       BlueMap3DItemModelBridge assets,
       Consumer<String> log,
-      ArmorCompatibilityConfig.Data compatibility) {
+      EquipmentCompatibilityConfig.Data compatibility) {
     this.assets = assets;
     this.log = log;
     this.compatibility = compatibility;
