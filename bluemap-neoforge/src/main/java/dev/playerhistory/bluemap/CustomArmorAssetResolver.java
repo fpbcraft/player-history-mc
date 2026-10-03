@@ -9,8 +9,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.zip.ZipFile;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ArmorItem;
 import net.neoforged.fml.ModList;
 
 /**
@@ -24,6 +26,14 @@ import net.neoforged.fml.ModList;
 final class CustomArmorAssetResolver {
   record Part(String parent, String slot, float[] positions, float[] uvs) {}
   record Model(String texture, List<Part> parts) {}
+  record Layer(
+      String texture,
+      String overlayTexture,
+      float deformation,
+      float headDeformation,
+      boolean dyeable) {}
+  record LayeredModel(int layer, List<Layer> layers) {}
+  private record LayerSpec(String name, float deformation, float headDeformation) {}
 
   private static final Set<String> GENERIC_TOKENS =
       Set.of("armor", "armour", "robe", "robes", "gear", "set");
@@ -31,6 +41,16 @@ final class CustomArmorAssetResolver {
       Set.of(
           "wood", "wooden", "stone", "chain", "chainmail", "iron", "gold", "golden",
           "diamond", "netherite", "leather", "copper");
+  // Client armor renderers can deliberately reuse geometry under a different
+  // texture/item family. Dedicated servers do not run those client registrations,
+  // so keep the small set of known resource-only aliases explicit here.
+  private static final Map<String, String> GEOMETRY_FAMILY_ALIASES =
+      Map.ofEntries(
+          Map.entry("armory_rpgs:astral_robe", "tirisfal_robe"),
+          Map.entry("armory_rpgs:scarlet_robe", "tirisfal_robe"),
+          Map.entry("armory_rpgs:glacier_robe", "tirisfal_robe"),
+          Map.entry("armory_rpgs:smouldering_robe", "tempest_robe"),
+          Map.entry("armory_rpgs:rimeweave_robe", "tempest_robe"));
 
   private final BlueMap3DItemModelBridge assets;
   private final Consumer<String> log;
@@ -88,6 +108,75 @@ final class CustomArmorAssetResolver {
       missing.add(key);
       return null;
     }
+  }
+
+
+  LayeredModel resolveLayered(ResourceLocation item, ArmorItem.Type type) {
+    return layeredModel(
+        item.getNamespace(),
+        family(item.getPath()),
+        type == ArmorItem.Type.LEGGINGS,
+        path -> assets.asset(path) != null);
+  }
+
+  static LayeredModel layeredModel(
+      String namespace, String family, boolean leggings, Predicate<String> exists) {
+    String directory =
+        "assets/"
+            + namespace
+            + "/textures/models/armor/"
+            + family
+            + "/";
+    List<LayerSpec> specs =
+        leggings
+            ? List.of(
+                new LayerSpec("leggings_lower", 0.125f, 0.125f),
+                new LayerSpec("leggings_middle", 0.5f, 0.5f),
+                new LayerSpec("leggings_upper", 1.0f, 1.0f))
+            : List.of(
+                new LayerSpec("body_lower", 0.25f, 0.55f),
+                new LayerSpec("body_middle", 0.75f, 0.9f),
+                new LayerSpec("body_upper", 1.25f, 1.25f));
+
+    var layers = new ArrayList<Layer>();
+    for (LayerSpec spec : specs) {
+      String base = directory + spec.name() + ".png";
+      if (!exists.test(base)) continue;
+      String overlayFile = directory + spec.name() + "_overlay.png";
+      String overlay = exists.test(overlayFile) ? textureId(overlayFile) : null;
+      layers.add(
+          new Layer(
+              textureId(base),
+              overlay,
+              spec.deformation(),
+              spec.headDeformation(),
+              overlay != null));
+    }
+
+    // Some segmented sets intentionally reuse one transparent sprite at all three
+    // dilations (for example a gel/slime shell). Reproduce that stack when the
+    // conventional lower/middle/upper files are absent.
+    if (layers.isEmpty()) {
+      String baseName = leggings ? "leggings" : "body";
+      String base = directory + baseName + ".png";
+      if (exists.test(base)) {
+        String overlayFile = directory + baseName + "_overlay.png";
+        String overlay = exists.test(overlayFile) ? textureId(overlayFile) : null;
+        String texture = textureId(base);
+        for (LayerSpec spec : specs)
+          layers.add(
+              new Layer(
+                  texture,
+                  overlay,
+                  spec.deformation(),
+                  spec.headDeformation(),
+                  overlay != null));
+      }
+    }
+
+    return layers.isEmpty()
+        ? null
+        : new LayeredModel(leggings ? 2 : 1, List.copyOf(layers));
   }
 
   private void indexInstalledMods() {
@@ -172,14 +261,19 @@ final class CustomArmorAssetResolver {
   }
 
   private String chooseGeo(String namespace, String family) {
+    String geometryFamily = geometryFamily(namespace, family);
     List<String> candidates = geoByNamespace.getOrDefault(namespace, List.of());
-    String exact = "assets/" + namespace + "/geo/" + family + ".geo.json";
+    String exact = "assets/" + namespace + "/geo/" + geometryFamily + ".geo.json";
     if (candidates.contains(exact) && isHumanoid(exact)) return exact;
 
     List<String> humanoid = new ArrayList<>();
     for (String candidate : candidates) if (isHumanoid(candidate)) humanoid.add(candidate);
     if (humanoid.size() == 1) return humanoid.getFirst();
-    return best(family, humanoid, candidate -> stem(candidate, ".geo.json"));
+    return best(geometryFamily, humanoid, candidate -> stem(candidate, ".geo.json"));
+  }
+
+  static String geometryFamily(String namespace, String family) {
+    return GEOMETRY_FAMILY_ALIASES.getOrDefault(namespace + ":" + family, family);
   }
 
   private boolean isHumanoid(String path) {
@@ -201,7 +295,8 @@ final class CustomArmorAssetResolver {
             || text.contains("armorRightLeg")
             || text.contains("armorLeftLeg")
             || text.contains("armorRightBoot")
-            || text.contains("armorLeftBoot");
+            || text.contains("armorLeftBoot")
+            || text.contains("armorWaist");
     return biped || geckoArmor;
   }
 
@@ -361,6 +456,7 @@ final class CustomArmorAssetResolver {
             case "armorLeftLeg" -> new Root(current, "leftLeg", "legs");
             case "armorRightBoot" -> new Root(current, "rightLeg", "feet");
             case "armorLeftBoot" -> new Root(current, "leftLeg", "feet");
+            case "bipedWaist", "armorWaist" -> new Root(current, "torso", "legs");
             case "bipedRightLeg" -> new Root(current, "rightLeg", null);
             case "bipedLeftLeg" -> new Root(current, "leftLeg", null);
             default -> null;
@@ -394,9 +490,10 @@ final class CustomArmorAssetResolver {
     boolean mirror =
         cube.has("mirror") ? cube.get("mirror").getAsBoolean() : bone.mirror();
 
-    // Match GeckoLib GeometryCube#bake: Bedrock X is mirrored into Minecraft
-    // model space, while Y/Z keep their sign. Units become blocks here.
-    float ox = -(origin[0] + size[0]) / 16f;
+    // ArmorModelAPI bakes Bedrock armor without mirroring X. Player History
+    // already renders in y-up model space, so the authored local axes can be
+    // kept directly and converted only from pixels to blocks.
+    float ox = origin[0] / 16f;
     float oy = origin[1] / 16f;
     float oz = origin[2] / 16f;
     float sx = size[0] / 16f;
@@ -435,11 +532,10 @@ final class CustomArmorAssetResolver {
       vertex[1] -= root.bone().pivot()[1];
       vertex[2] -= root.bone().pivot()[2];
 
-      // Gecko/Minecraft humanoid model space faces toward -Z, while the
-      // BlueMap Three.js avatar uses +Z as its visible/front face (matching
-      // skinview3d's BoxGeometry UV convention). Reflect local Z once at the
-      // integration boundary so custom equipment faces the same direction as
-      // the player skin without changing Gecko's internal bake semantics.
+      // Armor Model API keeps authored X/Z orientation and rotation signs, but
+      // Minecraft armor model front is -Z while the BlueMap skin mesh maps its
+      // front UV onto Three.js BoxGeometry +Z. Reflect Z exactly once at this
+      // integration boundary, after all authored pivots/rotations are applied.
       vertex[2] = -vertex[2];
     }
 
@@ -482,11 +578,11 @@ final class CustomArmorAssetResolver {
   }
 
   private static float[] modelPoint(float[] value) {
-    return new float[] {-value[0] / 16f, value[1] / 16f, value[2] / 16f};
+    return new float[] {value[0] / 16f, value[1] / 16f, value[2] / 16f};
   }
 
   private static float[] modelRotation(float[] value) {
-    return new float[] {-value[0], -value[1], value[2]};
+    return value.clone();
   }
 
   private static void rotateAll(float[][] vertices, float[] pivot, float[] degrees) {

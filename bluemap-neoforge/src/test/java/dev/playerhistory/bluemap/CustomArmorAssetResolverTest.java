@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.gson.JsonParser;
 import java.util.Arrays;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class CustomArmorAssetResolverTest {
@@ -125,7 +126,7 @@ final class CustomArmorAssetResolverTest {
   }
 
   @Test
-  void reflectsGeckoForwardAxisIntoViewerSpace() {
+  void reflectsArmorModelApiForwardAxisIntoViewerSpace() {
     var root =
         JsonParser.parseString(
                 """
@@ -152,14 +153,14 @@ final class CustomArmorAssetResolverTest {
     assertNotNull(model);
     var part = model.parts().getFirst();
 
-    // Gecko/Minecraft model front is -Z. The BlueMap avatar front is +Z,
-    // so an asymmetric cube in front of the body must land on positive Z.
+    // Armor Model API/Minecraft model front is -Z, while the BlueMap avatar's
+    // skin front is the Three.js +Z face. The integration boundary reflects Z.
     assertEquals(0.1875f, axisMin(part.positions(), 2), 0.0001f);
     assertEquals(0.3125f, axisMax(part.positions(), 2), 0.0001f);
   }
 
   @Test
-  void appliesGeckoAxisAndRotationConventions() {
+  void matchesArmorModelApiAxisAndRotationConventions() {
     var root =
         JsonParser.parseString(
                 """
@@ -187,12 +188,165 @@ final class CustomArmorAssetResolverTest {
     assertNotNull(model);
     var part = model.parts().getFirst();
 
-    // The source cube sits on negative Bedrock X. Gecko/Minecraft mirrors X,
-    // then the +90-degree Z rotation moves that positive-X offset upward.
+    // ArmorModelAPI preserves authored X and rotation signs. The negative-X
+    // cube rotates +90 degrees around Z without an extra mirror.
     assertEquals(-0.125f, axisMin(part.positions(), 0), 0.0001f);
     assertEquals(0.125f, axisMax(part.positions(), 0), 0.0001f);
-    assertEquals(0.5f, axisMin(part.positions(), 1), 0.0001f);
-    assertEquals(0.625f, axisMax(part.positions(), 1), 0.0001f);
+    assertEquals(-0.125f, axisMin(part.positions(), 1), 0.0001f);
+    assertEquals(0.0f, axisMax(part.positions(), 1), 0.0001f);
+  }
+
+
+  @Test
+  void assignsConventionalLegBonesToLeggingsSlot() {
+    var root =
+        JsonParser.parseString(
+                """
+                {
+                  "minecraft:geometry": [{
+                    "description": {"texture_width":64,"texture_height":64},
+                    "bones": [
+                      {"name":"bipedRightLeg","pivot":[-2,12,0]},
+                      {
+                        "name":"armorRightLeg",
+                        "parent":"bipedRightLeg",
+                        "pivot":[-2,12,0],
+                        "cubes":[{"origin":[-4,0,-2],"size":[4,12,4],"uv":[0,16]}]
+                      },
+                      {"name":"bipedLeftLeg","pivot":[2,12,0]},
+                      {
+                        "name":"armorLeftLeg",
+                        "parent":"bipedLeftLeg",
+                        "pivot":[2,12,0],
+                        "cubes":[{"origin":[0,0,-2],"size":[4,12,4],"uv":[16,16]}]
+                      }
+                    ]
+                  }]
+                }
+                """)
+            .getAsJsonObject();
+
+    var model = CustomArmorAssetResolver.parseGeometry(root, "example:armor/test");
+    assertNotNull(model);
+    assertEquals(2, model.parts().size());
+    assertTrue(
+        model.parts().stream()
+            .allMatch(part -> part.slot().equals("legs")));
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("rightLeg")));
+    assertTrue(
+        model.parts().stream()
+            .anyMatch(part -> part.parent().equals("leftLeg")));
+  }
+
+  @Test
+  void keepsPositiveBedrockXOnPositivePlayerX() {
+    var root =
+        JsonParser.parseString(
+                """
+                {
+                  "minecraft:geometry": [{
+                    "description": {"texture_width":64,"texture_height":64},
+                    "bones": [
+                      {"name":"bipedBody","pivot":[0,24,0]},
+                      {
+                        "name":"armorBody",
+                        "parent":"bipedBody",
+                        "pivot":[0,24,0],
+                        "cubes":[
+                          {"origin":[2,20,-1],"size":[2,2,2],"uv":[0,0]}
+                        ]
+                      }
+                    ]
+                  }]
+                }
+                """)
+            .getAsJsonObject();
+
+    var model = CustomArmorAssetResolver.parseGeometry(root, "example:armor/test");
+    assertNotNull(model);
+    var part = model.parts().getFirst();
+    assertEquals(0.125f, axisMin(part.positions(), 0), 0.0001f);
+    assertEquals(0.25f, axisMax(part.positions(), 0), 0.0001f);
+  }
+
+  @Test
+  void assignsArmorWaistToLegsButParentsItToTorso() {
+    var root =
+        JsonParser.parseString(
+                """
+                {
+                  "minecraft:geometry": [{
+                    "description": {"texture_width":64,"texture_height":64},
+                    "bones": [{
+                      "name":"armorWaist",
+                      "pivot":[0,24,0],
+                      "cubes":[{"origin":[-4,10,-2],"size":[8,4,4],"uv":[0,0]}]
+                    }]
+                  }]
+                }
+                """)
+            .getAsJsonObject();
+
+    var model = CustomArmorAssetResolver.parseGeometry(root, "example:armor/test");
+    assertNotNull(model);
+    var waist = model.parts().getFirst();
+    assertEquals("torso", waist.parent());
+    assertEquals("legs", waist.slot());
+  }
+
+  @Test
+  void resolvesKnownSharedArmorGeometryFamilies() {
+    assertEquals(
+        "tirisfal_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "astral_robe"));
+    assertEquals(
+        "tirisfal_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "scarlet_robe"));
+    assertEquals(
+        "tirisfal_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "glacier_robe"));
+    assertEquals(
+        "tempest_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "smouldering_robe"));
+    assertEquals(
+        "tempest_robe",
+        CustomArmorAssetResolver.geometryFamily("armory_rpgs", "rimeweave_robe"));
+    assertEquals(
+        "unrelated_armor",
+        CustomArmorAssetResolver.geometryFamily("example", "unrelated_armor"));
+  }
+
+  @Test
+  void discoversSegmentedHumanoidArmorLayersAndDyeOverlays() {
+    var available =
+        Set.of(
+            "assets/immersive_armors/textures/models/armor/robe/body_lower.png",
+            "assets/immersive_armors/textures/models/armor/robe/body_lower_overlay.png",
+            "assets/immersive_armors/textures/models/armor/robe/body_middle.png",
+            "assets/immersive_armors/textures/models/armor/robe/leggings_lower.png",
+            "assets/immersive_armors/textures/models/armor/robe/leggings_middle.png");
+
+    var chest =
+        CustomArmorAssetResolver.layeredModel(
+            "immersive_armors", "robe", false, available::contains);
+    assertNotNull(chest);
+    assertEquals(1, chest.layer());
+    assertEquals(2, chest.layers().size());
+    assertEquals(0.25f, chest.layers().getFirst().deformation(), 0.0001f);
+    assertEquals(0.55f, chest.layers().getFirst().headDeformation(), 0.0001f);
+    assertTrue(chest.layers().getFirst().dyeable());
+    assertNotNull(chest.layers().getFirst().overlayTexture());
+
+    var legs =
+        CustomArmorAssetResolver.layeredModel(
+            "immersive_armors", "robe", true, available::contains);
+    assertNotNull(legs);
+    assertEquals(2, legs.layer());
+    assertEquals(2, legs.layers().size());
+    assertEquals(0.125f, legs.layers().getFirst().deformation(), 0.0001f);
+    assertEquals(0.5f, legs.layers().get(1).deformation(), 0.0001f);
   }
 
   private static void assertRange(

@@ -387,3 +387,42 @@ test("equipment loader cache-busts descriptors and textures by build", async () 
     "https://map.example/player-history/equipment/textures/example/models/armor/test_layer_1.png?v=1.0.0-dev.deadbeef",
   ]);
 });
+
+test("equipment loader preserves segmented armor deformation metadata", async () => {
+  textureUrls.length = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => ({
+      ok: true,
+      json: async () => ({
+        format: 2,
+        item: "immersive_armors:robe_chestplate",
+        kind: "layers",
+        layer: 1,
+        layers: [
+          {
+            texture:
+              "textures/immersive_armors/models/armor/robe/body_lower.png",
+            overlayTexture:
+              "textures/immersive_armors/models/armor/robe/body_lower_overlay.png",
+            dyeable: true,
+            deformation: 0.25,
+            headDeformation: 0.55,
+          },
+        ],
+      }),
+    }),
+  );
+
+  const armor = await loader.armor("immersive_armors:robe_chestplate");
+  assert.ok(armor);
+  assert.equal(armor.kind, "layers");
+  if (armor.kind !== "layers") return;
+  assert.equal(armor.layers.length, 1);
+  assert.equal(armor.layers[0]?.deformation, 0.25);
+  assert.equal(armor.layers[0]?.headDeformation, 0.55);
+  assert.equal(armor.layers[0]?.dyeable, true);
+  assert.ok(armor.layers[0]?.overlayTexture);
+});
+
