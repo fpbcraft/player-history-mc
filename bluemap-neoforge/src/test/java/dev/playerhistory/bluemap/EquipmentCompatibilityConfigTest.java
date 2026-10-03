@@ -36,6 +36,9 @@ final class EquipmentCompatibilityConfigTest {
     assertEquals("shared_model", data.geometryFamily("example", "odd_set"));
     assertEquals("shared_texture", data.textureFamily("example", "odd_set"));
     assertEquals("wizard_robes", data.geometryFamily("wizards", "fire_robe"));
+    assertEquals("head", data.wearableItems().get("create:goggles").parent());
+    assertEquals("torso", data.wearableSlots().get("back").parent());
+    assertTrue(data.wearableItems().containsKey("sophisticatedbackpacks:*_backpack"));
     assertFalse(logs.isEmpty());
   }
 }
