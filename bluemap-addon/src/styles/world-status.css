@@ -28,6 +28,7 @@
   background: var(--theme-bg);
   color: var(--theme-fg-light);
   cursor: pointer;
+  pointer-events: auto;
   user-select: none;
   white-space: nowrap;
 }
