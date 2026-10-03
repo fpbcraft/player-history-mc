@@ -233,6 +233,7 @@ test("equipment loader loads legacy armor descriptors", async () => {
   assert.equal(armor.layer, 1);
   assert.equal(armor.layers.length, 1);
   assert.equal(armor.layers[0]?.dyeable, true);
+  assert.equal(armor.layers[0]?.defaultColor, 0xa06540);
   assert.ok(armor.layers[0]?.overlayTexture);
 });
 
@@ -407,6 +408,7 @@ test("equipment loader preserves segmented armor deformation metadata", async ()
             overlayTexture:
               "textures/immersive_armors/models/armor/robe/body_lower_overlay.png",
             dyeable: true,
+            defaultColor: 0xa06540,
             deformation: 0.25,
             headDeformation: 0.55,
           },
