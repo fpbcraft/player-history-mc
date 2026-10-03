@@ -28,6 +28,7 @@ final class EquipmentCompatibilityConfig {
   record Data(
       Map<String, String> geometryAliases,
       Map<String, String> textureAliases,
+      Map<String, Integer> defaultArmorColors,
       Map<String, Wearable> wearableSlots,
       Map<String, Wearable> wearableItems) {
     String geometryFamily(String namespace, String family) {
@@ -37,19 +38,30 @@ final class EquipmentCompatibilityConfig {
     String textureFamily(String namespace, String family) {
       return textureAliases.getOrDefault(namespace + ":" + family, family);
     }
+
+    int defaultArmorColor(String namespace, String family) {
+      return defaultArmorColors.getOrDefault(namespace + ":" + family, 0xA06540);
+    }
   }
 
   static Data load(Path serverRoot, Consumer<String> log) {
     Data defaults = defaults();
     var geometry = new LinkedHashMap<>(defaults.geometryAliases());
     var textures = new LinkedHashMap<>(defaults.textureAliases());
+    var colors = new LinkedHashMap<>(defaults.defaultArmorColors());
     var slots = new LinkedHashMap<>(defaults.wearableSlots());
     var items = new LinkedHashMap<>(defaults.wearableItems());
 
     Path override = serverRoot.resolve("config").resolve(OVERRIDE_FILE);
     if (Files.isRegularFile(override)) {
       try (var reader = Files.newBufferedReader(override, StandardCharsets.UTF_8)) {
-        merge(JsonParser.parseReader(reader).getAsJsonObject(), geometry, textures, slots, items);
+        merge(
+            JsonParser.parseReader(reader).getAsJsonObject(),
+            geometry,
+            textures,
+            colors,
+            slots,
+            items);
         log.accept("Loaded equipment compatibility overrides from " + override);
       } catch (IOException | RuntimeException error) {
         log.accept("Could not load equipment compatibility overrides " + override + ": " + error);
@@ -57,7 +69,11 @@ final class EquipmentCompatibilityConfig {
     }
 
     return new Data(
-        Map.copyOf(geometry), Map.copyOf(textures), Map.copyOf(slots), Map.copyOf(items));
+        Map.copyOf(geometry),
+        Map.copyOf(textures),
+        Map.copyOf(colors),
+        Map.copyOf(slots),
+        Map.copyOf(items));
   }
 
   static Data defaults() {
@@ -66,11 +82,22 @@ final class EquipmentCompatibilityConfig {
       try (var reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
         var geometry = new LinkedHashMap<String, String>();
         var textures = new LinkedHashMap<String, String>();
+        var colors = new LinkedHashMap<String, Integer>();
         var slots = new LinkedHashMap<String, Wearable>();
         var items = new LinkedHashMap<String, Wearable>();
-        merge(JsonParser.parseReader(reader).getAsJsonObject(), geometry, textures, slots, items);
+        merge(
+            JsonParser.parseReader(reader).getAsJsonObject(),
+            geometry,
+            textures,
+            colors,
+            slots,
+            items);
         return new Data(
-            Map.copyOf(geometry), Map.copyOf(textures), Map.copyOf(slots), Map.copyOf(items));
+            Map.copyOf(geometry),
+            Map.copyOf(textures),
+            Map.copyOf(colors),
+            Map.copyOf(slots),
+            Map.copyOf(items));
       }
     } catch (IOException | RuntimeException error) {
       return empty();
@@ -78,17 +105,19 @@ final class EquipmentCompatibilityConfig {
   }
 
   private static Data empty() {
-    return new Data(Map.of(), Map.of(), Map.of(), Map.of());
+    return new Data(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
   }
 
   private static void merge(
       JsonObject root,
       Map<String, String> geometry,
       Map<String, String> textures,
+      Map<String, Integer> colors,
       Map<String, Wearable> slots,
       Map<String, Wearable> items) {
     aliases(root.get("geometryAliases"), geometry);
     aliases(root.get("textureAliases"), textures);
+    colors(root.get("defaultArmorColors"), colors);
     wearables(root.get("wearableSlots"), slots, false);
     wearables(root.get("wearableItems"), items, true);
   }
@@ -101,6 +130,23 @@ final class EquipmentCompatibilityConfig {
       String value = entry.getValue().getAsString().trim();
       if (key.isEmpty() || value.isEmpty() || !key.contains(":")) continue;
       target.put(key, value);
+    }
+  }
+
+  private static void colors(JsonElement element, Map<String, Integer> target) {
+    if (element == null || !element.isJsonObject()) return;
+    for (var entry : element.getAsJsonObject().entrySet()) {
+      String key = entry.getKey().trim();
+      if (key.isEmpty() || !key.contains(":")) continue;
+      try {
+        int value =
+            entry.getValue().isJsonPrimitive() && entry.getValue().getAsJsonPrimitive().isString()
+                ? Integer.decode(entry.getValue().getAsString())
+                : entry.getValue().getAsInt();
+        target.put(key, value & 0xFFFFFF);
+      } catch (RuntimeException ignored) {
+        // Optional compatibility entries should not make the entire file invalid.
+      }
     }
   }
 
