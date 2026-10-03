@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = join(root, "visual-dist");
@@ -212,6 +213,17 @@ try {
   console.log(`Visual verification passed (${results.length} screenshots)`);
 } finally {
   chrome.kill("SIGTERM");
-  server.close();
-  await rm(profile, { recursive: true, force: true });
+  await Promise.race([
+    once(chrome, "exit"),
+    delay(2_000).then(() => {
+      chrome.kill("SIGKILL");
+    }),
+  ]);
+  await new Promise((resolve) => server.close(resolve));
+  await rm(profile, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  });
 }
