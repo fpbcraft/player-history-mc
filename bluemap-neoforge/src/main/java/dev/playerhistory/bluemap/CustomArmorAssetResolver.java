@@ -4,11 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.LogSink;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.zip.ZipFile;
 import net.minecraft.resources.ResourceLocation;
@@ -42,7 +42,7 @@ final class CustomArmorAssetResolver {
           "wood", "wooden", "stone", "chain", "chainmail", "iron", "gold", "golden",
           "diamond", "netherite", "leather", "copper");
   private final BlueMap3DItemModelBridge assets;
-  private final Consumer<String> log;
+  private final LogSink log;
   private final EquipmentCompatibilityConfig.Data compatibility;
   private final Map<String, List<String>> geoByNamespace = new HashMap<>();
   private final Map<String, List<String>> armorTexturesByNamespace = new HashMap<>();
@@ -50,7 +50,7 @@ final class CustomArmorAssetResolver {
 
   CustomArmorAssetResolver(
       BlueMap3DItemModelBridge assets,
-      Consumer<String> log,
+      LogSink log,
       EquipmentCompatibilityConfig.Data compatibility) {
     this.assets = assets;
     this.log = log;
@@ -83,7 +83,7 @@ final class CustomArmorAssetResolver {
       if (model == null || model.parts().isEmpty()) {
         return null;
       }
-      log.accept(
+      log.debug(
           "Resolved custom equipment "
               + item
               + " from "
@@ -93,7 +93,7 @@ final class CustomArmorAssetResolver {
       cache.put(key, model);
       return model;
     } catch (RuntimeException error) {
-      log.accept("Could not parse custom equipment geometry " + geoPath + ": " + error);
+      log.warn("Could not parse custom equipment geometry " + geoPath + ": " + error);
       return null;
     }
   }
@@ -207,11 +207,11 @@ final class CustomArmorAssetResolver {
         }
       }
     } catch (RuntimeException error) {
-      log.accept("Could not index custom equipment assets: " + error);
+      log.warn("Could not index custom equipment assets: " + error);
       return;
     }
     if (geos > 0)
-      log.accept(
+      log.debug(
           "Indexed "
               + geos
               + " humanoid geometry candidate(s) and "
