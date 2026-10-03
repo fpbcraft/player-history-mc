@@ -40,7 +40,7 @@ final class EquipmentAssetPublisher {
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
   private volatile CustomArmorAssetResolver customArmor;
-  private volatile EquipmentCompatibilityConfig.Data armorCompatibility =
+  private volatile EquipmentCompatibilityConfig.Data equipmentCompatibility =
       EquipmentCompatibilityConfig.defaults();
   private volatile long nextScan;
 
@@ -62,8 +62,20 @@ final class EquipmentAssetPublisher {
     registry = worldRoot.resolve("player-history/registry.json").toAbsolutePath().normalize();
     processedModels.clear();
     processedArmor.clear();
-    armorCompatibility =
+    equipmentCompatibility =
         EquipmentCompatibilityConfig.load(Path.of("").toAbsolutePath().normalize(), log);
+    try {
+      Files.createDirectories(root);
+      writeAtomic(
+          root.resolve("wearables.json"),
+          JsonFiles.GSON.toJson(
+              new WearableConfig(
+                  FORMAT,
+                  equipmentCompatibility.wearableSlots(),
+                  equipmentCompatibility.wearableItems())));
+    } catch (IOException error) {
+      log.accept("Could not publish wearable equipment compatibility: " + error);
+    }
     nextScan = 0;
   }
 
@@ -106,7 +118,7 @@ final class EquipmentAssetPublisher {
         currentBridge =
             BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
         bridge = currentBridge;
-        customArmor = new CustomArmorAssetResolver(currentBridge, log, armorCompatibility);
+        customArmor = new CustomArmorAssetResolver(currentBridge, log, equipmentCompatibility);
       } catch (ClassNotFoundException error) {
         log.accept("BlueMap3D is unavailable; Player History will keep simple equipment models");
         nextScan = Long.MAX_VALUE;
@@ -420,6 +432,11 @@ final class EquipmentAssetPublisher {
       List<ArmorLayer> layers,
       String texture,
       List<CustomArmorPart> parts) {}
+
+  private record WearableConfig(
+      int format,
+      Map<String, EquipmentCompatibilityConfig.Wearable> slots,
+      Map<String, EquipmentCompatibilityConfig.Wearable> items) {}
 
   private record ItemModel(int format, String item, List<ModelGroup> groups, String fingerprint) {}
 
