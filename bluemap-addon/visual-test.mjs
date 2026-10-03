@@ -194,6 +194,13 @@ async function capture({ name, scenario, width, height }) {
       const panel=document.querySelector("bluemap-player-replay > section");
       const rect=panel.getBoundingClientRect();
       const overlay=${JSON.stringify(expectedOverlay)} ? document.querySelector(${JSON.stringify(expectedOverlay)}) : null;
+      const controlBar=document.querySelector(".control-bar");
+      const position=document.querySelector(".control-bar .pos-input");
+      const sync=document.querySelector(".player-history-game-time-sync");
+      const follow=document.querySelector(".history-player-followbar");
+      const controlRect=controlBar?.getBoundingClientRect();
+      const followRect=follow?.getBoundingClientRect();
+      const visible=(element)=>!!element && getComputedStyle(element).display !== "none";
       return {
         ready: document.documentElement.dataset.visualReady === "true",
         panelVisible: !panel.hidden && rect.width > 0 && rect.height > 0,
@@ -201,13 +208,23 @@ async function capture({ name, scenario, width, height }) {
         overlayVisible: !overlay || (!overlay.hidden && getComputedStyle(overlay).display !== "none"),
         players: document.querySelector('[data-control="player-count"]')?.textContent,
         status: document.querySelector(".history-status")?.textContent,
+        mobileControlsOk: innerWidth > 600 || (
+          visible(position) &&
+          visible(sync) &&
+          sync.querySelector(".time-sync-label")?.textContent === "Sync" &&
+          sync.querySelector("input[type=checkbox]")?.checked === true &&
+          visible(follow) &&
+          followRect?.width > 0 &&
+          followRect?.top >= (controlRect?.bottom ?? 0) - 1
+        ),
       };
     })()`);
     if (
       !state.ready ||
       !state.panelVisible ||
       !state.panelInsideViewport ||
-      !state.overlayVisible
+      !state.overlayVisible ||
+      !state.mobileControlsOk
     ) {
       throw new Error(`Visual fixture layout check failed: ${JSON.stringify(state)}`);
     }
