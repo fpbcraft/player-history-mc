@@ -1289,7 +1289,10 @@ export class ReplayPanel extends HTMLElement {
       this.livePoints = update.points;
       this.liveEvents = update.events;
       this.liveStates = update.states;
-      if (fullLive) this.liveReplay.update(update.points, update.generatedAt);
+      // Presence snapshots still contain the latest point for each online player.
+      // Feed them into the live replay even while History is closed so the 3D avatar
+      // and floating follow bar do not disappear between full-live sessions.
+      this.liveReplay.update(update.points, update.generatedAt);
       for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
       this.eventRevision++;
 
