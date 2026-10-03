@@ -1,5 +1,7 @@
 package dev.playerhistory.bluemap;
 
+import dev.playerhistory.core.LogSink;
+
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -10,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * Loads mod-specific equipment metadata that cannot be inferred from standard APIs/resources.
@@ -44,7 +45,7 @@ final class EquipmentCompatibilityConfig {
     }
   }
 
-  static Data load(Path serverRoot, Consumer<String> log) {
+  static Data load(Path serverRoot, LogSink log) {
     Data defaults = defaults();
     var geometry = new LinkedHashMap<>(defaults.geometryAliases());
     var textures = new LinkedHashMap<>(defaults.textureAliases());
@@ -62,9 +63,9 @@ final class EquipmentCompatibilityConfig {
             colors,
             slots,
             items);
-        log.accept("Loaded equipment compatibility overrides from " + override);
+        log.info("Loaded equipment compatibility overrides from " + override);
       } catch (IOException | RuntimeException error) {
-        log.accept("Could not load equipment compatibility overrides " + override + ": " + error);
+        log.warn("Could not load equipment compatibility overrides " + override + ": " + error);
       }
     }
 
