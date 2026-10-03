@@ -1,0 +1,75 @@
+{
+  "generatedAt": "2026-10-03T15:29:19.963Z",
+  "results": [
+    {
+      "name": "desktop",
+      "scenario": "default",
+      "width": 1280,
+      "height": 800,
+      "state": {
+        "ready": true,
+        "panelVisible": true,
+        "panelInsideViewport": true,
+        "overlayVisible": true,
+        "players": "3",
+        "status": "Historical replay · local time"
+      }
+    },
+    {
+      "name": "players-popover",
+      "scenario": "players",
+      "width": 1280,
+      "height": 800,
+      "state": {
+        "ready": true,
+        "panelVisible": true,
+        "panelInsideViewport": true,
+        "overlayVisible": true,
+        "players": "3",
+        "status": "Historical replay · local time"
+      }
+    },
+    {
+      "name": "range-popover",
+      "scenario": "range",
+      "width": 1280,
+      "height": 800,
+      "state": {
+        "ready": true,
+        "panelVisible": true,
+        "panelInsideViewport": true,
+        "overlayVisible": true,
+        "players": "3",
+        "status": "Historical replay · local time"
+      }
+    },
+    {
+      "name": "chat-panel",
+      "scenario": "chat",
+      "width": 1280,
+      "height": 800,
+      "state": {
+        "ready": true,
+        "panelVisible": true,
+        "panelInsideViewport": true,
+        "overlayVisible": true,
+        "players": "3",
+        "status": "Historical replay · local time"
+      }
+    },
+    {
+      "name": "mobile",
+      "scenario": "default",
+      "width": 390,
+      "height": 844,
+      "state": {
+        "ready": true,
+        "panelVisible": true,
+        "panelInsideViewport": true,
+        "overlayVisible": true,
+        "players": "3",
+        "status": "Historical replay · local time"
+      }
+    }
+  ]
+}
