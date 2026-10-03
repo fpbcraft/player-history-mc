@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-03T19:11:45.872Z",
+  "generatedAt": "2026-10-03T19:11:53.761Z",
   "results": [
     {
       "name": "desktop",
@@ -12,7 +12,8 @@
         "panelInsideViewport": true,
         "overlayVisible": true,
         "players": "3",
-        "status": "Historical replay · local time"
+        "status": "Historical replay · local time",
+        "mobileControlsOk": true
       }
     },
     {
@@ -26,7 +27,8 @@
         "panelInsideViewport": true,
         "overlayVisible": true,
         "players": "3",
-        "status": "Historical replay · local time"
+        "status": "Historical replay · local time",
+        "mobileControlsOk": true
       }
     },
     {
@@ -40,7 +42,8 @@
         "panelInsideViewport": true,
         "overlayVisible": true,
         "players": "3",
-        "status": "Historical replay · local time"
+        "status": "Historical replay · local time",
+        "mobileControlsOk": true
       }
     },
     {
@@ -54,7 +57,8 @@
         "panelInsideViewport": true,
         "overlayVisible": true,
         "players": "3",
-        "status": "Historical replay · local time"
+        "status": "Historical replay · local time",
+        "mobileControlsOk": true
       }
     },
     {
@@ -68,7 +72,8 @@
         "panelInsideViewport": true,
         "overlayVisible": true,
         "players": "3",
-        "status": "Historical replay · local time"
+        "status": "Historical replay · local time",
+        "mobileControlsOk": true
       }
     }
   ]
