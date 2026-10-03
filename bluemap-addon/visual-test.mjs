@@ -229,6 +229,32 @@ async function capture({ name, scenario, width, height }) {
       throw new Error(`Visual fixture layout check failed: ${JSON.stringify(state)}`);
     }
     if (state.players !== "3") throw new Error(`Expected three fixture players: ${JSON.stringify(state)}`);
+
+    if (width <= 600) {
+      const syncRect = await cdp.evaluate(`(()=>{
+        const rect=document.querySelector(".player-history-game-time-sync .time-sync-track")?.getBoundingClientRect();
+        return rect ? {x:rect.x,y:rect.y,width:rect.width,height:rect.height} : null;
+      })()`);
+      if (!syncRect) throw new Error("Missing mobile sync switch hit target");
+      const x = syncRect.x + syncRect.width / 2;
+      const y = syncRect.y + syncRect.height / 2;
+      const click = async () => {
+        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+        await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+        await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+      };
+      await click();
+      const toggledOff = await cdp.evaluate(
+        'document.querySelector(".player-history-game-time-sync input[type=checkbox]")?.checked === false',
+      );
+      if (!toggledOff) throw new Error("Sync switch did not receive a real pointer click");
+      await click();
+      const restoredOn = await cdp.evaluate(
+        'document.querySelector(".player-history-game-time-sync input[type=checkbox]")?.checked === true',
+      );
+      if (!restoredOn) throw new Error("Sync switch did not restore after second pointer click");
+    }
+
     if (cdp.runtimeErrors.length) {
       throw new Error(`Browser exception: ${JSON.stringify(cdp.runtimeErrors[0])}`);
     }
