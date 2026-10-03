@@ -107,7 +107,7 @@ final class BlueMap3DHistoryBridge {
           } catch (ReflectiveOperationException | RuntimeException error) {
             complete = false;
             log.warn(
-                "BlueMap3D provider '
+                "BlueMap3D provider '"
                     + providerId
                     + "' could not be sampled; preserving its previous object state: "
                     + rootCause(error));
