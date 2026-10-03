@@ -179,9 +179,15 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     popupMarker.visible = true;
     const popupMarkerSet = new SetMarker("root");
     popupMarkerSet.add(popupMarker);
+    const nativePlayerMarker = { id: "native-player", isPlayerMarker: true, data: { position: new Vector() } };
     const app = {
       popupMarker,
       popupMarkerSet,
+      playerMarkerManager: {
+        getPlayerMarker(uuid) {
+          return uuid === "abc" ? nativePlayerMarker : undefined;
+        },
+      },
       mapViewer: {
         markers: {},
         map: { data: { id: "world", mapDataRoot: "maps/world" } },
@@ -372,6 +378,17 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(chatIcon.children.length, 1, "chat renders as an icon-only map event");
     assert.doesNotMatch(chatIcon.className, /history-chat-bubble/);
     assert.match(chatIcon.dataset.historyTooltip, /<b>Hello<\/b>/);
+
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(
+      mapControls.data.followingPlayer,
+      nativePlayerMarker,
+      "live follow delegates to BlueMap's native animated player marker",
+    );
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer, null);
+
     adapter.dispose();
     assert.equal(
       popupMarker.onMapInteraction,
