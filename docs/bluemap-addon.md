@@ -63,6 +63,9 @@ Renderer-specific relationships that cannot be inferred from resource filenames 
   "textureAliases": {
     "examplemod:crimson_armor": "shared_crimson_texture"
   },
+  "defaultArmorColors": {
+    "examplemod:crimson_armor": "0x7A3E36"
+  },
   "wearableSlots": {
     "back": {
       "parent": "torso",
@@ -82,7 +85,7 @@ Renderer-specific relationships that cannot be inferred from resource filenames 
 }
 ```
 
-Armor alias keys are `<namespace>:<item-family>`; values are resource-family names without `geo/`, `textures/armor/` or file extensions. Item families strip the standard `_helmet`, `_chestplate`, `_leggings`, `_boots`, `_head`, `_chest`, `_legs` and `_feet` suffixes.
+Armor alias keys are `<namespace>:<item-family>`; values are resource-family names without `geo/`, `textures/armor/` or file extensions. Item families strip the standard `_helmet`, `_chestplate`, `_leggings`, `_boots`, `_head`, `_chest`, `_legs` and `_feet` suffixes. `defaultArmorColors` supplies the undyed RGB color for dyeable armor whose client renderer uses a material-specific default; values may be decimal or hex strings such as `"0xA06540"`.
 
 Curios integration is optional and reflective: the recorder records visible Curios as `curio:<slot>:<index>` when Curios is installed, including cosmetic-slot overrides. The viewer first checks `wearableItems` (exact IDs and `*` wildcard patterns), then falls back to the matching Curios identifier in `wearableSlots`. Supported parents are `head`, `torso`, `rightArm`, `leftArm`, `rightLeg`, and `leftLeg`. Positions are player-model units and rotations are degrees. Built-ins include common Curios attachment points, Create Engineer's Goggles, and Sophisticated Backpacks.
 
