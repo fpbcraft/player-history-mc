@@ -316,7 +316,7 @@ export class BlueMapAdapter {
     player: number,
     players: HistoryRegistry["players"],
   ): string {
-    const uuid = players.find((entry) => entry.id === player)?.uuid;
+    const uuid = players.find((p) => p.id === player)?.uuid;
     const root = this.app.mapViewer.map?.data?.mapDataRoot;
     return uuid && root ? `${root}/assets/playerheads/${uuid}.png` : FALLBACK_HEAD;
   }
@@ -329,14 +329,14 @@ export class BlueMapAdapter {
   }
 
   private followPlayer(player: number): void {
-    const controls = this.app.mapViewer.controlsManager?.controls;
+    const c = this.app.mapViewer.controlsManager?.controls;
     const target = this.scene3d.playerTarget(player);
-    if (!controls?.followPlayerMarker || !target) return;
-    if (this.following === player && controls.data?.followingPlayer != null) {
-      controls.stopFollowingPlayerMarker?.();
+    if (!c?.followPlayerMarker || !target) return;
+    if (this.following === player && c.data?.followingPlayer != null) {
+      c.stopFollowingPlayerMarker?.();
       this.following = null;
     } else {
-      controls.followPlayerMarker(target);
+      c.followPlayerMarker(target);
       this.following = player;
     }
     this.syncFollowButtons();
@@ -347,7 +347,7 @@ export class BlueMapAdapter {
     names: ReadonlyMap<number, string>,
     players: HistoryRegistry["players"],
   ): void {
-    const key = `${this.mapId}:${positions.map((point) => point.player).join(",")}`;
+    const key = `${this.mapId}:${positions.map((p) => p.player).join(",")}`;
     if (this.bar.dataset.players !== key) {
       this.bar.dataset.players = key;
       this.bar.replaceChildren();
@@ -372,13 +372,12 @@ export class BlueMapAdapter {
     players: HistoryRegistry["players"] = [],
   ): void {
     this.scene3d.setPlayers(positions, names, players);
-    const controls = this.app.mapViewer.controlsManager?.controls;
+    const c = this.app.mapViewer.controlsManager?.controls;
     if (
       this.following !== null &&
-      (!controls?.data?.followingPlayer ||
-        !positions.some((point) => point.player === this.following))
+      (!c?.data?.followingPlayer || !positions.some((p) => p.player === this.following))
     ) {
-      controls?.stopFollowingPlayerMarker?.();
+      c?.stopFollowingPlayerMarker?.();
       this.following = null;
     }
     this.updatePlayerBar(positions, names, players);
