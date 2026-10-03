@@ -11,7 +11,6 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 /**
  * Generic moving-object history, independent of any particular vehicle mod.
@@ -59,7 +58,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private final ObjectRegistry registry;
   private final ObjectGeometryArchive geometryArchive;
   private final Options options;
-  private final Consumer<String> log;
+  private final dev.playerhistory.core.LogSink log;
   private final ArrayBlockingQueue<Envelope> queue;
   private final Thread worker;
   private final Map<String, Map<String, Tracked>> tracked = new HashMap<>();
@@ -90,7 +89,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   public final AtomicLong skipped = new AtomicLong();
   public final AtomicLong bytes = new AtomicLong();
 
-  public ObjectHistoryRecorder(Path root, Options options, Consumer<String> log) throws IOException {
+  public ObjectHistoryRecorder(Path root, Options options, dev.playerhistory.core.LogSink log) throws IOException {
     this.root = root;
     this.options = options;
     this.log = log;
@@ -222,7 +221,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     try {
       geometryArchive.publishTo(target);
     } catch (IOException error) {
-      log.accept("Could not publish object geometry archive: " + error);
+      log.warn("Could not publish object geometry archive: " + error);
     }
   }
 
@@ -323,7 +322,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
       finish();
     } catch (Throwable error) {
       failure = error;
-      log.accept("Object-history writer stopped after failure: " + error);
+      log.error("Object-history writer stopped after failure: " + error);
       try {
         if (channel != null) channel.close();
       } catch (IOException ignored) {
@@ -485,7 +484,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         JsonFiles.write(pub.resolve("chunks/" + read.start() + ".json"), read.points());
         publishedChunks.add(read.start());
       } catch (IOException error) {
-        log.accept("Could not publish object-history chunk " + file + ": " + error);
+        log.warn("Could not publish object-history chunk " + file + ": " + error);
       }
       JsonFiles.write(pub.resolve("manifest.json"), publicManifest());
     }
@@ -512,9 +511,9 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         }
         TemporaryChunkFiles.repair(file, read.validBytes(), channel -> {});
         TemporaryChunkFiles.complete(file, read.start());
-        log.accept("Recovered object-history chunk " + read.start());
+        log.info("Recovered object-history chunk " + read.start());
       } catch (Exception error) {
-        log.accept("Quarantined corrupt object history " + file + ": " + error);
+        log.warn("Quarantined corrupt object history " + file + ": " + error);
         TemporaryChunkFiles.quarantine(file);
       }
     }
@@ -565,6 +564,6 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     } catch (InterruptedException error) {
       Thread.currentThread().interrupt();
     }
-    if (worker.isAlive()) log.accept("Object-history flush still running after 30 seconds");
+    if (worker.isAlive()) log.warn("Object-history flush still running after 30 seconds");
   }
 }
