@@ -1,5 +1,6 @@
 import type {
   BlueMapApp,
+  BlueMapPopupMarker,
   BlueMapRuntime,
   HtmlMarker,
   MarkerSet,
@@ -69,6 +70,15 @@ export class BlueMapAdapter {
   stateDetails?: (player: number, time: number) => Promise<string>;
   private playerIconMode = false;
   private following: number | null = null;
+  private popupOverride:
+    | {
+        marker: BlueMapPopupMarker;
+        onMapInteraction?: (event: unknown) => void;
+        display?: string;
+        cubeVisible?: boolean;
+        visible?: boolean;
+      }
+    | undefined;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
   private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
 
@@ -78,9 +88,23 @@ export class BlueMapAdapter {
     if (!api?.MarkerSet || !api?.HtmlMarker || !api?.Three || !app?.mapViewer?.markers)
       throw Error("Unsupported BlueMap web API");
 
-    // Keep BlueMap's shared popup set because Player History mounts overlays
-    // into it, but detach the stock block-coordinate popup itself.
-    if (app.popupMarker) app.popupMarkerSet.remove(app.popupMarker);
+    // Disable BlueMap's stock coordinate popup without removing/disposal.
+    // PopupMarker installs global close listeners that outlive MarkerSet.remove();
+    // disposing it here leaves those listeners dereferencing a removed DOM element.
+    const popup = app.popupMarker;
+    if (popup) {
+      this.popupOverride = {
+        marker: popup,
+        onMapInteraction: popup.onMapInteraction,
+        display: popup.element?.style.display,
+        cubeVisible: popup.cube?.visible,
+        visible: popup.visible,
+      };
+      popup.onMapInteraction = () => {};
+      if (popup.element) popup.element.style.display = "none";
+      if (popup.cube) popup.cube.visible = false;
+      popup.visible = false;
+    }
 
     this.root = new api.MarkerSet("player-history-replay", {
       label: "Historical replay",
@@ -692,6 +716,14 @@ export class BlueMapAdapter {
     this.bar.remove();
     this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
     this.following = null;
+    if (this.popupOverride) {
+      const { marker, onMapInteraction, display, cubeVisible, visible } = this.popupOverride;
+      marker.onMapInteraction = onMapInteraction;
+      if (marker.element) marker.element.style.display = display ?? "";
+      if (marker.cube && cubeVisible !== undefined) marker.cube.visible = cubeVisible;
+      marker.visible = visible;
+      this.popupOverride = undefined;
+    }
     this.clearHeatmap();
     this.scene3d.dispose();
     this.clear(this.players);
