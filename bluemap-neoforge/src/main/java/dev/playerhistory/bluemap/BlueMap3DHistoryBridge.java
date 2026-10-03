@@ -1,12 +1,12 @@
 package dev.playerhistory.bluemap;
 
+import dev.playerhistory.core.LogSink;
 import dev.playerhistory.object.ObjectHistoryApi;
 import dev.playerhistory.object.ObjectSnapshot;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.function.Consumer;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -25,7 +25,7 @@ final class BlueMap3DHistoryBridge {
   private static final Set<String> LEGACY_DEFAULT_PROVIDERS =
       Set.of("create_contraptions", "sable_ships");
 
-  private final Consumer<String> log;
+  private final LogSink log;
   private boolean resolutionAttempted;
   private boolean connectedLogged;
   private boolean legacyProviderMigrationLogged;
@@ -55,7 +55,7 @@ final class BlueMap3DHistoryBridge {
   private Method instanceRotationMethod;
   private Method instanceScaleMethod;
 
-  BlueMap3DHistoryBridge(Consumer<String> log) {
+  BlueMap3DHistoryBridge(LogSink log) {
     this.log = log;
   }
 
@@ -83,7 +83,7 @@ final class BlueMap3DHistoryBridge {
       allow.clear();
       if (!legacyProviderMigrationLogged) {
         legacyProviderMigrationLogged = true;
-        log.accept(
+        log.info(
             "Migrated legacy BlueMap3D history provider default to all recordable providers.");
       }
     }
@@ -106,7 +106,7 @@ final class BlueMap3DHistoryBridge {
             for (Object object : objects) snapshots.add(snapshot(object));
           } catch (ReflectiveOperationException | RuntimeException error) {
             complete = false;
-            log.accept(
+            log.warn(
                 "BlueMap3D provider '"
                     + providerId
                     + "' could not be sampled; preserving its previous object state: "
@@ -122,13 +122,13 @@ final class BlueMap3DHistoryBridge {
 
       if (!connectedLogged) {
         connectedLogged = true;
-        log.accept(
+        log.info(
             explicitProviderList
                 ? "BlueMap3D object-history bridge active for configured providers " + allow
                 : "BlueMap3D object-history bridge active for all recordable providers");
       }
     } catch (ReflectiveOperationException | RuntimeException error) {
-      log.accept("Cannot sample BlueMap3D object history: " + rootCause(error));
+      log.warn("Cannot sample BlueMap3D object history: " + rootCause(error));
     }
   }
 
@@ -267,7 +267,7 @@ final class BlueMap3DHistoryBridge {
       installMeshListener(api);
       return true;
     } catch (ReflectiveOperationException error) {
-      log.accept("BlueMap3D is not available; vehicle/object history is inactive.");
+      log.debug("BlueMap3D is not available; vehicle/object history is inactive.");
       return false;
     }
   }
@@ -278,7 +278,7 @@ final class BlueMap3DHistoryBridge {
       Object lifecycle = providerLifecycleMethod.invoke(provider);
       return lifecycle != null && Boolean.TRUE.equals(lifecycleRecordHistoryMethod.invoke(lifecycle));
     } catch (ReflectiveOperationException | RuntimeException error) {
-      log.accept("Could not read BlueMap3D provider lifecycle; recording it by default: " + rootCause(error));
+      log.warn("Could not read BlueMap3D provider lifecycle; recording it by default: " + rootCause(error));
       return true;
     }
   }
@@ -309,9 +309,9 @@ final class BlueMap3DHistoryBridge {
               });
       api.getMethod("addMeshPublicationListener", listenerType).invoke(null, listener);
       meshListener = listener;
-      log.accept("BlueMap3D geometry archive listener active.");
+      log.info("BlueMap3D geometry archive listener active.");
     } catch (ReflectiveOperationException error) {
-      log.accept(
+      log.warn(
           "BlueMap3D does not expose mesh publication events; object transforms will record, "
               + "but durable historical geometry needs the Player History BlueMap3D build.");
     }
@@ -340,7 +340,7 @@ final class BlueMap3DHistoryBridge {
 
       ObjectHistoryApi.archiveGeometry(provider, sourceId, version, mesh, atlas);
     } catch (Exception error) {
-      log.accept("Could not archive BlueMap3D geometry: " + rootCause(error));
+      log.warn("Could not archive BlueMap3D geometry: " + rootCause(error));
     }
   }
 

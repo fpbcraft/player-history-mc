@@ -29,7 +29,7 @@ public final class HistoryStore implements AutoCloseable {
   private final Path root;
   private final Registry registry;
   private final Options options;
-  private final Consumer<String> log;
+  private final LogSink log;
   private final ArrayBlockingQueue<Envelope> queue;
   private final Thread worker;
   private final Map<Integer, Point> last = new HashMap<>();
@@ -184,7 +184,7 @@ public final class HistoryStore implements AutoCloseable {
       written = new AtomicLong();
   public volatile long writerLatency;
 
-  public HistoryStore(Path root, Registry registry, Options options, Consumer<String> log)
+  public HistoryStore(Path root, Registry registry, Options options, LogSink log)
       throws IOException {
     this.root = root;
     this.registry = registry;
@@ -251,7 +251,7 @@ public final class HistoryStore implements AutoCloseable {
                         .orElse(0));
           }
       } catch (IOException e) {
-        log.accept("Cannot read newest chunk metadata: " + e);
+        log.warn("Cannot read newest chunk metadata: " + e);
       }
     }
     worker = new Thread(this::run, "player-history-writer");
@@ -270,7 +270,7 @@ public final class HistoryStore implements AutoCloseable {
     if (!queue.offer(new Envelope(List.copyOf(ps), List.copyOf(es), List.copyOf(ss), overflow))) {
       if (System.currentTimeMillis() - lastOverflowWarning > 5000) {
         lastOverflowWarning = System.currentTimeMillis();
-        log.accept("History queue full; recording gap begins (server thread will not block)");
+        log.warn("History queue full; recording gap begins (server thread will not block)");
       }
       overflow = true;
       dropped.incrementAndGet();
@@ -389,7 +389,7 @@ public final class HistoryStore implements AutoCloseable {
       states.close();
     } catch (Throwable e) {
       failure = e;
-      log.accept("History writer stopped after IO failure: " + e);
+      log.error("History writer stopped after IO failure: " + e);
       try {
         if (channel != null) channel.close();
         states.abort();
@@ -529,7 +529,7 @@ public final class HistoryStore implements AutoCloseable {
       try {
         states.publish(file, pub);
       } catch (IOException ex) {
-        log.accept("Skipping corrupt state chunk " + file + ": " + ex);
+        log.warn("Skipping corrupt state chunk " + file + ": " + ex);
       }
     }
     if (!backfill.isEmpty()) {
@@ -540,7 +540,7 @@ public final class HistoryStore implements AutoCloseable {
         publishedChunks.add(r.start());
         ActivityIndex.publish(pub, r.start(), options.duration, r.batch().points());
       } catch (IOException e) {
-        log.accept("Could not publish historical chunk " + f + ": " + e);
+        log.warn("Could not publish historical chunk " + f + ": " + e);
       }
     }
     if (channel == null && latest > 0 && System.currentTimeMillis() - lastFlush >= 5000)
@@ -571,12 +571,12 @@ public final class HistoryStore implements AutoCloseable {
               while (data.hasRemaining()) channel.write(data);
             });
         TemporaryChunkFiles.complete(file, read.start());
-        log.accept(
+        log.info(
             "Recovered history chunk "
                 + read.start()
                 + "; unfinished sessions closed at last durable sample");
       } catch (Exception error) {
-        log.accept("Quarantined corrupt history " + file + ": " + error);
+        log.warn("Quarantined corrupt history " + file + ": " + error);
         TemporaryChunkFiles.quarantine(file);
       }
     }
@@ -606,6 +606,6 @@ public final class HistoryStore implements AutoCloseable {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
-    if (worker.isAlive()) log.accept("History flush still running after 30 seconds");
+    if (worker.isAlive()) log.warn("History flush still running after 30 seconds");
   }
 }
