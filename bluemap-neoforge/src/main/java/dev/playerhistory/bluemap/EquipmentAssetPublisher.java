@@ -40,8 +40,8 @@ final class EquipmentAssetPublisher {
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
   private volatile CustomArmorAssetResolver customArmor;
-  private volatile ArmorCompatibilityConfig.Data armorCompatibility =
-      ArmorCompatibilityConfig.defaults();
+  private volatile EquipmentCompatibilityConfig.Data armorCompatibility =
+      EquipmentCompatibilityConfig.defaults();
   private volatile long nextScan;
 
   EquipmentAssetPublisher(Consumer<String> log) {
@@ -63,7 +63,7 @@ final class EquipmentAssetPublisher {
     processedModels.clear();
     processedArmor.clear();
     armorCompatibility =
-        ArmorCompatibilityConfig.load(Path.of("").toAbsolutePath().normalize(), log);
+        EquipmentCompatibilityConfig.load(Path.of("").toAbsolutePath().normalize(), log);
     nextScan = 0;
   }
 
