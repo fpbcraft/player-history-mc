@@ -179,7 +179,12 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     popupMarker.visible = true;
     const popupMarkerSet = new SetMarker("root");
     popupMarkerSet.add(popupMarker);
-    const nativePlayerMarker = { id: "native-player", isPlayerMarker: true, data: { position: new Vector() } };
+    const nativePlayerMarker = {
+      id: "native-player",
+      isPlayerMarker: true,
+      data: { position: new Vector() },
+      element: new Element(),
+    };
     const app = {
       popupMarker,
       popupMarkerSet,
@@ -388,6 +393,21 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     );
     followButton.onclick({ stopPropagation() {} });
     assert.equal(mapControls.data.followingPlayer, null);
+
+    app.mapViewer.controlsManager.distance = 100;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      "none",
+      "native BlueMap marker is hidden while the close-up 3D model is visible",
+    );
+    app.mapViewer.controlsManager.distance = 300;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      undefined,
+      "native BlueMap marker returns when zooming back out",
+    );
 
     adapter.dispose();
     assert.equal(
