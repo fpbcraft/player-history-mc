@@ -72,6 +72,7 @@ export class BlueMapAdapter {
   private following: number | null = null;
   private liveMode = false;
   private readonly playerUuids = new Map<number, string>();
+  private readonly hiddenNativePlayerElements = new Map<HTMLElement, string>();
   private popupOverride:
     | {
         marker: BlueMapPopupMarker;
@@ -354,6 +355,44 @@ export class BlueMapAdapter {
     }
   }
 
+  private restoreNativePlayerMarkers(): void {
+    for (const [element, display] of this.hiddenNativePlayerElements) {
+      element.style.display = display;
+    }
+    this.hiddenNativePlayerElements.clear();
+  }
+
+  private syncNativePlayerMarkers(
+    positions: readonly HistoryPoint[],
+    players: HistoryRegistry["players"],
+    hide: boolean,
+  ): void {
+    if (!hide) {
+      this.restoreNativePlayerMarkers();
+      return;
+    }
+
+    const visiblePlayers = new Set(positions.map((point) => point.player));
+    const keep = new Set<HTMLElement>();
+    for (const player of players) {
+      if (!player.uuid || !visiblePlayers.has(player.id)) continue;
+      const marker = this.app.playerMarkerManager?.getPlayerMarker?.(player.uuid);
+      const element = marker?.element;
+      if (!element) continue;
+      keep.add(element);
+      if (!this.hiddenNativePlayerElements.has(element)) {
+        this.hiddenNativePlayerElements.set(element, element.style.display);
+      }
+      element.style.display = "none";
+    }
+
+    for (const [element, display] of [...this.hiddenNativePlayerElements]) {
+      if (keep.has(element)) continue;
+      element.style.display = display;
+      this.hiddenNativePlayerElements.delete(element);
+    }
+  }
+
   private followPlayer(player: number): void {
     const c = this.app.mapViewer.controlsManager?.controls;
     const uuid = this.playerUuids.get(player);
@@ -432,7 +471,9 @@ export class BlueMapAdapter {
       this.playerIconMode = false;
     }
 
-    this.scene3d.setPlayersVisible(!this.playerIconMode);
+    const show3dPlayers = !this.playerIconMode;
+    this.scene3d.setPlayersVisible(show3dPlayers);
+    this.syncNativePlayerMarkers(positions, players, show3dPlayers && positions.length > 0);
 
     if (!this.playerIconMode) {
       this.clear(this.players);
@@ -729,6 +770,7 @@ export class BlueMapAdapter {
     this.bar.remove();
     this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
     this.following = null;
+    this.restoreNativePlayerMarkers();
     if (this.popupOverride) {
       const { marker, onMapInteraction, display, cubeVisible, visible } = this.popupOverride;
       if (onMapInteraction) marker.onMapInteraction = onMapInteraction;
