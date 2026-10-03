@@ -77,7 +77,7 @@ export const formatMinecraftTime = (dayTime: number): string => {
 
 export const minecraftDay = (dayTime: number): number => Math.floor(dayTime / 24_000) + 1;
 
-class WorldStatusController {
+export class WorldStatusController {
   private integration?: IntegrationMapping;
   private snapshot?: WorldStatusSnapshot;
   private fetchedAt = 0;
@@ -284,39 +284,40 @@ class WorldStatusController {
   }
 
   private updateLightingSwitch(): void {
-    const control = document.querySelector<HTMLButtonElement>(
+    const control = document.querySelector<HTMLElement>(
       ".player-history-game-time-sync",
     );
-    if (!control) return;
-    control.classList.toggle("active", this.enabled);
+    const input = control?.querySelector<HTMLInputElement>("input[type='checkbox']");
+    if (!control || !input) return;
+
+    input.checked = this.enabled;
     control.dataset.state = this.enabled ? "on" : "off";
-    control.setAttribute("aria-checked", this.enabled ? "true" : "false");
     const state = this.enabled ? "on" : "off";
-    control.setAttribute("aria-label", `Sync map lighting to server time: ${state}`);
+    input.setAttribute("aria-label", `Sync map lighting to server time: ${state}`);
     control.title = `Sync map lighting to Minecraft time · ${state}`;
   }
 
-  private ensureLightingSwitch(): HTMLButtonElement | null {
+  private ensureLightingSwitch(): HTMLElement | null {
     const bar = document.querySelector<HTMLElement>(".control-bar");
     if (!bar) return null;
 
     const time = this.ensureTimeDisplay();
-    let control = bar.querySelector<HTMLButtonElement>(
+    let control = bar.querySelector<HTMLElement>(
       ".player-history-game-time-sync",
     );
     if (!control) {
-      control = document.createElement("button");
-      control.type = "button";
+      control = document.createElement("label");
       control.className = "player-history-game-time-sync";
-      control.setAttribute("role", "switch");
       control.innerHTML = `
+        <span class="time-sync-label">Sync</span>
+        <input type="checkbox" role="switch">
         <span class="time-sync-track" aria-hidden="true">
           <span class="time-sync-thumb"></span>
         </span>`;
-      control.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.setEnabled(!this.enabled, true);
+
+      const input = control.querySelector<HTMLInputElement>("input");
+      input?.addEventListener("change", () => {
+        this.setEnabled(Boolean(input.checked), true);
       });
     }
 
