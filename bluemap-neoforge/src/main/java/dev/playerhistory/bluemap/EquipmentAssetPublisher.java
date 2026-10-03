@@ -232,7 +232,7 @@ final class EquipmentAssetPublisher {
               armor.getArmorTexture(
                   armor.getDefaultInstance(), null, armor.getType().getSlot(), layer, inner);
           if (override != null) textureFile = override;
-        } catch (RuntimeException error) {
+        } catch (RuntimeException | LinkageError error) {
           log.accept("Could not resolve per-item armor texture for " + item + ": " + error);
         }
         String texture = textureId(textureFile);
