@@ -5,12 +5,31 @@ import { BlueMapAdapter, eventColor, meterLevels, playerColor } from "../src/blu
 vi.mock("../src/history-scene3d.js", () => ({
   HistoryScene3D: class {
     root = { children: [], userData: {}, visible: true };
+    targets = new Map();
 
     raycastObjects() {
       return [];
     }
 
-    setPlayers() {}
+    setPlayers(positions) {
+      this.targets = new Map(
+        positions.map((point) => [
+          point.player,
+          {
+            position: {
+              x: point.x / 32,
+              y: point.y / 32,
+              z: point.z / 32,
+            },
+            userData: { historyPlayer: point.player },
+          },
+        ]),
+      );
+    }
+
+    playerTarget(player) {
+      return this.targets.get(player);
+    }
 
     setPlayersVisible() {}
 
@@ -147,8 +166,12 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     globalThis.innerWidth = 800;
     globalThis.innerHeight = 600;
     globalThis.cancelAnimationFrame = () => {};
+    const popupMarker = new Marker("bm-popup");
+    const popupMarkerSet = new SetMarker("root");
+    popupMarkerSet.add(popupMarker);
     const app = {
-      popupMarkerSet: new SetMarker("root"),
+      popupMarker,
+      popupMarkerSet,
       mapViewer: {
         markers: {},
         map: { data: { id: "world", mapDataRoot: "maps/world" } },
@@ -174,9 +197,24 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       },
     };
     const adapter = new BlueMapAdapter(app, api);
+    assert.equal(
+      app.popupMarkerSet.children.includes(popupMarker),
+      false,
+      "stock BlueMap block-position popup is detached",
+    );
+    const mapControls = {
+      data: { followingPlayer: null },
+      followPlayerMarker(marker) {
+        this.data.followingPlayer = marker;
+      },
+      stopFollowingPlayerMarker() {
+        this.data.followingPlayer = null;
+      },
+    };
     app.mapViewer.controlsManager = {
       distance: 300,
       position: new Vector(),
+      controls: mapControls,
       updateCamera() {
         this.updated = true;
       },
@@ -209,6 +247,28 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     image.onerror();
     assert.match(image.src, /^data:image\/svg\+xml,/);
     assert.equal(image.onerror, null);
+
+    assert.equal(adapter.playerBar.hidden, false);
+    assert.equal(adapter.playerBar.children.length, 1);
+    const followButton = adapter.playerBar.children[0];
+    assert.equal(followButton.title, "Test player");
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
+    assert.equal(followButton.attributes["aria-pressed"], "true");
+
+    head.element.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer, null);
+    assert.equal(followButton.attributes["aria-pressed"], "false");
+
+    followButton.onclick({ stopPropagation() {} });
+    mapControls.data.followingPlayer = null;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    assert.equal(
+      followButton.attributes["aria-pressed"],
+      "false",
+      "manual camera movement clears the active follow state",
+    );
+
     adapter.setPlayerVitals(1, { health: 17, maxHealth: 20 });
     const vitals = head.element.querySelector(".history-player-vitals");
     assert.equal(vitals.hidden, false);
