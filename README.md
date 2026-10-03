@@ -9,6 +9,8 @@ Install `player-history-recorder-<version>.jar` for recording. Add BlueMap and `
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 
+The BlueMap mod also publishes a tiny live world-status feed. The viewer shows the selected dimension's Minecraft time in the BlueMap control bar and can synchronize BlueMap lighting with that clock. Tick `0` displays as `06:00`; `doDaylightCycle=false` freezes the display, dimensions without skylight keep their configured lighting, and manual BlueMap lighting controls disable synchronization. This UI/world-state integration is owned here rather than by BlueMap3D patches.
+
 The viewer defaults to a three-hour range, live mode and one-minute trails. It includes playback speed, an activity histogram, Grafana-style relative/absolute time selection, persistent player selection, trails and heatmap. Ranges include **last hour, 3, 6 and 12 hours, today, yesterday, 24 and 48 hours, week, 30 days, last N days, all history and custom dates**. Historical players appear as local BlueMap skin heads, with names/details on hover or keyboard focus. Trails and event icons share each player's color. Trail hover places a dot at the selected segment position and interpolates that point's historical timestamp without crossing discontinuities.
 
 ## Build

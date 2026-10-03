@@ -1,0 +1,17 @@
+.control-bar .player-history-server-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.2em;
+  min-height: 2em;
+  padding: 0 0.55em;
+  box-sizing: border-box;
+  background: var(--theme-bg);
+  color: var(--theme-fg-light);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  pointer-events: auto;
+  cursor: default;
+  white-space: nowrap;
+}
