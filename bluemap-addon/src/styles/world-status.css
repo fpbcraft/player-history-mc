@@ -19,8 +19,8 @@
 .control-bar .player-history-game-time-sync {
   display: grid;
   place-items: center;
-  width: 2.15em;
-  min-width: 2.15em;
+  width: 3.15em;
+  min-width: 3.15em;
   min-height: 2em;
   padding: 0;
   border: 0;
@@ -28,45 +28,55 @@
   background: var(--theme-bg);
   color: var(--theme-fg-light);
   cursor: pointer;
-  opacity: 0.48;
+}
+
+.control-bar .player-history-game-time-sync .time-sync-track {
+  position: relative;
+  display: block;
+  width: 2.15em;
+  height: 1.15em;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-bg-light, #333) 82%, #000 18%);
   transition:
-    background-color 120ms ease,
-    color 120ms ease,
-    opacity 120ms ease,
-    box-shadow 120ms ease;
+    background-color 140ms ease,
+    border-color 140ms ease;
 }
 
-.control-bar .player-history-game-time-sync svg {
-  width: 1.35em;
-  height: 1.35em;
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.65;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.control-bar .player-history-game-time-sync .time-sync-sun {
-  fill: currentColor;
-  stroke-width: 1.25;
-}
-
-.control-bar .player-history-game-time-sync .time-sync-rays {
-  stroke-width: 1.35;
+.control-bar .player-history-game-time-sync .time-sync-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.12em;
+  width: 0.78em;
+  height: 0.78em;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateY(-50%);
+  transition:
+    left 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .control-bar .player-history-game-time-sync:hover,
 .control-bar .player-history-game-time-sync:focus-visible {
   color: var(--theme-fg);
-  opacity: 0.85;
 }
 
 .control-bar .player-history-game-time-sync.active {
-  background: color-mix(in srgb, var(--theme-bg-light, #333) 82%, #80b8ed 18%);
-  color: #d9ecff;
-  opacity: 1;
-  box-shadow: inset 0 -2px #80b8ed;
+  color: #eef7ff;
+}
+
+.control-bar .player-history-game-time-sync.active .time-sync-track {
+  border-color: #80b8ed;
+  background: #397eb8;
+}
+
+.control-bar .player-history-game-time-sync.active .time-sync-thumb {
+  left: 1.12em;
+  background: white;
+  box-shadow: 0 0 0 1px #0002;
 }
 
 @media (max-width: 600px) {
@@ -83,7 +93,7 @@
   }
 
   .control-bar .player-history-game-time-sync {
-    width: 2em;
-    min-width: 2em;
+    width: 2.8em;
+    min-width: 2.8em;
   }
 }
