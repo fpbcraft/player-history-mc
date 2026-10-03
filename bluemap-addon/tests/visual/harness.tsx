@@ -17,6 +17,9 @@ mountReplayPanelView(root);
 const section = requireElement<HTMLElement>(root, "section");
 section.hidden = false;
 requireElement<HTMLButtonElement>(root, '[name="open"]').hidden = true;
+if (matchMedia("(max-width: 600px)").matches) {
+  requireElement<HTMLButtonElement>(root, '[name="webchat"]').hidden = true;
+}
 
 const setText = (selector: string, value: string) => {
   requireElement<HTMLElement>(root, selector).textContent = value;
