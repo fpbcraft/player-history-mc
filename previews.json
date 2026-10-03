@@ -9,6 +9,15 @@
       "generatedAt": "2026-10-03T18:16:59.251Z"
     },
     {
+      "target": "pr/54",
+      "label": "PR #54",
+      "sha": "312d2cc9fb8d4d3b74a5c4403f88b739ea7c655c",
+      "runUrl": "https://github.com/fpbcraft/player-history-mc/actions/runs/37144881128",
+      "previewUrl": "https://fpbcraft.github.io/player-history-mc/pr/54/",
+      "generatedAt": "2026-10-03T18:37:54.651Z",
+      "prNumber": 54
+    },
+    {
       "target": "pr/53",
       "label": "PR #53",
       "sha": "b017254d53af1e7b5d65d41d7669a351708285ba",
