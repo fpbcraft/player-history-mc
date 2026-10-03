@@ -10,6 +10,10 @@ const requireElement = <T extends Element>(root: ParentNode, selector: string): 
   return element;
 };
 
+const appRoot = document.createElement("div");
+appRoot.id = "app";
+document.body.append(appRoot);
+
 const controlBar = document.createElement("div");
 controlBar.className = "control-bar";
 controlBar.innerHTML = `
@@ -26,7 +30,7 @@ controlBar.innerHTML = `
   <div class="pos-input">X: -862&nbsp;&nbsp; Z: -262</div>
   <div class="fixture-compass" aria-label="Compass">▲</div>
 `;
-document.body.append(controlBar);
+appRoot.append(controlBar);
 
 const followBar = document.createElement("div");
 followBar.className = "history-player-followbar";
