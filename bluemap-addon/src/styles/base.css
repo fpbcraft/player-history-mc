@@ -372,7 +372,7 @@ bluemap-player-replay .history-status {
 .history-player-followbar:empty {
   display: none;
 }
-.history-player-follow {
+.history-player-followbar > button {
   width: 34px;
   height: 34px;
   min-width: 34px;
@@ -383,16 +383,16 @@ bluemap-player-replay .history-status {
   box-shadow: 0 1px 4px #0008;
   cursor: pointer;
 }
-.history-player-follow:hover,
-.history-player-follow:focus-visible {
+.history-player-followbar > button:hover,
+.history-player-followbar > button:focus-visible {
   border-color: #ffffff99;
   outline: none;
 }
-.history-player-follow[aria-pressed="true"] {
+.history-player-followbar > button[aria-pressed="true"] {
   border-color: var(--history-accent, #80b8ed);
   box-shadow: 0 0 0 2px #80b8ed40, 0 1px 4px #0008;
 }
-.history-player-follow img {
+.history-player-followbar > button img {
   width: 100%;
   height: 100%;
   display: block;
