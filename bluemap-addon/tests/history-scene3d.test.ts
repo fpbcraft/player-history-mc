@@ -447,3 +447,30 @@ test("3D trails are depth tested and event anchors are instanced", () => {
   assert.equal(anchors.userData.historyKind, "events");
   assert.equal(anchors.matrices.length, 2);
 });
+
+
+test("3D player parts consume clicks and expose a follow target", () => {
+  let clicked: number | undefined;
+  const scene = new HistoryScene3D(
+    runtime(),
+    "https://map.example/player-history/skins/",
+    undefined,
+    (player) => {
+      clicked = player;
+    },
+  );
+  scene.setPlayers(
+    [{ player: 1, time: 1000, world: 0, x: 32, y: 64 * 32, z: 64, flags: 0 }],
+    new Map([[1, "Alex"]]),
+    [{ id: 1, uuid: "", name: "Alex" }],
+  );
+
+  const playersRoot = scene.root.children?.[2] as O;
+  const avatar = playersRoot.children[0] as O;
+  const head = (avatar.children[0] as O).children[0] as O;
+  const headMesh = head.children[0] as Mesh;
+
+  assert.equal(scene.playerTarget(1), avatar);
+  assert.equal(headMesh.onClick?.({}), true);
+  assert.equal(clicked, 1);
+});
