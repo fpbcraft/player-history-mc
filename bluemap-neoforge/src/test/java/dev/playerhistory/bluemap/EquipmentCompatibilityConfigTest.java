@@ -25,6 +25,9 @@ final class EquipmentCompatibilityConfigTest {
           },
           "textureAliases": {
             "example:odd_set": "shared_texture"
+          },
+          "defaultArmorColors": {
+            "example:odd_set": "0x123456"
           }
         }
         """);
@@ -35,6 +38,8 @@ final class EquipmentCompatibilityConfigTest {
     assertEquals("custom_berserker", data.geometryFamily("rogues", "berserker_armor"));
     assertEquals("shared_model", data.geometryFamily("example", "odd_set"));
     assertEquals("shared_texture", data.textureFamily("example", "odd_set"));
+    assertEquals(0x123456, data.defaultArmorColor("example", "odd_set"));
+    assertEquals(0xA06540, data.defaultArmorColor("immersive_armors", "robe"));
     assertEquals("wizard_robes", data.geometryFamily("wizards", "fire_robe"));
     assertEquals("head", data.wearableItems().get("create:goggles").parent());
     assertEquals("torso", data.wearableSlots().get("back").parent());
