@@ -62,12 +62,30 @@ Renderer-specific relationships that cannot be inferred from resource filenames 
   },
   "textureAliases": {
     "examplemod:crimson_armor": "shared_crimson_texture"
+  },
+  "wearableSlots": {
+    "back": {
+      "parent": "torso",
+      "position": [0.0, -0.36, -0.28],
+      "rotationDegrees": [0.0, 180.0, 0.0],
+      "scale": 0.78
+    }
+  },
+  "wearableItems": {
+    "examplemod:*_backpack": {
+      "parent": "torso",
+      "position": [0.0, -0.36, -0.28],
+      "rotationDegrees": [0.0, 180.0, 0.0],
+      "scale": 0.78
+    }
   }
 }
 ```
 
-Keys are `<namespace>:<item-family>`; values are resource-family names without `geo/`, `textures/armor/` or file extensions. Item families strip the standard `_helmet`, `_chestplate`, `_leggings`, `_boots`, `_head`, `_chest`, `_legs` and `_feet` suffixes.
+Armor alias keys are `<namespace>:<item-family>`; values are resource-family names without `geo/`, `textures/armor/` or file extensions. Item families strip the standard `_helmet`, `_chestplate`, `_leggings`, `_boots`, `_head`, `_chest`, `_legs` and `_feet` suffixes.
 
-Use compatibility mappings only when a mod deliberately reuses a differently named geometry or texture. Do not add mappings for armor that exposes the correct texture through NeoForge's `ArmorItem#getArmorTexture`; Player History honors that hook directly. A server restart or BlueMap integration restart reloads the override file.
+Curios integration is optional and reflective: the recorder records visible Curios as `curio:<slot>:<index>` when Curios is installed, including cosmetic-slot overrides. The viewer first checks `wearableItems` (exact IDs and `*` wildcard patterns), then falls back to the matching Curios identifier in `wearableSlots`. Supported parents are `head`, `torso`, `rightArm`, `leftArm`, `rightLeg`, and `leftLeg`. Positions are player-model units and rotations are degrees. Built-ins include common Curios attachment points, Create Engineer's Goggles, and Sophisticated Backpacks.
+
+Use compatibility mappings only when a mod deliberately reuses a differently named geometry/texture or needs a nonstandard wearable attachment. Do not add mappings for armor that exposes the correct texture through NeoForge's `ArmorItem#getArmorTexture`; Player History honors that hook directly. A server restart or BlueMap integration restart reloads the override file.
 
 When a newly observed armor item has not yet been published, the bridge retries unresolved armor descriptors every five seconds. The browser keeps the gray fallback only until a usable descriptor appears. This avoids permanently caching a transient miss while still leaving unsupported client-code-only embellishments as a graceful fallback.
