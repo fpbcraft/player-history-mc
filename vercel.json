@@ -1,28 +1,33 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm ci --prefix bluemap-addon",
-  "buildCommand": "npm run build --prefix bluemap-addon",
+  "installCommand": "npm --prefix bluemap-addon ci",
+  "buildCommand": "npm --prefix bluemap-addon run build",
   "outputDirectory": "bluemap-addon/dist",
-  "routes": [
+  "rewrites": [
     {
-      "src": "/player-history/player-history(?:-[^/]+)?\\.js",
-      "dest": "/player-history.js"
+      "source": "/player-history/player-history.js",
+      "destination": "/player-history.js"
     },
     {
-      "src": "/player-history/player-history(?:-[^/]+)?\\.css",
-      "dest": "/player-history.css"
+      "source": "/player-history/player-history-:version.js",
+      "destination": "/player-history.js"
     },
     {
-      "handle": "filesystem"
+      "source": "/player-history/player-history.css",
+      "destination": "/player-history.css"
     },
     {
-      "src": "/(.*)",
-      "dest": "https://map.fpbcraft.com/$1"
+      "source": "/player-history/player-history-:version.css",
+      "destination": "/player-history.css"
+    },
+    {
+      "source": "/:path*",
+      "destination": "https://map.fpbcraft.com/:path*"
     }
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/:path*",
       "headers": [
         {
           "key": "x-vercel-enable-rewrite-caching",
