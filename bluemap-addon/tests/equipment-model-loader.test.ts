@@ -426,3 +426,92 @@ test("equipment loader preserves segmented armor deformation metadata", async ()
   assert.ok(armor.layers[0]?.overlayTexture);
 });
 
+
+
+test("equipment loader resolves exact, wildcard, and slot wearable transforms", async () => {
+  const requested: string[] = [];
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async (input) => {
+      requested.push(String(input));
+      return {
+        ok: true,
+        json: async () => ({
+          format: 1,
+          slots: {
+            ring: {
+              parent: "rightArm",
+              position: [0, -0.7, 0],
+              rotationDegrees: [0, 0, 0],
+              scale: 0.2,
+            },
+          },
+          items: {
+            "create:goggles": {
+              parent: "head",
+              position: [0, 0.25, 0],
+              rotationDegrees: [0, 0, 180],
+              scale: 0.625,
+            },
+            "sophisticatedbackpacks:*_backpack": {
+              parent: "torso",
+              position: [0, -0.36, -0.28],
+              rotationDegrees: [0, 180, 0],
+              scale: 0.78,
+            },
+          },
+        }),
+      };
+    },
+  );
+
+  const goggles = await loader.wearable("head", "create:goggles");
+  assert.ok(goggles);
+  assert.equal(goggles.parent, "head");
+  assert.equal(goggles.scale, 0.625);
+
+  const backpack = await loader.wearable(
+    "back",
+    "sophisticatedbackpacks:diamond_backpack",
+  );
+  assert.ok(backpack);
+  assert.equal(backpack.parent, "torso");
+  assert.deepEqual(backpack.position, [0, -0.36, -0.28]);
+
+  const ring = await loader.wearable("ring", "example:plain_ring");
+  assert.ok(ring);
+  assert.equal(ring.parent, "rightArm");
+  assert.equal(requested.length, 1, "wearable config is cached");
+});
+
+test("equipment loader retries a wearable config that was not published yet", async () => {
+  let requests = 0;
+  const loader = new EquipmentModelLoader(
+    runtime(),
+    "https://map.example/player-history/equipment/",
+    async () => {
+      requests++;
+      if (requests === 1) return { ok: false, json: async () => ({}) };
+      return {
+        ok: true,
+        json: async () => ({
+          format: 1,
+          slots: {
+            head: {
+              parent: "head",
+              position: [0, 0.25, 0],
+              rotationDegrees: [0, 0, 0],
+              scale: 0.7,
+            },
+          },
+          items: {},
+        }),
+      };
+    },
+  );
+
+  assert.equal(await loader.wearable("head", "example:goggles"), null);
+  assert.ok(await loader.wearable("head", "example:goggles"));
+  assert.equal(requests, 2);
+});
