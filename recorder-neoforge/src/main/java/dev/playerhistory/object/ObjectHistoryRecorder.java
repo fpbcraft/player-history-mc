@@ -2,6 +2,7 @@ package dev.playerhistory.object;
 
 import dev.playerhistory.core.ChunkChannelIO;
 import dev.playerhistory.core.JsonFiles;
+import LogSink;
 import dev.playerhistory.core.PublishedChunkIndex;
 import dev.playerhistory.core.RetentionFiles;
 import dev.playerhistory.core.TemporaryChunkFiles;
@@ -58,7 +59,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private final ObjectRegistry registry;
   private final ObjectGeometryArchive geometryArchive;
   private final Options options;
-  private final dev.playerhistory.core.LogSink log;
+  private final LogSink log;
   private final ArrayBlockingQueue<Envelope> queue;
   private final Thread worker;
   private final Map<String, Map<String, Tracked>> tracked = new HashMap<>();
@@ -89,7 +90,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   public final AtomicLong skipped = new AtomicLong();
   public final AtomicLong bytes = new AtomicLong();
 
-  public ObjectHistoryRecorder(Path root, Options options, dev.playerhistory.core.LogSink log) throws IOException {
+  public ObjectHistoryRecorder(Path root, Options options, LogSink log) throws IOException {
     this.root = root;
     this.options = options;
     this.log = log;
