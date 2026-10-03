@@ -104,8 +104,8 @@ class WorldStatusController {
     );
 
     const observer = new MutationObserver(() => {
-      this.ensureLightingSwitch();
       this.ensureTimeDisplay();
+      this.ensureLightingSwitch();
     });
     observer.observe(document.getElementById("app") ?? document.body, {
       childList: true,
@@ -285,39 +285,43 @@ class WorldStatusController {
   }
 
   private updateLightingSwitch(): void {
-    const control = document.querySelector<HTMLElement>(".player-history-game-time-sync");
+    const control = document.querySelector<HTMLButtonElement>(
+      ".player-history-game-time-sync",
+    );
     if (!control) return;
-    control.querySelector(".switch")?.classList.toggle("on", this.enabled);
-    control.setAttribute("aria-checked", this.enabled ? "true" : "false");
+    control.classList.toggle("active", this.enabled);
+    control.setAttribute("aria-pressed", this.enabled ? "true" : "false");
+    control.title = this.enabled
+      ? "Minecraft time lighting sync is on"
+      : "Minecraft time lighting sync is off";
   }
 
-  private ensureLightingSwitch(): void {
-    const group = this.lightingGroup();
-    if (!group) return;
-    if (group.querySelector(".player-history-game-time-sync")) {
-      this.updateLightingSwitch();
-      return;
+  private ensureLightingSwitch(): HTMLButtonElement | null {
+    const bar = document.querySelector<HTMLElement>(".control-bar");
+    if (!bar) return null;
+
+    let control = bar.querySelector<HTMLButtonElement>(
+      ".player-history-game-time-sync",
+    );
+    if (!control) {
+      control = document.createElement("button");
+      control.type = "button";
+      control.className = "player-history-game-time-sync";
+      control.setAttribute("aria-label", "Sync map lighting with Minecraft time");
+      control.textContent = "↻";
+      control.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.setEnabled(!this.enabled, true);
+      });
+
+      const dayNight = bar.querySelector(".day-night-switch");
+      const position = bar.querySelector(".pos-input");
+      bar.insertBefore(control, dayNight ?? position ?? null);
     }
 
-    const content = group.querySelector<HTMLElement>(".content");
-    if (!content) return;
-
-    const control = document.createElement("div");
-    control.className = "switch-button player-history-game-time-sync";
-    control.setAttribute("role", "switch");
-    control.title = "Use the selected Minecraft world's clock for BlueMap lighting.";
-
-    const label = document.createElement("div");
-    label.className = "label";
-    label.textContent = "Sync lighting with in-game time";
-
-    const handle = document.createElement("div");
-    handle.className = "switch";
-
-    control.append(label, handle);
-    control.addEventListener("click", () => this.setEnabled(!this.enabled, true));
-    content.append(control);
     this.updateLightingSwitch();
+    return control;
   }
 
   private onManualLightingPointerDown(event: PointerEvent): void {
