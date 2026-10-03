@@ -104,9 +104,6 @@ export class BlueMapAdapter {
 
     this.playerBar = document.createElement("div");
     this.playerBar.className = "history-player-followbar";
-    this.playerBar.setAttribute("role", "toolbar");
-    this.playerBar.setAttribute("aria-label", "Players");
-    this.playerBar.hidden = true;
     document.body.append(this.playerBar);
 
     this.tooltip = document.createElement("div");
@@ -325,12 +322,9 @@ export class BlueMapAdapter {
   }
 
   private syncFollowButtons(): void {
-    for (const child of Array.from(this.playerBar.children)) {
+    for (const child of this.playerBar.children) {
       const button = child as HTMLButtonElement;
-      button.setAttribute(
-        "aria-pressed",
-        String(Number(button.dataset.player) === this.followingPlayer),
-      );
+      button.ariaPressed = String(Number(button.dataset.player) === this.followingPlayer);
     }
   }
 
@@ -353,37 +347,26 @@ export class BlueMapAdapter {
     names: ReadonlyMap<number, string>,
     players: HistoryRegistry["players"],
   ): void {
-    const ids = [...new Set(positions.map((point) => point.player))];
-    const key = `${this.mapId ?? ""}:${ids.join(",")}`;
+    const key = `${this.mapId ?? ""}:${positions.map((point) => point.player).join(",")}`;
     if (this.playerBar.dataset.players !== key) {
       this.playerBar.dataset.players = key;
       this.playerBar.replaceChildren();
-      for (const player of ids) {
+      for (const { player } of positions) {
         const button = document.createElement("button");
-        button.type = "button";
         button.className = "history-player-follow";
         button.dataset.player = String(player);
-        const name = names.get(player) ?? String(player);
-        button.title = name;
-        button.setAttribute("aria-label", `Follow ${name}`);
+        button.title = names.get(player) ?? String(player);
         button.onclick = (event) => {
           event.stopPropagation();
           this.followPlayer(player);
         };
-
         const image = document.createElement("img");
-        image.alt = "";
-        image.draggable = false;
         image.src = this.playerHeadUrl(player, players);
-        image.onerror = () => {
-          image.onerror = null;
-          image.src = FALLBACK_HEAD;
-        };
+        image.onerror = () => (image.src = FALLBACK_HEAD);
         button.append(image);
         this.playerBar.append(button);
       }
     }
-    this.playerBar.hidden = ids.length === 0;
     this.syncFollowButtons();
   }
 
@@ -393,15 +376,13 @@ export class BlueMapAdapter {
     players: HistoryRegistry["players"] = [],
   ): void {
     this.scene3d.setPlayers(positions, names, players);
-    if (this.followingPlayer !== null) {
-      const controls = this.app.mapViewer.controlsManager?.controls;
-      const target = this.scene3d.playerTarget(this.followingPlayer);
-      if (!target) {
-        controls?.stopFollowingPlayerMarker?.();
-        this.followingPlayer = null;
-      } else if (controls?.data?.followingPlayer == null) {
-        this.followingPlayer = null;
-      }
+    if (
+      this.followingPlayer !== null &&
+      (!positions.some((point) => point.player === this.followingPlayer) ||
+        this.app.mapViewer.controlsManager?.controls?.data?.followingPlayer == null)
+    ) {
+      this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
+      this.followingPlayer = null;
     }
     this.updatePlayerBar(positions, names, players);
 
