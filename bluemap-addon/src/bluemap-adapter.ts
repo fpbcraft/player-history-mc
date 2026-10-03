@@ -57,8 +57,6 @@ export class BlueMapAdapter {
   readonly raycaster: Raycaster;
   readonly scene3d: HistoryScene3D;
   readonly playerBar: HTMLDivElement;
-  readonly playerButtons = new Map<number, HTMLButtonElement>();
-  readonly playerHeadImages = new Map<number, HTMLImageElement>();
   readonly eventMarkers = new Map<string, HtmlMarker>();
   nextEventId = 0;
   hoverActive = false;
@@ -319,55 +317,35 @@ export class BlueMapAdapter {
   }
   private playerHeadUrl(
     player: number,
-    players: HistoryRegistry["players"] = [],
+    players: HistoryRegistry["players"],
   ): string {
     const uuid = players.find((entry) => entry.id === player)?.uuid;
     const root = this.app.mapViewer.map?.data?.mapDataRoot;
     return uuid && root ? `${root}/assets/playerheads/${uuid}.png` : FALLBACK_HEAD;
   }
 
-  private syncFollowingState(): void {
-    if (this.followingPlayer === null) return;
-    const controls = this.app.mapViewer.controlsManager?.controls;
-    const target = this.scene3d.playerTarget(this.followingPlayer);
-    if (!target) {
-      controls?.stopFollowingPlayerMarker?.();
-      this.followingPlayer = null;
-      return;
-    }
-    if (controls?.data && controls.data.followingPlayer == null)
-      this.followingPlayer = null;
-  }
-
-  private syncFollowUi(): void {
-    for (const [player, button] of this.playerButtons) {
-      button.setAttribute("aria-pressed", String(player === this.followingPlayer));
-    }
-    for (const marker of this.players.markers.values()) {
-      const player = Number(marker.element.dataset.player);
-      marker.element.setAttribute(
+  private syncFollowButtons(): void {
+    for (const child of Array.from(this.playerBar.children)) {
+      const button = child as HTMLButtonElement;
+      button.setAttribute(
         "aria-pressed",
-        String(Number.isFinite(player) && player === this.followingPlayer),
+        String(Number(button.dataset.player) === this.followingPlayer),
       );
     }
   }
 
-  followPlayer(player: number): boolean {
+  private followPlayer(player: number): void {
     const controls = this.app.mapViewer.controlsManager?.controls;
     const target = this.scene3d.playerTarget(player);
-    if (!controls?.followPlayerMarker || !target) return false;
-
+    if (!controls?.followPlayerMarker || !target) return;
     if (this.followingPlayer === player && controls.data?.followingPlayer != null) {
       controls.stopFollowingPlayerMarker?.();
       this.followingPlayer = null;
-      this.syncFollowUi();
-      return true;
+    } else {
+      controls.followPlayerMarker(target);
+      this.followingPlayer = player;
     }
-
-    controls.followPlayerMarker(target);
-    this.followingPlayer = player;
-    this.syncFollowUi();
-    return true;
+    this.syncFollowButtons();
   }
 
   private updatePlayerBar(
@@ -375,60 +353,38 @@ export class BlueMapAdapter {
     names: ReadonlyMap<number, string>,
     players: HistoryRegistry["players"],
   ): void {
-    const keep = new Set<number>();
-    for (const point of positions) {
-      if (keep.has(point.player)) continue;
-      keep.add(point.player);
-
-      let button = this.playerButtons.get(point.player);
-      let image = this.playerHeadImages.get(point.player);
-      if (!button || !image) {
-        button = document.createElement("button");
+    const ids = [...new Set(positions.map((point) => point.player))];
+    const key = `${this.mapId ?? ""}:${ids.join(",")}`;
+    if (this.playerBar.dataset.players !== key) {
+      this.playerBar.dataset.players = key;
+      this.playerBar.replaceChildren();
+      for (const player of ids) {
+        const button = document.createElement("button");
         button.type = "button";
         button.className = "history-player-follow";
+        button.dataset.player = String(player);
+        const name = names.get(player) ?? String(player);
+        button.title = name;
+        button.setAttribute("aria-label", `Follow ${name}`);
         button.onclick = (event) => {
           event.stopPropagation();
-          this.followPlayer(point.player);
+          this.followPlayer(player);
         };
 
-        const createdImage = document.createElement("img");
-        createdImage.alt = "";
-        createdImage.draggable = false;
-        createdImage.onerror = () => {
-          createdImage.onerror = null;
-          createdImage.src = FALLBACK_HEAD;
+        const image = document.createElement("img");
+        image.alt = "";
+        image.draggable = false;
+        image.src = this.playerHeadUrl(player, players);
+        image.onerror = () => {
+          image.onerror = null;
+          image.src = FALLBACK_HEAD;
         };
-        image = createdImage;
-        button.append(createdImage);
-        this.playerButtons.set(point.player, button);
-        this.playerHeadImages.set(point.player, createdImage);
+        button.append(image);
         this.playerBar.append(button);
       }
-
-      const name = names.get(point.player) ?? String(point.player);
-      const source = this.playerHeadUrl(point.player, players);
-      const currentImage = image;
-      if (currentImage.dataset.historySource !== source) {
-        currentImage.dataset.historySource = source;
-        currentImage.src = source;
-        currentImage.onerror = () => {
-          currentImage.onerror = null;
-          currentImage.src = FALLBACK_HEAD;
-        };
-      }
-      button.title = name;
-      button.setAttribute("aria-label", `Follow ${name}`);
     }
-
-    for (const [player, button] of this.playerButtons) {
-      if (keep.has(player)) continue;
-      button.remove();
-      this.playerButtons.delete(player);
-      this.playerHeadImages.delete(player);
-    }
-
-    this.playerBar.hidden = keep.size === 0;
-    this.syncFollowUi();
+    this.playerBar.hidden = ids.length === 0;
+    this.syncFollowButtons();
   }
 
   setPlayers(
@@ -437,7 +393,16 @@ export class BlueMapAdapter {
     players: HistoryRegistry["players"] = [],
   ): void {
     this.scene3d.setPlayers(positions, names, players);
-    this.syncFollowingState();
+    if (this.followingPlayer !== null) {
+      const controls = this.app.mapViewer.controlsManager?.controls;
+      const target = this.scene3d.playerTarget(this.followingPlayer);
+      if (!target) {
+        controls?.stopFollowingPlayerMarker?.();
+        this.followingPlayer = null;
+      } else if (controls?.data?.followingPlayer == null) {
+        this.followingPlayer = null;
+      }
+    }
     this.updatePlayerBar(positions, names, players);
 
     const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
@@ -506,10 +471,6 @@ export class BlueMapAdapter {
         marker.element.dataset.historyTooltip,
       );
       marker.element.style.borderColor = playerColor(p.player);
-      marker.element.setAttribute(
-        "aria-pressed",
-        String(p.player === this.followingPlayer),
-      );
       marker.position.set(p.x / 32, p.y / 32, p.z / 32);
     }
 
