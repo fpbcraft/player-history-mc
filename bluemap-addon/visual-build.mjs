@@ -80,6 +80,11 @@ await writeFile(
       font-size: 12px;
       letter-spacing: .02em;
     }
+    #app {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
     .control-bar {
       position: fixed;
       z-index: 30;
@@ -111,6 +116,7 @@ await writeFile(
       width: 48px;
       min-width: 48px;
       font-size: 20px;
+      pointer-events: auto;
     }
     .pos-input {
       flex: 1 1 auto;
