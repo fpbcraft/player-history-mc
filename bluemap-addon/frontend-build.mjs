@@ -27,7 +27,10 @@ async function projectVersion() {
     .sort((left, right) =>
       right[0] - left[0] || right[1] - left[1] || right[2] - left[2],
     );
-  if (!versions.length) throw new Error("Could not determine stable release tag");
+  // Hosted/shallow Git checkouts (for example Vercel) may not contain release tags.
+  // The SHA still gives the frontend an immutable cache-busting version; normal CI and
+  // release builds continue to derive the dev version from the latest stable tag.
+  if (!versions.length) return `0.0.0-dev.${sha}`;
   return `${versions[0].join(".")}-dev.${sha}`;
 }
 
