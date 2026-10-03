@@ -29,6 +29,19 @@ export type ArmorParent =
   | "leftLeg";
 export type ArmorSlot = "head" | "chest" | "legs" | "feet";
 
+export interface WearableTransform {
+  parent: ArmorParent;
+  position: readonly [number, number, number];
+  rotationDegrees: readonly [number, number, number];
+  scale: number;
+}
+
+interface PublishedWearableConfig {
+  format: 1;
+  slots: Record<string, WearableTransform>;
+  items: Record<string, WearableTransform>;
+}
+
 interface PublishedArmorLayer {
   texture: string;
   overlayTexture?: string | null;
@@ -230,6 +243,74 @@ const parseArmorModel = (value: unknown, item: string): PublishedArmorModel | nu
   return null;
 };
 
+const parseVector3 = (value: unknown): [number, number, number] | null =>
+  Array.isArray(value) &&
+  value.length === 3 &&
+  value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
+    ? [value[0] as number, value[1] as number, value[2] as number]
+    : null;
+
+const parseWearable = (value: unknown): WearableTransform | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (
+    typeof input.parent !== "string" ||
+    !ARMOR_PARENTS.has(input.parent as ArmorParent) ||
+    typeof input.scale !== "number" ||
+    !Number.isFinite(input.scale) ||
+    input.scale <= 0 ||
+    input.scale > 4
+  )
+    return null;
+  const position = parseVector3(input.position);
+  const rotationDegrees = parseVector3(input.rotationDegrees);
+  if (!position || !rotationDegrees) return null;
+  return {
+    parent: input.parent as ArmorParent,
+    position,
+    rotationDegrees,
+    scale: input.scale,
+  };
+};
+
+const parseWearableMap = (value: unknown): Record<string, WearableTransform> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const result: Record<string, WearableTransform> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    const wearable = parseWearable(raw);
+    if (!wearable) return null;
+    result[key] = wearable;
+  }
+  return result;
+};
+
+const parseWearableConfig = (value: unknown): PublishedWearableConfig | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (input.format !== 1) return null;
+  const slots = parseWearableMap(input.slots);
+  const items = parseWearableMap(input.items);
+  return slots && items ? { format: 1, slots, items } : null;
+};
+
+const wildcardMatch = (pattern: string, value: string): boolean => {
+  if (!pattern.includes("*")) return pattern === value;
+  const parts = pattern.split("*");
+  let cursor = 0;
+  const first = parts[0] ?? "";
+  if (first && !value.startsWith(first)) return false;
+  cursor = first.length;
+  for (let index = 1; index < parts.length - 1; index++) {
+    const part = parts[index] ?? "";
+    if (!part) continue;
+    const found = value.indexOf(part, cursor);
+    if (found < 0) return false;
+    cursor = found + part.length;
+  }
+  const last = parts[parts.length - 1] ?? "";
+  return !last || value.slice(cursor).endsWith(last);
+};
+
 const parseModel = (value: unknown, item: string): PublishedItemModel | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const model = value as Record<string, unknown>;
@@ -269,6 +350,7 @@ export class EquipmentModelLoader {
   private readonly models = new Map<string, Promise<PublishedItemModel | null>>();
   private readonly armorModels = new Map<string, Promise<PublishedArmorModel | null>>();
   private readonly textures = new Map<string, Promise<Texture | null>>();
+  private wearableConfig?: Promise<PublishedWearableConfig | null>;
   private readonly textureLoader: InstanceType<BlueMapRuntime["Three"]["TextureLoader"]>;
 
   constructor(
@@ -287,6 +369,18 @@ export class EquipmentModelLoader {
     this.textures.clear();
     this.models.clear();
     this.armorModels.clear();
+    this.wearableConfig = undefined;
+  }
+
+  async wearable(slot: string, item: string): Promise<WearableTransform | null> {
+    const config = await this.wearables();
+    if (!config) return null;
+    const exact = config.items[item];
+    if (exact) return exact;
+    for (const [pattern, transform] of Object.entries(config.items)) {
+      if (pattern.includes("*") && wildcardMatch(pattern, item)) return transform;
+    }
+    return config.slots[slot] ?? null;
   }
 
   async armor(item: string): Promise<LoadedArmorModel | null> {
@@ -366,6 +460,18 @@ export class EquipmentModelLoader {
       for (const geometry of geometries) geometry.dispose();
       return null;
     }
+  }
+
+  private wearables(): Promise<PublishedWearableConfig | null> {
+    if (this.wearableConfig) return this.wearableConfig;
+    const url = new URL("wearables.json", this.base);
+    if (this.assetVersion) url.searchParams.set("v", this.assetVersion);
+    this.wearableConfig = this.fetcher(url)
+      .then(async (response) =>
+        response.ok ? parseWearableConfig(await response.json()) : null,
+      )
+      .catch(() => null);
+    return this.wearableConfig;
   }
 
   private armorModel(item: string): Promise<PublishedArmorModel | null> {
