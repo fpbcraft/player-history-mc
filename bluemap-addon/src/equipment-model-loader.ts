@@ -470,7 +470,11 @@ export class EquipmentModelLoader {
       .then(async (response) =>
         response.ok ? parseWearableConfig(await response.json()) : null,
       )
-      .catch(() => null);
+      .catch(() => null)
+      .then((config) => {
+        if (!config) this.wearableConfig = undefined;
+        return config;
+      });
     return this.wearableConfig;
   }
 
