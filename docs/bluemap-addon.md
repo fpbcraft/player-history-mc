@@ -49,11 +49,11 @@ Item pickup/drop, block place/break and container-open are hidden by default in 
 The History panel remains fully expanded while open. Desktop playback controls share the timeline row; mobile places the same controls below the timeline in back, play, forward, NOW and speed order. Mobile spacing and widths are reduced to leave more of the map visible.
 
 
-## Modded armor compatibility
+## Modded equipment compatibility
 
 Player History resolves ordinary armor through Minecraft/NeoForge's armor material and per-item armor texture APIs. It also recognizes resource-backed custom humanoid geometry and segmented armor textures used by several armor mods.
 
-Renderer-specific relationships that cannot be inferred from resource filenames are data-driven. Built-in mappings ship in the viewer JAR. Server owners can add or override mappings with `config/playerhistory_bluemap-armor.json`:
+Renderer-specific relationships that cannot be inferred from resource filenames are data-driven. Built-in mappings ship in the viewer JAR. Server owners can add or override mappings with `config/playerhistory_bluemap-equipment.json`:
 
 ```json
 {
