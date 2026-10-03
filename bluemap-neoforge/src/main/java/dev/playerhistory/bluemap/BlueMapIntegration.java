@@ -48,6 +48,7 @@ public final class BlueMapIntegration {
   private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
   private final EquipmentAssetPublisher equipment = new EquipmentAssetPublisher(log);
   private final ServerOverlayPublisher serverOverlays = new ServerOverlayPublisher(log);
+  private final WorldStatusPublisher worldStatus = new WorldStatusPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
@@ -75,6 +76,7 @@ public final class BlueMapIntegration {
                     skins.disable();
                     equipment.disable();
                     serverOverlays.stop();
+                    worldStatus.stop();
                   });
     } catch (Exception ex) {
       log.warn("Cannot connect to BlueMap API: " + ex);
@@ -95,6 +97,7 @@ public final class BlueMapIntegration {
     objectHistory.reset();
     equipment.disable();
     serverOverlays.stop();
+    worldStatus.stop();
     server = null;
     worldRoot = null;
     levels.clear();
@@ -106,6 +109,7 @@ public final class BlueMapIntegration {
     skins.tick(event.getServer(), worldRoot);
     equipment.tick(worldRoot);
     serverOverlays.tick(event.getServer());
+    worldStatus.tick(event.getServer());
   }
 
   private static Object call(
@@ -130,6 +134,16 @@ public final class BlueMapIntegration {
           (Set<String>) manager.getClass().getMethod("getScripts").invoke(manager);
       Set<String> styles =
           (Set<String>) manager.getClass().getMethod("getStyles").invoke(manager);
+
+      // Game-time UI originally shipped from bluemap3d-patches. Player History now owns it;
+      // remove the persisted registration and old web files so the two runtimes cannot coexist.
+      scripts.remove("assets/bluemap3d/game-time-sync.js");
+      Path webRoot = assetRoot.getParent();
+      if (webRoot != null) {
+        Files.deleteIfExists(webRoot.resolve("assets/bluemap3d/game-time-sync.js"));
+        Files.deleteIfExists(webRoot.resolve("assets/bluemap3d/game-time-sync.core.js"));
+        Files.deleteIfExists(webRoot.resolve("assets/bluemap3d/game-time.json"));
+      }
 
       scripts.removeIf(
           url ->
@@ -175,7 +189,10 @@ public final class BlueMapIntegration {
       equipment.configure(webRoot, worldRoot);
       Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
-      if (server != null) serverOverlays.start(server, webRoot);
+      if (server != null) {
+        serverOverlays.start(server, webRoot);
+        worldStatus.start(server, webRoot);
+      }
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);
