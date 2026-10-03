@@ -16,6 +16,7 @@ import {
   type BuiltEquipmentModel,
   EquipmentModelLoader,
   type LoadedArmorModel,
+  type WearableTransform,
 } from "./equipment-model-loader.js";
 import { eventDetails } from "./telemetry.js";
 import type {
@@ -1044,7 +1045,7 @@ export class HistoryScene3D {
   private attachWearableModel(
     avatar: PlayerAvatar,
     model: BuiltEquipmentModel,
-    transform: import("./equipment-model-loader.js").WearableTransform,
+    transform: WearableTransform,
     name: string,
   ): void {
     model.root.name = name;
