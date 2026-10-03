@@ -41,6 +41,16 @@ final class CustomArmorAssetResolver {
       Set.of(
           "wood", "wooden", "stone", "chain", "chainmail", "iron", "gold", "golden",
           "diamond", "netherite", "leather", "copper");
+  // Client armor renderers can deliberately reuse geometry under a different
+  // texture/item family. Dedicated servers do not run those client registrations,
+  // so keep the small set of known resource-only aliases explicit here.
+  private static final Map<String, String> GEOMETRY_FAMILY_ALIASES =
+      Map.ofEntries(
+          Map.entry("armory_rpgs:astral_robe", "tirisfal_robe"),
+          Map.entry("armory_rpgs:scarlet_robe", "tirisfal_robe"),
+          Map.entry("armory_rpgs:glacier_robe", "tirisfal_robe"),
+          Map.entry("armory_rpgs:smouldering_robe", "tempest_robe"),
+          Map.entry("armory_rpgs:rimeweave_robe", "tempest_robe"));
 
   private final BlueMap3DItemModelBridge assets;
   private final Consumer<String> log;
@@ -251,14 +261,19 @@ final class CustomArmorAssetResolver {
   }
 
   private String chooseGeo(String namespace, String family) {
+    String geometryFamily = geometryFamily(namespace, family);
     List<String> candidates = geoByNamespace.getOrDefault(namespace, List.of());
-    String exact = "assets/" + namespace + "/geo/" + family + ".geo.json";
+    String exact = "assets/" + namespace + "/geo/" + geometryFamily + ".geo.json";
     if (candidates.contains(exact) && isHumanoid(exact)) return exact;
 
     List<String> humanoid = new ArrayList<>();
     for (String candidate : candidates) if (isHumanoid(candidate)) humanoid.add(candidate);
     if (humanoid.size() == 1) return humanoid.getFirst();
-    return best(family, humanoid, candidate -> stem(candidate, ".geo.json"));
+    return best(geometryFamily, humanoid, candidate -> stem(candidate, ".geo.json"));
+  }
+
+  static String geometryFamily(String namespace, String family) {
+    return GEOMETRY_FAMILY_ALIASES.getOrDefault(namespace + ":" + family, family);
   }
 
   private boolean isHumanoid(String path) {
@@ -517,9 +532,11 @@ final class CustomArmorAssetResolver {
       vertex[1] -= root.bone().pivot()[1];
       vertex[2] -= root.bone().pivot()[2];
 
-      // The Armor Model API keeps authored X/Z orientation and rotation signs.
-      // The avatar uses the same -Z-forward convention, so no integration-axis
-      // reflection belongs here.
+      // Armor Model API keeps authored X/Z orientation and rotation signs, but
+      // Minecraft armor model front is -Z while the BlueMap skin mesh maps its
+      // front UV onto Three.js BoxGeometry +Z. Reflect Z exactly once at this
+      // integration boundary, after all authored pivots/rotations are applied.
+      vertex[2] = -vertex[2];
     }
 
     JsonElement uvValue = cube.get("uv");
