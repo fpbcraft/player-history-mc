@@ -1298,3 +1298,19 @@ bluemap-player-replay .history-chat-death > span {
   bottom: auto !important;
   left: auto !important;
 }
+
+
+@media (max-width: 600px) {
+  .history-player-followbar {
+    top: 50px;
+    max-width: calc(100vw - 16px);
+    padding: 4px;
+    gap: 4px;
+  }
+
+  .history-player-followbar > button {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+  }
+}
