@@ -3,6 +3,7 @@ package dev.playerhistory.bluemap;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.LogSink;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -11,7 +12,6 @@ import java.security.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -30,7 +30,7 @@ final class EquipmentAssetPublisher {
   private static final int ARMOR_FORMAT = 2;
   private static final long SCAN_INTERVAL_MS = 5_000;
 
-  private final Consumer<String> log;
+  private final LogSink log;
   private final ExecutorService worker;
   private final AtomicBoolean scanning = new AtomicBoolean();
   private final Set<String> processedModels = ConcurrentHashMap.newKeySet();
@@ -44,7 +44,7 @@ final class EquipmentAssetPublisher {
       EquipmentCompatibilityConfig.defaults();
   private volatile long nextScan;
 
-  EquipmentAssetPublisher(Consumer<String> log) {
+  EquipmentAssetPublisher(LogSink log) {
     this.log = log;
     worker =
         Executors.newSingleThreadExecutor(
@@ -74,7 +74,7 @@ final class EquipmentAssetPublisher {
                   equipmentCompatibility.wearableSlots(),
                   equipmentCompatibility.wearableItems())));
     } catch (IOException error) {
-      log.accept("Could not publish wearable equipment compatibility: " + error);
+      log.warn("Could not publish wearable equipment compatibility: " + error);
     }
     nextScan = 0;
   }
@@ -120,11 +120,11 @@ final class EquipmentAssetPublisher {
         bridge = currentBridge;
         customArmor = new CustomArmorAssetResolver(currentBridge, log, equipmentCompatibility);
       } catch (ClassNotFoundException error) {
-        log.accept("BlueMap3D is unavailable; Player History will keep simple equipment models");
+        log.debug("BlueMap3D is unavailable; Player History will keep simple equipment models");
         nextScan = Long.MAX_VALUE;
         return;
       } catch (Exception error) {
-        log.accept("Could not initialize BlueMap3D equipment models: " + error);
+        log.warn("Could not initialize BlueMap3D equipment models: " + error);
         return;
       }
     }
@@ -150,7 +150,7 @@ final class EquipmentAssetPublisher {
         }
       }
     } catch (IOException | RuntimeException error) {
-      log.accept("Could not inspect Player History item registry for equipment models: " + error);
+      log.warn("Could not inspect Player History item registry for equipment models: " + error);
     }
   }
 
@@ -205,7 +205,7 @@ final class EquipmentAssetPublisher {
               new ItemModel(FORMAT, item, output, fingerprint(item, output))));
       return true;
     } catch (IOException error) {
-      log.accept("Could not publish equipment model " + item + ": " + error);
+      log.warn("Could not publish equipment model " + item + ": " + error);
       return false;
     }
   }
@@ -245,7 +245,7 @@ final class EquipmentAssetPublisher {
                   armor.getDefaultInstance(), null, armor.getType().getSlot(), layer, inner);
           if (override != null) textureFile = override;
         } catch (RuntimeException | LinkageError error) {
-          log.accept("Could not resolve per-item armor texture for " + item + ": " + error);
+          log.debug("Could not resolve per-item armor texture for " + item + ": " + error);
         }
         String texture = textureId(textureFile);
         BufferedImage image = currentBridge.texture(texture);
@@ -272,7 +272,7 @@ final class EquipmentAssetPublisher {
           new ArmorModel(ARMOR_FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
       return true;
     } catch (IOException error) {
-      log.accept("Could not publish armor textures for " + item + ": " + error);
+      log.warn("Could not publish armor textures for " + item + ": " + error);
       return false;
     }
   }
@@ -321,7 +321,7 @@ final class EquipmentAssetPublisher {
               ARMOR_FORMAT, item, "layers", model.layer(), published, null, null));
       return true;
     } catch (IOException error) {
-      log.accept("Could not publish segmented armor textures for " + item + ": " + error);
+      log.warn("Could not publish segmented armor textures for " + item + ": " + error);
       return false;
     }
   }
@@ -347,7 +347,7 @@ final class EquipmentAssetPublisher {
           new ArmorModel(ARMOR_FORMAT, item, "custom", null, null, texturePath, parts));
       return true;
     } catch (IOException error) {
-      log.accept("Could not publish custom armor geometry for " + item + ": " + error);
+      log.warn("Could not publish custom armor geometry for " + item + ": " + error);
       return false;
     }
   }
