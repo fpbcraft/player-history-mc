@@ -233,7 +233,6 @@ test("equipment loader loads legacy armor descriptors", async () => {
   assert.equal(armor.layer, 1);
   assert.equal(armor.layers.length, 1);
   assert.equal(armor.layers[0]?.dyeable, true);
-  assert.equal(armor.layers[0]?.defaultColor, 0xa06540);
   assert.ok(armor.layers[0]?.overlayTexture);
 });
 
@@ -425,6 +424,7 @@ test("equipment loader preserves segmented armor deformation metadata", async ()
   assert.equal(armor.layers[0]?.deformation, 0.25);
   assert.equal(armor.layers[0]?.headDeformation, 0.55);
   assert.equal(armor.layers[0]?.dyeable, true);
+  assert.equal(armor.layers[0]?.defaultColor, 0xa06540);
   assert.ok(armor.layers[0]?.overlayTexture);
 });
 
