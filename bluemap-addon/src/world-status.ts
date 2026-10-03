@@ -77,7 +77,7 @@ export const formatMinecraftTime = (dayTime: number): string => {
 
 export const minecraftDay = (dayTime: number): number => Math.floor(dayTime / 24_000) + 1;
 
-class WorldStatusController {
+export class WorldStatusController {
   private integration?: IntegrationMapping;
   private snapshot?: WorldStatusSnapshot;
   private fetchedAt = 0;
@@ -104,8 +104,8 @@ class WorldStatusController {
     );
 
     const observer = new MutationObserver(() => {
-      this.ensureLightingSwitch();
       this.ensureTimeDisplay();
+      this.ensureLightingSwitch();
     });
     observer.observe(document.getElementById("app") ?? document.body, {
       childList: true,
@@ -158,10 +158,9 @@ class WorldStatusController {
         this.integration = (await integration.json()) as IntegrationMapping;
       }
 
-      const response = await fetch(
-        new URL("player-history/world-status.json", document.baseURI),
-        { cache: "no-store" },
-      );
+      const statusUrl = new URL("player-history/world-status.json", document.baseURI);
+      statusUrl.searchParams.set("_ph", String(Date.now()));
+      const response = await fetch(statusUrl, { cache: "no-store" });
       if (!response.ok) throw new Error(`world-status.json HTTP ${response.status}`);
       const snapshot = (await response.json()) as WorldStatusSnapshot;
       if (snapshot.version !== 1) throw new Error("Unsupported world status version");
@@ -285,39 +284,46 @@ class WorldStatusController {
   }
 
   private updateLightingSwitch(): void {
-    const control = document.querySelector<HTMLElement>(".player-history-game-time-sync");
-    if (!control) return;
-    control.querySelector(".switch")?.classList.toggle("on", this.enabled);
-    control.setAttribute("aria-checked", this.enabled ? "true" : "false");
+    const control = document.querySelector<HTMLElement>(
+      ".player-history-game-time-sync",
+    );
+    const input = control?.querySelector<HTMLInputElement>("input[type='checkbox']");
+    if (!control || !input) return;
+
+    input.checked = this.enabled;
+    control.dataset.state = this.enabled ? "on" : "off";
+    const state = this.enabled ? "on" : "off";
+    input.setAttribute("aria-label", `Sync map lighting to server time: ${state}`);
+    control.title = `Sync map lighting to Minecraft time · ${state}`;
   }
 
-  private ensureLightingSwitch(): void {
-    const group = this.lightingGroup();
-    if (!group) return;
-    if (group.querySelector(".player-history-game-time-sync")) {
-      this.updateLightingSwitch();
-      return;
+  private ensureLightingSwitch(): HTMLElement | null {
+    const bar = document.querySelector<HTMLElement>(".control-bar");
+    if (!bar) return null;
+
+    const time = this.ensureTimeDisplay();
+    let control = bar.querySelector<HTMLElement>(
+      ".player-history-game-time-sync",
+    );
+    if (!control) {
+      control = document.createElement("label");
+      control.className = "player-history-game-time-sync";
+      control.innerHTML = `
+        <span class="time-sync-label">Sync</span>
+        <input type="checkbox" role="switch">
+        <span class="time-sync-track" aria-hidden="true">
+          <span class="time-sync-thumb"></span>
+        </span>`;
+
+      const input = control.querySelector<HTMLInputElement>("input");
+      input?.addEventListener("change", () => {
+        this.setEnabled(Boolean(input.checked), true);
+      });
     }
 
-    const content = group.querySelector<HTMLElement>(".content");
-    if (!content) return;
-
-    const control = document.createElement("div");
-    control.className = "switch-button player-history-game-time-sync";
-    control.setAttribute("role", "switch");
-    control.title = "Use the selected Minecraft world's clock for BlueMap lighting.";
-
-    const label = document.createElement("div");
-    label.className = "label";
-    label.textContent = "Sync lighting with in-game time";
-
-    const handle = document.createElement("div");
-    handle.className = "switch";
-
-    control.append(label, handle);
-    control.addEventListener("click", () => this.setEnabled(!this.enabled, true));
-    content.append(control);
+    if (time && time.nextElementSibling !== control) time.after(control);
     this.updateLightingSwitch();
+    return control;
   }
 
   private onManualLightingPointerDown(event: PointerEvent): void {

@@ -173,11 +173,26 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     globalThis.innerHeight = 600;
     globalThis.cancelAnimationFrame = () => {};
     const popupMarker = new Marker("bm-popup");
+    const originalPopupInteraction = () => "stock";
+    popupMarker.onMapInteraction = originalPopupInteraction;
+    popupMarker.cube = { visible: true };
+    popupMarker.visible = true;
     const popupMarkerSet = new SetMarker("root");
     popupMarkerSet.add(popupMarker);
+    const nativePlayerMarker = {
+      id: "native-player",
+      isPlayerMarker: true,
+      data: { position: new Vector() },
+      element: new Element(),
+    };
     const app = {
       popupMarker,
       popupMarkerSet,
+      playerMarkerManager: {
+        getPlayerMarker(uuid) {
+          return uuid === "abc" ? nativePlayerMarker : undefined;
+        },
+      },
       mapViewer: {
         markers: {},
         map: { data: { id: "world", mapDataRoot: "maps/world" } },
@@ -205,9 +220,13 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     const adapter = new BlueMapAdapter(app, api);
     assert.equal(
       app.popupMarkerSet.children.includes(popupMarker),
-      false,
-      "stock BlueMap block-position popup is detached",
+      true,
+      "stock BlueMap popup stays mounted so its global listeners remain safe",
     );
+    assert.equal(popupMarker.element.style.display, "none");
+    assert.equal(popupMarker.cube.visible, false);
+    assert.equal(popupMarker.visible, false);
+    assert.notEqual(popupMarker.onMapInteraction, originalPopupInteraction);
     const mapControls = {
       data: { followingPlayer: null },
       followPlayerMarker(marker) {
@@ -364,7 +383,41 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(chatIcon.children.length, 1, "chat renders as an icon-only map event");
     assert.doesNotMatch(chatIcon.className, /history-chat-bubble/);
     assert.match(chatIcon.dataset.historyTooltip, /<b>Hello<\/b>/);
+
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(
+      mapControls.data.followingPlayer,
+      nativePlayerMarker,
+      "live follow delegates to BlueMap's native animated player marker",
+    );
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer, null);
+
+    app.mapViewer.controlsManager.distance = 100;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      "none",
+      "native BlueMap marker is hidden while the close-up 3D model is visible",
+    );
+    app.mapViewer.controlsManager.distance = 300;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      undefined,
+      "native BlueMap marker returns when zooming back out",
+    );
+
     adapter.dispose();
+    assert.equal(
+      popupMarker.onMapInteraction,
+      originalPopupInteraction,
+      "disposing Player History restores BlueMap's popup behavior",
+    );
+    assert.equal(popupMarker.element.style.display, "");
+    assert.equal(popupMarker.cube.visible, true);
+    assert.equal(popupMarker.visible, true);
   } finally {
     for (const key of keys) {
       if (old[key] === undefined) delete globalThis[key];

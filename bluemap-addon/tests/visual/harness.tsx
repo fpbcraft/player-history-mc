@@ -10,6 +10,37 @@ const requireElement = <T extends Element>(root: ParentNode, selector: string): 
   return element;
 };
 
+const appRoot = document.createElement("div");
+appRoot.id = "app";
+document.body.append(appRoot);
+
+const controlBar = document.createElement("div");
+controlBar.className = "control-bar";
+controlBar.innerHTML = `
+  <button class="fixture-menu" aria-label="Menu">☰</button>
+  <div class="player-history-server-time">22:53</div>
+  <label class="player-history-game-time-sync" data-state="on" title="Sync map lighting to Minecraft time · on">
+    <span class="time-sync-label">Sync</span>
+    <input type="checkbox" role="switch" aria-label="Sync map lighting to server time: on" checked>
+    <span class="time-sync-track" aria-hidden="true">
+      <span class="time-sync-thumb"></span>
+    </span>
+  </label>
+  <div class="day-night-switch thin-hide" aria-label="Day/night">◐</div>
+  <div class="pos-input">X: -862&nbsp;&nbsp; Z: -262</div>
+  <div class="fixture-compass" aria-label="Compass">▲</div>
+`;
+appRoot.append(controlBar);
+
+const followBar = document.createElement("div");
+followBar.className = "history-player-followbar";
+followBar.innerHTML = `
+  <button type="button" aria-pressed="false" title="Alex">
+    <img alt="Alex" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8' shape-rendering='crispEdges'%3E%3Cpath fill='%23b68763' d='M0 0h8v8H0z'/%3E%3Cpath fill='%23493222' d='M0 0h8v2H0z'/%3E%3Cpath fill='%23fff' d='M1 4h2v1H1zM5 4h2v1H5z'/%3E%3C/svg%3E">
+  </button>
+`;
+document.body.append(followBar);
+
 const root = document.createElement("bluemap-player-replay");
 document.body.append(root);
 mountReplayPanelView(root);

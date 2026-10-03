@@ -194,6 +194,13 @@ async function capture({ name, scenario, width, height }) {
       const panel=document.querySelector("bluemap-player-replay > section");
       const rect=panel.getBoundingClientRect();
       const overlay=${JSON.stringify(expectedOverlay)} ? document.querySelector(${JSON.stringify(expectedOverlay)}) : null;
+      const controlBar=document.querySelector(".control-bar");
+      const position=document.querySelector(".control-bar .pos-input");
+      const sync=document.querySelector(".player-history-game-time-sync");
+      const follow=document.querySelector(".history-player-followbar");
+      const controlRect=controlBar?.getBoundingClientRect();
+      const followRect=follow?.getBoundingClientRect();
+      const visible=(element)=>!!element && getComputedStyle(element).display !== "none";
       return {
         ready: document.documentElement.dataset.visualReady === "true",
         panelVisible: !panel.hidden && rect.width > 0 && rect.height > 0,
@@ -201,17 +208,53 @@ async function capture({ name, scenario, width, height }) {
         overlayVisible: !overlay || (!overlay.hidden && getComputedStyle(overlay).display !== "none"),
         players: document.querySelector('[data-control="player-count"]')?.textContent,
         status: document.querySelector(".history-status")?.textContent,
+        mobileControlsOk: innerWidth > 600 || (
+          visible(position) &&
+          visible(sync) &&
+          sync.querySelector(".time-sync-label")?.textContent === "Sync" &&
+          sync.querySelector("input[type=checkbox]")?.checked === true &&
+          visible(follow) &&
+          followRect?.width > 0 &&
+          followRect?.top >= (controlRect?.bottom ?? 0) - 1
+        ),
       };
     })()`);
     if (
       !state.ready ||
       !state.panelVisible ||
       !state.panelInsideViewport ||
-      !state.overlayVisible
+      !state.overlayVisible ||
+      !state.mobileControlsOk
     ) {
       throw new Error(`Visual fixture layout check failed: ${JSON.stringify(state)}`);
     }
     if (state.players !== "3") throw new Error(`Expected three fixture players: ${JSON.stringify(state)}`);
+
+    if (width <= 600) {
+      const syncRect = await cdp.evaluate(`(()=>{
+        const rect=document.querySelector(".player-history-game-time-sync .time-sync-track")?.getBoundingClientRect();
+        return rect ? {x:rect.x,y:rect.y,width:rect.width,height:rect.height} : null;
+      })()`);
+      if (!syncRect) throw new Error("Missing mobile sync switch hit target");
+      const x = syncRect.x + syncRect.width / 2;
+      const y = syncRect.y + syncRect.height / 2;
+      const click = async () => {
+        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none" });
+        await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+        await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+      };
+      await click();
+      const toggledOff = await cdp.evaluate(
+        'document.querySelector(".player-history-game-time-sync input[type=checkbox]")?.checked === false',
+      );
+      if (!toggledOff) throw new Error("Sync switch did not receive a real pointer click");
+      await click();
+      const restoredOn = await cdp.evaluate(
+        'document.querySelector(".player-history-game-time-sync input[type=checkbox]")?.checked === true',
+      );
+      if (!restoredOn) throw new Error("Sync switch did not restore after second pointer click");
+    }
+
     if (cdp.runtimeErrors.length) {
       throw new Error(`Browser exception: ${JSON.stringify(cdp.runtimeErrors[0])}`);
     }

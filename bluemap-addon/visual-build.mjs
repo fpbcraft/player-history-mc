@@ -71,7 +71,7 @@ await writeFile(
     }
     .fixture-brand {
       position: fixed;
-      top: 18px;
+      top: 64px;
       left: 20px;
       padding: 7px 10px;
       border-radius: 5px;
@@ -79,6 +79,65 @@ await writeFile(
       border: 1px solid #fff2;
       font-size: 12px;
       letter-spacing: .02em;
+    }
+    #app {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+    .control-bar {
+      position: fixed;
+      z-index: 30;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      height: 42px;
+      display: flex;
+      align-items: stretch;
+      background: #181818ed;
+      border: 1px solid #fff2;
+      box-shadow: 0 3px 12px #0008;
+    }
+    .control-bar > * {
+      min-height: 40px;
+      border: 0;
+      border-left: 1px solid #fff2;
+      color: #eee;
+      background: #181818;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    .control-bar > :first-child { border-left: 0; }
+    .fixture-menu,
+    .fixture-compass,
+    .day-night-switch {
+      width: 48px;
+      min-width: 48px;
+      font-size: 20px;
+      pointer-events: auto;
+    }
+    .pos-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 0 14px;
+      justify-content: flex-start;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    @media (max-width: 600px) {
+      .control-bar {
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 44px;
+      }
+      .control-bar > * { min-height: 44px; }
+      .fixture-menu,
+      .fixture-compass { width: 52px; min-width: 52px; }
+      .thin-hide { display: none !important; }
+      .fixture-brand { top: 56px; }
     }
     #zoom-buttons {
       position: fixed;

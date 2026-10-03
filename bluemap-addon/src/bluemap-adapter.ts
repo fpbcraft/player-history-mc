@@ -1,5 +1,6 @@
 import type {
   BlueMapApp,
+  BlueMapPopupMarker,
   BlueMapRuntime,
   HtmlMarker,
   MarkerSet,
@@ -69,6 +70,18 @@ export class BlueMapAdapter {
   stateDetails?: (player: number, time: number) => Promise<string>;
   private playerIconMode = false;
   private following: number | null = null;
+  private liveMode = false;
+  private readonly playerUuids = new Map<number, string>();
+  private readonly hiddenNativePlayerElements = new Map<HTMLElement, string>();
+  private popupOverride:
+    | {
+        marker: BlueMapPopupMarker;
+        onMapInteraction: ((event: unknown) => void) | undefined;
+        display: string | undefined;
+        cubeVisible: boolean | undefined;
+        visible: boolean | undefined;
+      }
+    | undefined;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
   private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
 
@@ -78,9 +91,23 @@ export class BlueMapAdapter {
     if (!api?.MarkerSet || !api?.HtmlMarker || !api?.Three || !app?.mapViewer?.markers)
       throw Error("Unsupported BlueMap web API");
 
-    // Keep BlueMap's shared popup set because Player History mounts overlays
-    // into it, but detach the stock block-coordinate popup itself.
-    if (app.popupMarker) app.popupMarkerSet.remove(app.popupMarker);
+    // Disable BlueMap's stock coordinate popup without removing/disposal.
+    // PopupMarker installs global close listeners that outlive MarkerSet.remove();
+    // disposing it here leaves those listeners dereferencing a removed DOM element.
+    const popup = app.popupMarker;
+    if (popup) {
+      this.popupOverride = {
+        marker: popup,
+        onMapInteraction: popup.onMapInteraction,
+        display: popup.element?.style.display,
+        cubeVisible: popup.cube?.visible,
+        visible: popup.visible,
+      };
+      popup.onMapInteraction = () => {};
+      if (popup.element) popup.element.style.display = "none";
+      if (popup.cube) popup.cube.visible = false;
+      popup.visible = false;
+    }
 
     this.root = new api.MarkerSet("player-history-replay", {
       label: "Historical replay",
@@ -328,9 +355,52 @@ export class BlueMapAdapter {
     }
   }
 
+  private restoreNativePlayerMarkers(): void {
+    for (const [element, display] of this.hiddenNativePlayerElements) {
+      element.style.display = display;
+    }
+    this.hiddenNativePlayerElements.clear();
+  }
+
+  private syncNativePlayerMarkers(
+    positions: readonly HistoryPoint[],
+    players: HistoryRegistry["players"],
+    hide: boolean,
+  ): void {
+    if (!hide) {
+      this.restoreNativePlayerMarkers();
+      return;
+    }
+
+    const visiblePlayers = new Set(positions.map((point) => point.player));
+    const keep = new Set<HTMLElement>();
+    for (const player of players) {
+      if (!player.uuid || !visiblePlayers.has(player.id)) continue;
+      const marker = this.app.playerMarkerManager?.getPlayerMarker?.(player.uuid);
+      const element = marker?.element;
+      if (!element) continue;
+      keep.add(element);
+      if (!this.hiddenNativePlayerElements.has(element)) {
+        this.hiddenNativePlayerElements.set(element, element.style.display);
+      }
+      element.style.display = "none";
+    }
+
+    for (const [element, display] of [...this.hiddenNativePlayerElements]) {
+      if (keep.has(element)) continue;
+      element.style.display = display;
+      this.hiddenNativePlayerElements.delete(element);
+    }
+  }
+
   private followPlayer(player: number): void {
     const c = this.app.mapViewer.controlsManager?.controls;
-    const target = this.scene3d.playerTarget(player);
+    const uuid = this.playerUuids.get(player);
+    const nativeTarget =
+      this.liveMode && uuid
+        ? this.app.playerMarkerManager?.getPlayerMarker?.(uuid)
+        : undefined;
+    const target = nativeTarget ?? this.scene3d.playerTarget(player);
     if (!c?.followPlayerMarker || !target) return;
     if (this.following === player && c.data?.followingPlayer != null) {
       c.stopFollowingPlayerMarker?.();
@@ -370,7 +440,13 @@ export class BlueMapAdapter {
     positions: HistoryPoint[],
     names: Map<number, string>,
     players: HistoryRegistry["players"] = [],
+    liveMode = false,
   ): void {
+    this.liveMode = liveMode;
+    this.playerUuids.clear();
+    for (const player of players) {
+      if (player.uuid) this.playerUuids.set(player.id, player.uuid);
+    }
     this.scene3d.setPlayers(positions, names, players);
     const c = this.app.mapViewer.controlsManager?.controls;
     if (
@@ -395,7 +471,9 @@ export class BlueMapAdapter {
       this.playerIconMode = false;
     }
 
-    this.scene3d.setPlayersVisible(!this.playerIconMode);
+    const show3dPlayers = !this.playerIconMode;
+    this.scene3d.setPlayersVisible(show3dPlayers);
+    this.syncNativePlayerMarkers(positions, players, show3dPlayers && positions.length > 0);
 
     if (!this.playerIconMode) {
       this.clear(this.players);
@@ -692,6 +770,17 @@ export class BlueMapAdapter {
     this.bar.remove();
     this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
     this.following = null;
+    this.restoreNativePlayerMarkers();
+    if (this.popupOverride) {
+      const { marker, onMapInteraction, display, cubeVisible, visible } = this.popupOverride;
+      if (onMapInteraction) marker.onMapInteraction = onMapInteraction;
+      else delete marker.onMapInteraction;
+      if (marker.element) marker.element.style.display = display ?? "";
+      if (marker.cube && cubeVisible !== undefined) marker.cube.visible = cubeVisible;
+      if (visible !== undefined) marker.visible = visible;
+      else delete marker.visible;
+      this.popupOverride = undefined;
+    }
     this.clearHeatmap();
     this.scene3d.dispose();
     this.clear(this.players);

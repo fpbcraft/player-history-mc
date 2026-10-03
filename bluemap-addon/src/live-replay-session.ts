@@ -31,7 +31,25 @@ export class LiveReplaySession {
     // rewind the interpolation clock by a full interval and recreate the visible stutter.
     if (this.generatedAt !== undefined && generatedAt <= this.generatedAt) return;
 
-    this.engine.setPoints([...points]);
+    const grouped = new Map<number, HistoryPoint[]>();
+    for (const point of points) {
+      const samples = grouped.get(point.player) ?? [];
+      samples.push(point);
+      grouped.set(point.player, samples);
+    }
+
+    const interpolated: HistoryPoint[] = [];
+    for (const [player, samples] of grouped) {
+      const first = samples[0];
+      const previous = this.engine.players.get(player)?.at(-1);
+      // presence.json intentionally publishes only the newest point for each online
+      // player. Preserve the prior snapshot as the interpolation origin so live models
+      // and BlueMap's follow target move continuously between publication ticks.
+      if (first && previous && previous.time < first.time) interpolated.push(previous);
+      interpolated.push(...samples);
+    }
+
+    this.engine.setPoints(interpolated);
     this.generatedAt = generatedAt;
     this.receivedAt = receivedAt;
   }
