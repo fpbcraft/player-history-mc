@@ -182,6 +182,9 @@ export interface BlueMapRuntime {
 export interface BlueMapApp {
   popupMarkerSet: MarkerSet;
   popupMarker?: BlueMapPopupMarker;
+  playerMarkerManager?: {
+    getPlayerMarker?(uuid: string): unknown;
+  };
   mapViewer: {
     markers: unknown;
     camera: unknown;
