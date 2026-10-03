@@ -253,7 +253,17 @@ final class EquipmentAssetPublisher {
         String path = texturePath(texture);
         writePng(currentRoot, path, image);
 
-        published.add(new ArmorLayer(path, null, layer.dyeable(), null, null));
+        published.add(
+            new ArmorLayer(
+                path,
+                null,
+                layer.dyeable(),
+                layer.dyeable()
+                    ? equipmentCompatibility.defaultArmorColor(
+                        id.getNamespace(), armorFamily(id.getPath()))
+                    : null,
+                null,
+                null));
       }
       if (published.isEmpty()) return false;
       writeArmorDescriptor(
@@ -296,6 +306,10 @@ final class EquipmentAssetPublisher {
                 basePath,
                 overlayPath,
                 layer.dyeable(),
+                layer.dyeable()
+                    ? equipmentCompatibility.defaultArmorColor(
+                        id.getNamespace(), armorFamily(id.getPath()))
+                    : null,
                 layer.deformation(),
                 layer.headDeformation()));
       }
@@ -346,6 +360,16 @@ final class EquipmentAssetPublisher {
     writeAtomic(target, JsonFiles.GSON.toJson(model));
   }
 
+
+  private static String armorFamily(String path) {
+    for (String suffix :
+        List.of(
+            "_chestplate", "_leggings", "_helmet", "_boots",
+            "_chest", "_legs", "_head", "_feet")) {
+      if (path.endsWith(suffix)) return path.substring(0, path.length() - suffix.length());
+    }
+    return path;
+  }
 
   private static String textureId(ResourceLocation file) {
     String path = file.getPath();
@@ -419,6 +443,7 @@ final class EquipmentAssetPublisher {
       String texture,
       String overlayTexture,
       boolean dyeable,
+      Integer defaultColor,
       Float deformation,
       Float headDeformation) {}
 
