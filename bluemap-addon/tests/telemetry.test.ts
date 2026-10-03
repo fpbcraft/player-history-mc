@@ -63,6 +63,21 @@ test("state and inventory reconstruction respects unknown and disabled fields", 
   );
 });
 
+test("state details list visible Curios slots", () => {
+  const text = describeState(
+    { "curio:back:0": { item: 1, count: 1 }, "curio:head:0": { item: 2, count: 1 } },
+    {
+      items: [
+        { id: 1, key: "sophisticatedbackpacks:diamond_backpack" },
+        { id: 2, key: "create:goggles" },
+      ],
+    },
+    { curios: true },
+  );
+  assert.match(text, /Back #1: Sophisticatedbackpacks:diamond Backpack/);
+  assert.match(text, /Head #1: Create:goggles/);
+});
+
 test("chat display includes Minecraft-style status and death messages", () => {
   assert.equal(chatMessage("CHAT", "Alex", { message: "hello" }), "Alex: hello");
   assert.equal(chatMessage("JOIN", "Alex"), "Alex joined the game");
