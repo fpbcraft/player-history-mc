@@ -1,6 +1,14 @@
 {
   "previews": [
     {
+      "target": "main",
+      "label": "main",
+      "sha": "029d8cca295d8d96b07feeab9447e9b72eb6785b",
+      "runUrl": "https://github.com/fpbcraft/player-history-mc/actions/runs/37133369042",
+      "previewUrl": "https://fpbcraft.github.io/player-history-mc/main/",
+      "generatedAt": "2026-10-03T15:29:02.236Z"
+    },
+    {
       "target": "pr/52",
       "label": "PR #52",
       "sha": "f90e445fbbbe6801aa5ddb94548ba9cd9719bf82",
