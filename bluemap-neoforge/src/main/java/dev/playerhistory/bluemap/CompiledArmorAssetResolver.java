@@ -438,15 +438,21 @@ final class CompiledArmorAssetResolver {
 
     private static String semanticParent(PartNode part, String slot, int rootCount) {
       String name = compact(part.name);
-      if (containsAny(name, "rightarm", "armright", "rightsleeve")) return "rightArm";
-      if (containsAny(name, "leftarm", "armleft", "leftsleeve")) return "leftArm";
-      if (containsAny(name, "rightleg", "legright", "rightboot", "rightfoot"))
-        return "rightLeg";
-      if (containsAny(name, "leftleg", "legleft", "leftboot", "leftfoot"))
-        return "leftLeg";
-      if (containsAny(name, "head", "helmet", "hat", "hood", "mask")) return "head";
-      if (containsAny(name, "body", "torso", "chest", "jacket", "coat", "waist", "belt"))
-        return "torso";
+      String namedParent = null;
+      if (containsAny(name, "rightarm", "armright", "rightsleeve")) namedParent = "rightArm";
+      else if (containsAny(name, "leftarm", "armleft", "leftsleeve")) namedParent = "leftArm";
+      else if (containsAny(name, "rightleg", "legright", "rightboot", "rightfoot"))
+        namedParent = "rightLeg";
+      else if (containsAny(name, "leftleg", "legleft", "leftboot", "leftfoot"))
+        namedParent = "leftLeg";
+      else if (containsAny(name, "head", "helmet", "hat", "hood", "mask"))
+        namedParent = "head";
+      else if (containsAny(name, "body", "torso", "chest", "jacket", "coat", "waist", "belt"))
+        namedParent = "torso";
+
+      // Some generated armor classes contain geometry for the entire outfit even though the item
+      // only renders one armor slot. Never let an explicitly named root escape the equipped slot.
+      if (namedParent != null) return allowedForSlot(slot, namedParent) ? namedParent : null;
 
       if (slot.equals("head")) return "head";
       if (slot.equals("chest")) {
@@ -460,6 +466,16 @@ final class CompiledArmorAssetResolver {
         return slot.equals("legs") ? "torso" : (rootCount == 1 ? "rightLeg" : null);
       }
       return null;
+    }
+
+    private static boolean allowedForSlot(String slot, String parent) {
+      return switch (slot) {
+        case "head" -> parent.equals("head");
+        case "chest" -> parent.equals("torso") || parent.equals("rightArm") || parent.equals("leftArm");
+        case "legs" -> parent.equals("torso") || parent.equals("rightLeg") || parent.equals("leftLeg");
+        case "feet" -> parent.equals("rightLeg") || parent.equals("leftLeg");
+        default -> false;
+      };
     }
 
     private static boolean containsAny(String value, String... candidates) {
