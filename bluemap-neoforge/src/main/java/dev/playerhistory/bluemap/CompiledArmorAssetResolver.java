@@ -103,7 +103,7 @@ final class CompiledArmorAssetResolver {
     if (directory) {
       try (var stream = Files.walk(path)) {
         for (Path entry : stream.filter(Files::isRegularFile).toList()) {
-          String relative = path.relativize(entry).toString().replace('\', '/');
+          String relative = path.relativize(entry).toString().replace('\\', '/');
           indexEntry(path, true, relative, namespaces, models, classes);
         }
       }
