@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, stat, watch } from "node:fs/promises";
+import { mkdir, rm, stat, watch } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
@@ -7,22 +7,31 @@ import { build, context } from "esbuild";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const source = join(root, "src");
-const gradleProperties = join(root, "..", "gradle.properties");
-
 async function projectVersion() {
   const releaseVersion = process.env.PLAYER_HISTORY_VERSION?.trim();
   if (releaseVersion) return releaseVersion;
 
-  const properties = await readFile(gradleProperties, "utf8");
-  const match = properties.match(/^modVersion=(.+)$/m);
-  if (!match?.[1]?.trim()) throw new Error("gradle.properties is missing modVersion");
-
-  const { stdout } = await execFileAsync("git", ["rev-parse", "--short=8", "HEAD"], {
-    cwd: join(root, ".."),
-  });
-  const sha = stdout.trim().toLowerCase();
+  const cwd = join(root, "..");
+  const [{ stdout: shaOutput }, { stdout: tagOutput }] = await Promise.all([
+    execFileAsync("git", ["rev-parse", "--short=8", "HEAD"], { cwd }),
+    execFileAsync("git", ["tag", "--merged", "HEAD", "--list", "v*"], { cwd }),
+  ]);
+  const sha = shaOutput.trim().toLowerCase();
   if (!/^[0-9a-f]{7,8}$/.test(sha)) throw new Error("Could not determine Git SHA");
-  return `${match[1].trim()}-dev.${sha}`;
+
+  const versions = tagOutput
+    .split(/\r?\n/)
+    .map((tag) => /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag.trim()))
+    .filter(Boolean)
+    .map((match) => match.slice(1).map(Number))
+    .sort((left, right) =>
+      right[0] - left[0] || right[1] - left[1] || right[2] - left[2],
+    );
+  // Hosted/shallow Git checkouts (for example Vercel) may not contain release tags.
+  // The SHA still gives the frontend an immutable cache-busting version; normal CI and
+  // release builds continue to derive the dev version from the latest stable tag.
+  if (!versions.length) return `0.0.0-dev.${sha}`;
+  return `${versions[0].join(".")}-dev.${sha}`;
 }
 
 export const outputDirectory = join(root, "dist");
@@ -30,7 +39,8 @@ export const scriptOutput = join(outputDirectory, "player-history.js");
 export const developmentScriptOutput = join(outputDirectory, ".player-history.js.next");
 export const styleOutput = join(outputDirectory, "player-history.css");
 
-const maximumBundleSize = 250 * 1024;
+// Equipment/Curios rendering, player-follow UI and the live world-status controller are intentional browser features.
+const maximumBundleSize = 288 * 1024;
 const execFileAsync = promisify(execFile);
 
 export async function copyStyles() {

@@ -1,12 +1,12 @@
 package dev.playerhistory.bluemap;
 
+import dev.playerhistory.core.LogSink;
 import dev.playerhistory.object.ObjectHistoryApi;
 import dev.playerhistory.object.ObjectSnapshot;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.function.Consumer;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -25,7 +25,7 @@ final class BlueMap3DHistoryBridge {
   private static final Set<String> LEGACY_DEFAULT_PROVIDERS =
       Set.of("create_contraptions", "sable_ships");
 
-  private final Consumer<String> log;
+  private final LogSink log;
   private boolean resolutionAttempted;
   private boolean connectedLogged;
   private boolean legacyProviderMigrationLogged;
@@ -46,7 +46,16 @@ final class BlueMap3DHistoryBridge {
   private Method objectRotationMethod;
   private Method objectScaleMethod;
 
-  BlueMap3DHistoryBridge(Consumer<String> log) {
+  private Class<?> instancedObjectClass;
+  private Method instanceGroupsMethod;
+  private Method groupIdMethod;
+  private Method groupGeometryVersionMethod;
+  private Method groupInstancesMethod;
+  private Method instancePositionMethod;
+  private Method instanceRotationMethod;
+  private Method instanceScaleMethod;
+
+  BlueMap3DHistoryBridge(LogSink log) {
     this.log = log;
   }
 
@@ -74,7 +83,7 @@ final class BlueMap3DHistoryBridge {
       allow.clear();
       if (!legacyProviderMigrationLogged) {
         legacyProviderMigrationLogged = true;
-        log.accept(
+        log.info(
             "Migrated legacy BlueMap3D history provider default to all recordable providers.");
       }
     }
@@ -97,7 +106,7 @@ final class BlueMap3DHistoryBridge {
             for (Object object : objects) snapshots.add(snapshot(object));
           } catch (ReflectiveOperationException | RuntimeException error) {
             complete = false;
-            log.accept(
+            log.warn(
                 "BlueMap3D provider '"
                     + providerId
                     + "' could not be sampled; preserving its previous object state: "
@@ -113,13 +122,13 @@ final class BlueMap3DHistoryBridge {
 
       if (!connectedLogged) {
         connectedLogged = true;
-        log.accept(
+        log.info(
             explicitProviderList
                 ? "BlueMap3D object-history bridge active for configured providers " + allow
                 : "BlueMap3D object-history bridge active for all recordable providers");
       }
     } catch (ReflectiveOperationException | RuntimeException error) {
-      log.accept("Cannot sample BlueMap3D object history: " + rootCause(error));
+      log.warn("Cannot sample BlueMap3D object history: " + rootCause(error));
     }
   }
 
@@ -145,6 +154,8 @@ final class BlueMap3DHistoryBridge {
             ? new org.joml.Vector3f(1f, 1f, 1f)
             : (org.joml.Vector3f) objectScaleMethod.invoke(object);
 
+    List<ObjectSnapshot.InstanceGroup> groups = instanceGroups(object);
+
     return new ObjectSnapshot(
         sourceId,
         label,
@@ -159,7 +170,50 @@ final class BlueMap3DHistoryBridge {
         scale.x,
         scale.y,
         scale.z,
-        geometryVersion);
+        geometryVersion,
+        groups);
+  }
+
+  private List<ObjectSnapshot.InstanceGroup> instanceGroups(Object object)
+      throws ReflectiveOperationException {
+    if (instancedObjectClass == null
+        || instanceGroupsMethod == null
+        || !instancedObjectClass.isInstance(object)) return List.of();
+
+    Object value = instanceGroupsMethod.invoke(object);
+    if (!(value instanceof Iterable<?> groups)) return List.of();
+
+    List<ObjectSnapshot.InstanceGroup> result = new ArrayList<>();
+    for (Object group : groups) {
+      if (group == null) continue;
+      String id = (String) groupIdMethod.invoke(group);
+      long geometryVersion = ((Number) groupGeometryVersionMethod.invoke(group)).longValue();
+      Object instancesValue = groupInstancesMethod.invoke(group);
+      if (!(instancesValue instanceof Iterable<?> instances)) continue;
+
+      List<ObjectSnapshot.Instance> snapshotInstances = new ArrayList<>();
+      for (Object instance : instances) {
+        if (instance == null) continue;
+        Vec3 position = (Vec3) instancePositionMethod.invoke(instance);
+        Quaternionf rotation = (Quaternionf) instanceRotationMethod.invoke(instance);
+        org.joml.Vector3f scale =
+            (org.joml.Vector3f) instanceScaleMethod.invoke(instance);
+        snapshotInstances.add(
+            new ObjectSnapshot.Instance(
+                position.x,
+                position.y,
+                position.z,
+                rotation.x,
+                rotation.y,
+                rotation.z,
+                rotation.w,
+                scale.x,
+                scale.y,
+                scale.z));
+      }
+      result.add(new ObjectSnapshot.InstanceGroup(id, geometryVersion, snapshotInstances));
+    }
+    return List.copyOf(result);
   }
 
   private boolean resolve() {
@@ -193,10 +247,27 @@ final class BlueMap3DHistoryBridge {
       } catch (NoSuchMethodException ignored) {
         objectScaleMethod = null;
       }
+
+      try {
+        instancedObjectClass = Class.forName("dev.duzo.bluemap3d.api.InstancedSceneObject");
+        Class<?> groupClass = Class.forName("dev.duzo.bluemap3d.api.SceneInstanceGroup");
+        Class<?> instanceClass = Class.forName("dev.duzo.bluemap3d.api.SceneInstance");
+        instanceGroupsMethod = instancedObjectClass.getMethod("instanceGroups");
+        groupIdMethod = groupClass.getMethod("id");
+        groupGeometryVersionMethod = groupClass.getMethod("geometryVersion");
+        groupInstancesMethod = groupClass.getMethod("instances");
+        instancePositionMethod = instanceClass.getMethod("position");
+        instanceRotationMethod = instanceClass.getMethod("rotation");
+        instanceScaleMethod = instanceClass.getMethod("scale");
+      } catch (ReflectiveOperationException ignored) {
+        instancedObjectClass = null;
+        instanceGroupsMethod = null;
+      }
+
       installMeshListener(api);
       return true;
     } catch (ReflectiveOperationException error) {
-      log.accept("BlueMap3D is not available; vehicle/object history is inactive.");
+      log.debug("BlueMap3D is not available; vehicle/object history is inactive.");
       return false;
     }
   }
@@ -207,7 +278,7 @@ final class BlueMap3DHistoryBridge {
       Object lifecycle = providerLifecycleMethod.invoke(provider);
       return lifecycle != null && Boolean.TRUE.equals(lifecycleRecordHistoryMethod.invoke(lifecycle));
     } catch (ReflectiveOperationException | RuntimeException error) {
-      log.accept("Could not read BlueMap3D provider lifecycle; recording it by default: " + rootCause(error));
+      log.warn("Could not read BlueMap3D provider lifecycle; recording it by default: " + rootCause(error));
       return true;
     }
   }
@@ -238,9 +309,9 @@ final class BlueMap3DHistoryBridge {
               });
       api.getMethod("addMeshPublicationListener", listenerType).invoke(null, listener);
       meshListener = listener;
-      log.accept("BlueMap3D geometry archive listener active.");
+      log.info("BlueMap3D geometry archive listener active.");
     } catch (ReflectiveOperationException error) {
-      log.accept(
+      log.warn(
           "BlueMap3D does not expose mesh publication events; object transforms will record, "
               + "but durable historical geometry needs the Player History BlueMap3D build.");
     }
@@ -269,7 +340,7 @@ final class BlueMap3DHistoryBridge {
 
       ObjectHistoryApi.archiveGeometry(provider, sourceId, version, mesh, atlas);
     } catch (Exception error) {
-      log.accept("Could not archive BlueMap3D geometry: " + rootCause(error));
+      log.warn("Could not archive BlueMap3D geometry: " + rootCause(error));
     }
   }
 

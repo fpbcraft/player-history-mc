@@ -25,7 +25,7 @@ test("protocol parsers reject malformed public data", () => {
 test("live parser validates complete points and registry entries", () => {
   assert.deepEqual(
     parseLiveSnapshot({ protocolVersion: 2, generatedAt: 1, registry, points: [], events: [] }),
-    { protocolVersion: 2, generatedAt: 1, registry, points: [], events: [] },
+    { protocolVersion: 2, generatedAt: 1, registry, points: [], events: [], states: {} },
   );
   assert.throws(
     () =>
@@ -38,6 +38,52 @@ test("live parser validates complete points and registry entries", () => {
       }),
     /Invalid player/,
   );
+  assert.deepEqual(
+    parseLiveSnapshot({
+      protocolVersion: 2,
+      generatedAt: 1,
+      registry,
+      points: [],
+      events: [],
+      states: { "7": { sneaking: true, heldItem: { item: 2, count: 1 } } },
+    }).states,
+    { "7": { sneaking: true, heldItem: { item: 2, count: 1 } } },
+  );
+  assert.throws(
+    () =>
+      parseLiveSnapshot({
+        protocolVersion: 2,
+        generatedAt: 1,
+        registry,
+        points: [],
+        events: [],
+        states: { nope: true },
+      }),
+    /Invalid live player state/,
+  );
+});
+
+test("manifest retains current tracker configuration", () => {
+  const parsed = parseManifest({
+    protocolVersion: 2,
+    earliestTimestamp: 100,
+    latestTimestamp: 500,
+    chunkDurationMs: 100,
+    capabilities: { posture: true },
+    trackingEnabled: { movement: true, posture: false, ignored: "nope" },
+    registry,
+  });
+  assert.deepEqual(parsed.trackingEnabled, { movement: true, posture: false });
+
+  const legacy = parseManifest({
+    protocolVersion: 2,
+    earliestTimestamp: 100,
+    latestTimestamp: 500,
+    chunkDurationMs: 100,
+    capabilities: {},
+    registry,
+  });
+  assert.deepEqual(legacy.trackingEnabled, {});
 });
 
 test("manifest validates the optional published chunk index", () => {

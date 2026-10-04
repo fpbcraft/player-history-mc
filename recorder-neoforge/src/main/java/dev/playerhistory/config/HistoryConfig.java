@@ -84,6 +84,7 @@ public final class HistoryConfig {
             "effects",
             "held-item",
             "equipment",
+            "curios",
             "block-break",
             "block-place",
             "container-open",
@@ -97,8 +98,8 @@ public final class HistoryConfig {
             "enchanting",
             "trading",
             "item-pickup",
-            "item-drop", "chat")) TRACKERS.put(name, b.define("tracking." + name, true));
-    for (String name : List.of("inventory", "saturation", "posture"))
+            "item-drop", "chat", "posture")) TRACKERS.put(name, b.define("tracking." + name, true));
+    for (String name : List.of("inventory", "saturation"))
       TRACKERS.put(name, b.define("tracking." + name, false));
     for (String name : List.of("item-damage", "item-enchantments", "item-custom-name"))
       TRACKERS.put(name, b.define("tracking." + name, true));

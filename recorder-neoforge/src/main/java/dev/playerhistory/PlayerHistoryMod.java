@@ -69,7 +69,7 @@ public final class PlayerHistoryMod {
                   HistoryConfig.QUEUE.get(),
                   HistoryConfig.CELL.get(),
                   HistoryConfig.HEATMAP.get()),
-              s -> LoggerFactory.getLogger("PlayerHistory").info(s));
+              LogSink.slf4j(LoggerFactory.getLogger("PlayerHistory")));
       store.capabilities(HistoryConfig.capabilities());
       if (HistoryConfig.OBJECTS.get()) {
         objectHistory =
@@ -82,7 +82,7 @@ public final class PlayerHistoryMod {
                     HistoryConfig.OBJECT_MOVEMENT.get(),
                     HistoryConfig.OBJECT_ROTATION.get(),
                     HistoryConfig.OBJECT_KEYFRAME.get() * 1000L),
-                message -> LoggerFactory.getLogger("PlayerHistoryObjects").info(message));
+                LogSink.slf4j(LoggerFactory.getLogger("PlayerHistoryObjects")));
         ObjectHistoryApi.install(objectHistory);
       }
       if (HistoryConfig.PUBLISH.get()) {

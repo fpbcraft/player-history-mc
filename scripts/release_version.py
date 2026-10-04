@@ -29,9 +29,20 @@ def version_from_tag(tag: str) -> str:
     return normalize_version(tag)
 
 
+def stable_base_version(tags: Iterable[str]) -> str:
+    candidates = [
+        parsed
+        for tag in tags
+        if (parsed := stable_tuple(tag)) is not None
+    ]
+    if not candidates:
+        raise ValueError("no stable release tag found")
+    return ".".join(str(part) for part in max(candidates))
+
+
 def development_version(base: str, sha: str) -> str:
     version = normalize_version(base)
-    if "-" in version or "+" in version:
+    if stable_tuple(version) is None:
         raise ValueError("development base version must be a stable semantic version")
     short = sha.strip().lower()[:8]
     if not re.fullmatch(r"[0-9a-f]{7,8}", short):
@@ -50,7 +61,6 @@ def stable_tuple(value: str) -> tuple[int, int, int] | None:
 def next_version(
     tags: Iterable[str],
     bump: str,
-    fallback: str,
     exact: str | None = None,
 ) -> str:
     if exact and exact.strip():
@@ -59,17 +69,12 @@ def next_version(
     if bump not in {"patch", "minor", "major"}:
         raise ValueError(f"invalid bump: {bump!r}")
 
-    fallback_tuple = stable_tuple(normalize_version(fallback))
-    if fallback_tuple is None:
-        raise ValueError("fallback version must be a stable semantic version")
-
-    candidates = [fallback_tuple]
-    candidates.extend(
-        parsed
-        for tag in tags
-        if (parsed := stable_tuple(tag)) is not None
-    )
-    major, minor, patch = max(candidates)
+    try:
+        major, minor, patch = (
+            int(part) for part in stable_base_version(tags).split(".")
+        )
+    except ValueError as error:
+        raise ValueError("no stable release tag found; provide --exact") from error
 
     if bump == "major":
         return f"{major + 1}.0.0"
@@ -86,6 +91,14 @@ def repository_tags() -> list[str]:
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
+def reachable_repository_tags() -> list[str]:
+    output = subprocess.check_output(
+        ["git", "tag", "--merged", "HEAD", "--list", "v*"],
+        text=True,
+    )
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -94,12 +107,10 @@ def main() -> None:
     from_tag.add_argument("tag")
 
     development = subparsers.add_parser("dev")
-    development.add_argument("--base", required=True)
     development.add_argument("--sha", required=True)
 
     next_release = subparsers.add_parser("next")
     next_release.add_argument("--bump", choices=("patch", "minor", "major"), required=True)
-    next_release.add_argument("--fallback", required=True)
     next_release.add_argument("--exact", default="")
 
     args = parser.parse_args()
@@ -108,13 +119,17 @@ def main() -> None:
         if args.command == "from-tag":
             print(version_from_tag(args.tag))
         elif args.command == "dev":
-            print(development_version(args.base, args.sha))
+            print(
+                development_version(
+                    stable_base_version(reachable_repository_tags()),
+                    args.sha,
+                )
+            )
         else:
             print(
                 next_version(
                     repository_tags(),
                     args.bump,
-                    args.fallback,
                     args.exact,
                 )
             )

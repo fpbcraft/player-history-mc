@@ -20,7 +20,7 @@ tasks.register('buildViewer', Exec) {
  inputs.property 'playerHistoryVersion', project.version.toString()
  outputs.dir('../bluemap-addon/dist')
 }
-sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', 'player-history.js', 'player-history.css' }
+sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', 'player-history.js', 'player-history.css', 'playerhistory-equipment-compat.json' }
 tasks.named('processResources') {
  dependsOn 'buildViewer'
  inputs.property 'version', project.version
@@ -33,5 +33,12 @@ neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); prog
 
 dependencies {
   implementation project(':recorder-neoforge')
+  compileOnly 'org.ow2.asm:asm:9.7.1'
   compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
+  testImplementation 'com.google.code.gson:gson:2.10.1'
+  testImplementation 'org.ow2.asm:asm:9.7.1'
+  testImplementation platform('org.junit:junit-bom:5.11.4')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+test { useJUnitPlatform() }

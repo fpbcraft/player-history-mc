@@ -9,6 +9,8 @@ Install `player-history-recorder-<version>.jar` for recording. Add BlueMap and `
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 
+The BlueMap mod also publishes a tiny live world-status feed. The viewer shows the selected dimension's Minecraft time in the BlueMap control bar and can synchronize BlueMap lighting with that clock. Tick `0` displays as `06:00`; `doDaylightCycle=false` freezes the display, dimensions without skylight keep their configured lighting, and manual BlueMap lighting controls disable synchronization. This UI/world-state integration is owned here rather than by BlueMap3D patches.
+
 The viewer defaults to a three-hour range, live mode and one-minute trails. It includes playback speed, an activity histogram, Grafana-style relative/absolute time selection, persistent player selection, trails and heatmap. Ranges include **last hour, 3, 6 and 12 hours, today, yesterday, 24 and 48 hours, week, 30 days, last N days, all history and custom dates**. Historical players appear as local BlueMap skin heads, with names/details on hover or keyboard focus. Trails and event icons share each player's color. Trail hover places a dot at the selected segment position and interpolates that point's historical timestamp without crossing discontinuities.
 
 ## Build
@@ -33,12 +35,14 @@ publishes the JARs. The workflow can also be run manually from the default branc
 patch/minor/major bump, or provide an exact SemVer. Manual releases build successfully before
 the workflow creates the tag and release, and refuse to reuse an existing tag/version.
 
-Non-release CI/local builds use `<baseline>-dev.<short-sha>`, so artifacts from different
-commits cannot accidentally share a version.
+Non-release CI/local builds derive their base from the latest stable release tag reachable
+from the branch and append `-dev.<short-sha>`. For example, work based on `v1.0.0` produces
+`1.0.0-dev.a1b2c3d4`. This keeps development artifacts immutable while remaining a valid
+NeoForge/Maven version.
 
 The local proxy rebuilds TypeScript and CSS and refreshes the browser without rebuilding a JAR or restarting Minecraft. See [BlueMap installation and live frontend development](docs/bluemap-addon.md) for hosted targets, phone testing and options.
 
-The Gradle `modVersion` property is the baseline semantic version; the private npm package is intentionally not independently versioned. Normal builds append the short Git commit, for example `0.8.27-dev.a1b2c3d4`, and the embedded viewer receives the same version. Published releases use the exact release tag version. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
+The private npm package is intentionally not independently versioned. Normal builds use the latest reachable stable release as their base plus the short Git commit, for example `1.0.0-dev.a1b2c3d4`, and the embedded viewer receives the same version. Published releases use the exact release tag version. Manual semantic bumps derive from the highest stable release tag, so there is no separate repository version baseline to keep synchronized. Both mod builds are independent. Use Java 21. JARs are in each module's `build/libs/`; distribution copies are in `outputs/`. Frontend assets are in `bluemap-addon/dist/` and can be rebuilt without rebuilding either mod.
 
 ## Documentation
 

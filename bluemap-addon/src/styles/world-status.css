@@ -1,0 +1,152 @@
+.control-bar .player-history-server-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 4.2em;
+  min-height: 2em;
+  padding: 0 0.55em;
+  box-sizing: border-box;
+  background: var(--theme-bg);
+  color: var(--theme-fg-light);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  pointer-events: auto;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.control-bar .player-history-game-time-sync {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  min-width: max-content;
+  min-height: 2em;
+  padding: 0 0.55em;
+  box-sizing: border-box;
+  background: var(--theme-bg);
+  color: var(--theme-fg-light);
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.control-bar .player-history-game-time-sync .time-sync-label {
+  font-size: 0.76em;
+  font-weight: 600;
+}
+
+.control-bar .player-history-game-time-sync input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.control-bar .player-history-game-time-sync .time-sync-track {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 2.05em;
+  height: 1.08em;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-bg-light, #333) 82%, #000 18%);
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.control-bar .player-history-game-time-sync .time-sync-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.11em;
+  width: 0.74em;
+  height: 0.74em;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateY(-50%);
+  transition:
+    left 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.control-bar .player-history-game-time-sync:hover {
+  color: var(--theme-fg);
+}
+
+.control-bar .player-history-game-time-sync input:focus-visible + .time-sync-track {
+  outline: 2px solid var(--history-accent, #80b8ed);
+  outline-offset: 2px;
+}
+
+.control-bar .player-history-game-time-sync input:checked + .time-sync-track {
+  border-color: #80b8ed;
+  background: #397eb8;
+}
+
+.control-bar .player-history-game-time-sync input:checked + .time-sync-track .time-sync-thumb {
+  left: 1.08em;
+  background: white;
+  box-shadow: 0 0 0 1px #0002;
+}
+
+@media (max-width: 600px) {
+  .control-bar .player-history-server-time {
+    min-width: 3.65em;
+    padding-inline: 0.28em;
+    color: var(--theme-fg);
+    font-size: 0.82em;
+  }
+
+  .control-bar .player-history-game-time-sync {
+    gap: 0.28em;
+    padding-inline: 0.35em;
+  }
+
+  .control-bar .player-history-game-time-sync .time-sync-label {
+    font-size: 0.68em;
+  }
+
+  .control-bar .player-history-game-time-sync .time-sync-track {
+    width: 1.75em;
+    height: 0.95em;
+  }
+
+  .control-bar .player-history-game-time-sync .time-sync-thumb {
+    width: 0.64em;
+    height: 0.64em;
+  }
+
+  .control-bar .player-history-game-time-sync input:checked + .time-sync-track .time-sync-thumb {
+    left: 0.9em;
+  }
+
+  /* Keep X/Z available on mobile, but let the coordinate editor yield space to
+     the menu, server clock, sync toggle and compass. */
+  .control-bar .pos-input {
+    display: flex !important;
+    flex: 1 1 112px;
+    width: auto !important;
+    min-width: 92px;
+    max-width: 138px !important;
+  }
+
+  .control-bar .pos-input .number-input .label {
+    width: 0.8em;
+    padding-inline: 0.2em;
+    font-size: 0.76em;
+  }
+
+  .control-bar .pos-input .number-input input {
+    width: calc(100% - 1.2em);
+    min-width: 0;
+    padding-inline: 0.1em;
+    font-size: 0.78em;
+  }
+}

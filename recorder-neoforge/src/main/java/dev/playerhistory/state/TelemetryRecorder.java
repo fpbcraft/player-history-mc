@@ -24,6 +24,7 @@ public final class TelemetryRecorder {
   private final LongSupplier now;
   private StateTracker tracker = new StateTracker();
   private final Map<UUID, Integer> online = new HashMap<>();
+  private final CuriosEquipmentReader curios = new CuriosEquipmentReader();
 
   public TelemetryRecorder(
       Supplier<HistoryStore> store,
@@ -101,6 +102,8 @@ public final class TelemetryRecorder {
     value.put(
         "item", registry.get().item(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString()));
     value.put("count", stack.getCount());
+    var dyedColor = stack.get(DataComponents.DYED_COLOR);
+    if (dyedColor != null) value.put("color", dyedColor.rgb() & 0xFFFFFF);
     if (on("item-damage")) value.put("damage", stack.getDamageValue());
     if (on("item-custom-name") && stack.has(DataComponents.CUSTOM_NAME)) {
       String name = stack.getHoverName().getString();
@@ -145,6 +148,8 @@ public final class TelemetryRecorder {
     if (on("game-mode")) values.put("gameMode", p.gameMode.getGameModeForPlayer().getName());
     if (on("orientation")) {
       values.put("yaw", Math.round(p.getYRot() * 2.0f) / 2.0f);
+      values.put("headYaw", Math.round(p.getYHeadRot() * 2.0f) / 2.0f);
+      values.put("bodyYaw", Math.round(p.yBodyRot * 2.0f) / 2.0f);
       values.put("pitch", Math.round(p.getXRot() * 2.0f) / 2.0f);
     }
     if (on("posture")) {
@@ -153,6 +158,7 @@ public final class TelemetryRecorder {
       values.put("swimming", p.isSwimming());
       values.put("elytra", p.isFallFlying());
       values.put("sleeping", p.isSleeping());
+      values.put("onGround", p.onGround());
       values.put("onFire", p.isOnFire());
       values.put("frozen", p.getTicksFrozen());
     }
@@ -178,6 +184,8 @@ public final class TelemetryRecorder {
               EquipmentSlot.LEGS,
               EquipmentSlot.FEET))
         values.put("equipment:" + slot.getName(), item(p.getItemBySlot(slot)));
+    if (on("curios"))
+      curios.visible(p).forEach((key, stack) -> values.put(key, item(stack)));
     if (on("inventory"))
       for (int slot = 0; slot < p.getInventory().getContainerSize(); slot++)
         values.put("slot:" + slot, item(p.getInventory().getItem(slot)));

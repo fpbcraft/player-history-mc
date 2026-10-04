@@ -1,6 +1,7 @@
 package dev.playerhistory.bluemap;
 
 import com.google.gson.Gson;
+import dev.playerhistory.core.LogSink;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
@@ -42,10 +43,12 @@ public final class BlueMapIntegration {
   private volatile Path worldRoot;
   private volatile MinecraftServer server;
   private final Map<String, Object> levels = new HashMap<>();
-  private final Consumer<String> log = s -> LoggerFactory.getLogger("PlayerHistoryBlueMap").info(s);
+  private final LogSink log = LogSink.slf4j(LoggerFactory.getLogger("PlayerHistoryBlueMap"));
   private final BlueMap3DHistoryBridge objectHistory = new BlueMap3DHistoryBridge(log);
   private final PlayerSkinPublisher skins = new PlayerSkinPublisher(log);
+  private final EquipmentAssetPublisher equipment = new EquipmentAssetPublisher(log);
   private final ServerOverlayPublisher serverOverlays = new ServerOverlayPublisher(log);
+  private final WorldStatusPublisher worldStatus = new WorldStatusPublisher(log);
 
   public BlueMapIntegration(ModContainer container) {
     version = container.getModInfo().getVersion().toString();
@@ -71,10 +74,12 @@ public final class BlueMapIntegration {
                     api = null;
                     objectHistory.webRoot(null);
                     skins.disable();
+                    equipment.disable();
                     serverOverlays.stop();
+                    worldStatus.stop();
                   });
     } catch (Exception ex) {
-      log.accept("Cannot connect to BlueMap API: " + ex);
+      log.warn("Cannot connect to BlueMap API: " + ex);
     }
   }
 
@@ -90,7 +95,9 @@ public final class BlueMapIntegration {
 
   private void stop(ServerStoppingEvent event) {
     objectHistory.reset();
+    equipment.disable();
     serverOverlays.stop();
+    worldStatus.stop();
     server = null;
     worldRoot = null;
     levels.clear();
@@ -100,7 +107,9 @@ public final class BlueMapIntegration {
     objectHistory.tick(
         event, OBJECT_HISTORY.get(), OBJECT_SAMPLE_INTERVAL.get(), OBJECT_PROVIDERS.get());
     skins.tick(event.getServer(), worldRoot);
+    equipment.tick(worldRoot);
     serverOverlays.tick(event.getServer());
+    worldStatus.tick(event.getServer());
   }
 
   private static Object call(
@@ -125,6 +134,16 @@ public final class BlueMapIntegration {
           (Set<String>) manager.getClass().getMethod("getScripts").invoke(manager);
       Set<String> styles =
           (Set<String>) manager.getClass().getMethod("getStyles").invoke(manager);
+
+      // Game-time UI originally shipped from bluemap3d-patches. Player History now owns it;
+      // remove the persisted registration and old web files so the two runtimes cannot coexist.
+      scripts.remove("assets/bluemap3d/game-time-sync.js");
+      Path webRoot = assetRoot.getParent();
+      if (webRoot != null) {
+        Files.deleteIfExists(webRoot.resolve("assets/bluemap3d/game-time-sync.js"));
+        Files.deleteIfExists(webRoot.resolve("assets/bluemap3d/game-time-sync.core.js"));
+        Files.deleteIfExists(webRoot.resolve("assets/bluemap3d/game-time.json"));
+      }
 
       scripts.removeIf(
           url ->
@@ -153,7 +172,7 @@ public final class BlueMapIntegration {
     } catch (ReflectiveOperationException | java.io.IOException error) {
       // BlueMap has no public unregister API. Failure here is non-fatal, but keeping
       // stale versioned URLs can cause an older cached custom element to win at startup.
-      log.accept("Could not remove stale Player History web registrations: " + error);
+      log.warn("Could not remove stale Player History web registrations: " + error);
     }
   }
 
@@ -167,9 +186,13 @@ public final class BlueMapIntegration {
               .normalize();
       objectHistory.webRoot(webRoot);
       skins.configure(api, webRoot);
+      equipment.configure(webRoot, worldRoot);
       Path root = webRoot.resolve("player-history");
       Files.createDirectories(root);
-      if (server != null) serverOverlays.start(server, webRoot);
+      if (server != null) {
+        serverOverlays.start(server, webRoot);
+        worldStatus.start(server, webRoot);
+      }
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);
@@ -190,7 +213,7 @@ public final class BlueMapIntegration {
             && !(Files.isSymbolicLink(link) && Files.readSymbolicLink(link).equals(dataset))) {
           Path backup = root.resolve("legacy-data-" + System.currentTimeMillis());
           Files.move(link, backup);
-          log.accept(
+          log.info(
               "Preserved previous public history at "
                   + backup
                   + "; remove it explicitly when migration is confirmed.");
@@ -223,9 +246,9 @@ public final class BlueMapIntegration {
           "registerStyle",
           new Class<?>[] {String.class},
           "player-history/player-history-" + version + ".css");
-      log.accept("History viewer installed; public dataset: " + dataset);
+      log.info("History viewer installed; public dataset: " + dataset);
     } catch (Exception ex) {
-      log.accept(
+      log.warn(
           "Cannot install history viewer: "
               + ex
               + ". See docs/bluemap-addon.md for manual directory-link setup.");

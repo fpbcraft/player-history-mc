@@ -5,12 +5,31 @@ import { BlueMapAdapter, eventColor, meterLevels, playerColor } from "../src/blu
 vi.mock("../src/history-scene3d.js", () => ({
   HistoryScene3D: class {
     root = { children: [], userData: {}, visible: true };
+    targets = new Map();
 
     raycastObjects() {
       return [];
     }
 
-    setPlayers() {}
+    setPlayers(positions) {
+      this.targets = new Map(
+        positions.map((point) => [
+          point.player,
+          {
+            position: {
+              x: point.x / 32,
+              y: point.y / 32,
+              z: point.z / 32,
+            },
+            userData: { historyPlayer: point.player },
+          },
+        ]),
+      );
+    }
+
+    playerTarget(player) {
+      return this.targets.get(player);
+    }
 
     setPlayersVisible() {}
 
@@ -53,6 +72,12 @@ class Element {
   }
   setAttribute(name, value) {
     this.attributes[name] = value;
+  }
+  set ariaPressed(value) {
+    this.attributes["aria-pressed"] = value;
+  }
+  get ariaPressed() {
+    return this.attributes["aria-pressed"];
   }
   getBoundingClientRect() {
     return { left: 0, top: 0, right: 100, width: 100, height: 100 };
@@ -147,8 +172,27 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     globalThis.innerWidth = 800;
     globalThis.innerHeight = 600;
     globalThis.cancelAnimationFrame = () => {};
+    const popupMarker = new Marker("bm-popup");
+    const originalPopupInteraction = () => "stock";
+    popupMarker.onMapInteraction = originalPopupInteraction;
+    popupMarker.cube = { visible: true };
+    popupMarker.visible = true;
+    const popupMarkerSet = new SetMarker("root");
+    popupMarkerSet.add(popupMarker);
+    const nativePlayerMarker = {
+      id: "native-player",
+      isPlayerMarker: true,
+      data: { position: new Vector() },
+      element: new Element(),
+    };
     const app = {
-      popupMarkerSet: new SetMarker("root"),
+      popupMarker,
+      popupMarkerSet,
+      playerMarkerManager: {
+        getPlayerMarker(uuid) {
+          return uuid === "abc" ? nativePlayerMarker : undefined;
+        },
+      },
       mapViewer: {
         markers: {},
         map: { data: { id: "world", mapDataRoot: "maps/world" } },
@@ -174,9 +218,28 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       },
     };
     const adapter = new BlueMapAdapter(app, api);
+    assert.equal(
+      app.popupMarkerSet.children.includes(popupMarker),
+      true,
+      "stock BlueMap popup stays mounted so its global listeners remain safe",
+    );
+    assert.equal(popupMarker.element.style.display, "none");
+    assert.equal(popupMarker.cube.visible, false);
+    assert.equal(popupMarker.visible, false);
+    assert.notEqual(popupMarker.onMapInteraction, originalPopupInteraction);
+    const mapControls = {
+      data: { followingPlayer: null },
+      followPlayerMarker(marker) {
+        this.data.followingPlayer = marker;
+      },
+      stopFollowingPlayerMarker() {
+        this.data.followingPlayer = null;
+      },
+    };
     app.mapViewer.controlsManager = {
       distance: 300,
       position: new Vector(),
+      controls: mapControls,
       updateCamera() {
         this.updated = true;
       },
@@ -209,6 +272,27 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     image.onerror();
     assert.match(image.src, /^data:image\/svg\+xml,/);
     assert.equal(image.onerror, null);
+
+    assert.equal(adapter.bar.children.length, 1);
+    const followButton = adapter.bar.children[0];
+    assert.equal(followButton.title, "Test player");
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
+    assert.equal(followButton.attributes["aria-pressed"], "true");
+
+    head.element.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer, null);
+    assert.equal(followButton.attributes["aria-pressed"], "false");
+
+    followButton.onclick({ stopPropagation() {} });
+    mapControls.data.followingPlayer = null;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    assert.equal(
+      followButton.attributes["aria-pressed"],
+      "false",
+      "manual camera movement clears the active follow state",
+    );
+
     adapter.setPlayerVitals(1, { health: 17, maxHealth: 20 });
     const vitals = head.element.querySelector(".history-player-vitals");
     assert.equal(vitals.hidden, false);
@@ -299,7 +383,41 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(chatIcon.children.length, 1, "chat renders as an icon-only map event");
     assert.doesNotMatch(chatIcon.className, /history-chat-bubble/);
     assert.match(chatIcon.dataset.historyTooltip, /<b>Hello<\/b>/);
+
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(
+      mapControls.data.followingPlayer,
+      nativePlayerMarker,
+      "live follow delegates to BlueMap's native animated player marker",
+    );
+    followButton.onclick({ stopPropagation() {} });
+    assert.equal(mapControls.data.followingPlayer, null);
+
+    app.mapViewer.controlsManager.distance = 100;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      "none",
+      "native BlueMap marker is hidden while the close-up 3D model is visible",
+    );
+    app.mapViewer.controlsManager.distance = 300;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      undefined,
+      "native BlueMap marker returns when zooming back out",
+    );
+
     adapter.dispose();
+    assert.equal(
+      popupMarker.onMapInteraction,
+      originalPopupInteraction,
+      "disposing Player History restores BlueMap's popup behavior",
+    );
+    assert.equal(popupMarker.element.style.display, "");
+    assert.equal(popupMarker.cube.visible, true);
+    assert.equal(popupMarker.visible, true);
   } finally {
     for (const key of keys) {
       if (old[key] === undefined) delete globalThis[key];

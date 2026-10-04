@@ -6,6 +6,7 @@ import { chatEventsBetween } from "./event-notifications.js";
 import { ObjectReplaySession } from "./object-replay-session.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
 import { LiveFeedState } from "./live-feed-state.js";
+import { LiveReplaySession } from "./live-replay-session.js";
 import { loadHeatmapRange } from "./heatmap-loader.js";
 import { type HeatmapRow, type OverlayKeys, updateReplayOverlays } from "./overlay-coordinator.js";
 import { PanelControls, type ReplayControls } from "./panel-controls.js";
@@ -22,7 +23,7 @@ import {
   UNAVAILABLE_EVENT_TYPES,
 } from "./panel-options.js";
 import { preferences } from "./preferences.js";
-import { ChunkCache, OFFLINE, ReplayEngine } from "./replay-core.js";
+import { ChunkCache, ReplayEngine } from "./replay-core.js";
 import { createReplayPanelState, type ReplayPanelState } from "./replay-panel-state.js";
 import { clamp, ReplayClock } from "./replay-state.js";
 import { ReplayWindowState } from "./replay-window-state.js";
@@ -37,6 +38,7 @@ import type {
   HistoryManifest,
   HistoryPoint,
   IntegrationMapping,
+  PlayerState,
 } from "./types.js";
 import { renderActivityHistogram } from "./ui/activity-histogram-view.js";
 import { type ChatNotification, renderChatNotifications } from "./ui/chat-notification-view.js";
@@ -53,6 +55,7 @@ declare global {
 }
 
 const BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
+const LIVE_POLL_INTERVAL_MS = 1_000;
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -68,6 +71,7 @@ export class ReplayPanel extends HTMLElement {
   private rangeEvents: HistoryEvent[] = [];
   private liveEvents: HistoryEvent[] = [];
   private livePoints: HistoryPoint[] = [];
+  private liveStates: Record<string, PlayerState> = {};
   private manifest?: HistoryManifest;
   private integration?: IntegrationMapping;
   private cache: ChunkCache | undefined;
@@ -108,6 +112,7 @@ export class ReplayPanel extends HTMLElement {
   private trailMode = 60_000;
   private chatNotifications: ChatNotification[] = [];
   private liveFeed = new LiveFeedState();
+  private liveReplay = new LiveReplaySession(LIVE_POLL_INTERVAL_MS);
 
   private setTrailProgress(completed: number, total: number): void {
     if (total <= 0) return;
@@ -250,6 +255,7 @@ export class ReplayPanel extends HTMLElement {
     this.livePoints = [];
     this.chatNotifications = [];
     this.liveFeed.reset();
+    this.liveReplay.reset();
     this.mobileQuery = matchMedia("(max-width: 600px)");
     this.engine = new ReplayEngine();
     this.objectReplay.clear();
@@ -551,7 +557,7 @@ export class ReplayPanel extends HTMLElement {
     this.lifecycle.frame((time) => this.tickFrame(time));
     const startLivePolling = () => {
       void this.pollLive();
-      this.lifecycle.interval(() => this.pollLive(), 1000);
+      this.lifecycle.interval(() => this.pollLive(), LIVE_POLL_INTERVAL_MS);
     };
     void this.refresh(true).then(startLivePolling);
     this.lifecycle.interval(() => {
@@ -631,8 +637,10 @@ export class ReplayPanel extends HTMLElement {
     this.trailMode = this.trailMode || 60000;
     this.q("trails").value = String(this.trailMode);
     preferences.saveTrails(this.trailMode);
+    this.liveReplay.reset();
     this.goNow();
     await this.refresh(true);
+    await this.pollLive();
   }
   async openChat() {
     const box = this.require<HTMLElement>(".history-chat-panel");
@@ -813,6 +821,14 @@ export class ReplayPanel extends HTMLElement {
         previous.latestTimestamp !== m.latestTimestamp ||
         previous.earliestTimestamp !== m.earliestTimestamp;
       this.manifest = m;
+      if (m.trackingEnabled.posture === false) {
+        this.statusCoordinator.show(
+          "configuration",
+          "Player pose animations are disabled: set tracking.posture = true in config/playerhistory-common.toml.",
+        );
+      } else {
+        this.statusCoordinator.clear("configuration");
+      }
       this.telemetryCache?.chunks.clear();
       for (const [control, cap] of [
         ["trails", "movement"],
@@ -1146,20 +1162,19 @@ export class ReplayPanel extends HTMLElement {
       const ready = this.windowState.isLoaded(this.clock.time, this.cache.duration);
       let positions: HistoryPoint[] = [];
       if (this.isLive) {
-        const latest = new Map<number, HistoryPoint>();
-        for (const point of this.livePoints) {
-          if (point.world !== world || !this.selection.has(point.player)) continue;
-          const previous = latest.get(point.player);
-          if (!previous || point.time >= previous.time) latest.set(point.player, point);
-        }
-        positions = [...latest.values()].filter((point) => !(point.flags & OFFLINE));
+        positions = this.liveReplay.positions(this.selection, world);
       } else if (ready) {
         positions = [...this.selection]
           .map((id) => this.engine.position(id, this.clock.time))
           .filter((point): point is HistoryPoint => point !== null && point.world === world)
           .map((point) => ({ ...point, time: this.clock.time }));
       }
-      this.adapter.setPlayers(positions, this.names, this.manifest.registry.players);
+      this.adapter.setPlayers(
+        positions,
+        this.names,
+        this.manifest.registry.players,
+        this.isLive,
+      );
 
       if (this.objectAdapter && !this.isLive) {
         const objectFrame = this.objectReplay.frame(this.clock.time, this.worldKey());
@@ -1176,25 +1191,39 @@ export class ReplayPanel extends HTMLElement {
       } else {
         this.objectAdapter?.clear();
       }
-      const healthKey = `${Math.floor(this.clock.time / 1000)}:${positions
-        .map((position) => position.player)
-        .join(",")}`;
-      if (healthKey !== this.healthKey) {
-        this.healthKey = healthKey;
-        const token = {};
-        this.healthToken = token;
-        const telemetryCache = this.telemetryCache;
-        if (!telemetryCache) return;
-        Promise.all(
-          positions.map(
-            async (position) =>
-              [position.player, await telemetryCache.at(position.player, this.clock.time)] as const,
-          ),
-        ).then((states) => {
-          if (this.healthToken !== token || this.isLive) return;
-          for (const [player, state] of states)
-            this.adapter?.setPlayerVitals(player, state ?? undefined);
-        });
+      if (this.isLive) {
+        for (const position of positions) {
+          this.adapter.setPlayerVitals(
+            position.player,
+            this.liveStates[String(position.player)] ?? {},
+            this.manifest.registry.items,
+          );
+        }
+      } else {
+        const healthKey = `${Math.floor(this.clock.time / 1000)}:${positions
+          .map((position) => position.player)
+          .join(",")}`;
+        if (healthKey !== this.healthKey) {
+          this.healthKey = healthKey;
+          const token = {};
+          this.healthToken = token;
+          const telemetryCache = this.telemetryCache;
+          if (!telemetryCache) return;
+          Promise.all(
+            positions.map(
+              async (position) =>
+                [position.player, await telemetryCache.at(position.player, this.clock.time)] as const,
+            ),
+          ).then((states) => {
+            if (this.healthToken !== token || this.isLive) return;
+            for (const [player, state] of states)
+              this.adapter?.setPlayerVitals(
+                player,
+                state ?? undefined,
+                this.manifest?.registry.items ?? [],
+              );
+          });
+        }
       }
       if (world === undefined)
         this.statusCoordinator.show("range", "This map has no matching recorded dimension.");
@@ -1255,7 +1284,8 @@ export class ReplayPanel extends HTMLElement {
     this.liveLoading = true;
     const controller = this.requests.start("live");
     try {
-      const data = this.opened
+      const fullLive = this.opened;
+      const data = fullLive
         ? await this.historyClient.live(controller.signal)
         : await this.historyClient.presence(controller.signal);
       const update = this.liveFeed.apply(data);
@@ -1263,6 +1293,11 @@ export class ReplayPanel extends HTMLElement {
 
       this.livePoints = update.points;
       this.liveEvents = update.events;
+      this.liveStates = update.states;
+      // Presence snapshots still contain the latest point for each online player.
+      // Feed them into the live replay even while History is closed so the 3D avatar
+      // and floating follow bar do not disappear between full-live sessions.
+      this.liveReplay.update(update.points, update.generatedAt);
       for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
       this.eventRevision++;
 

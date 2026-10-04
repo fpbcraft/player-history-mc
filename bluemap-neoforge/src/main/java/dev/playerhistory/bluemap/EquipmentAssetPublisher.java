@@ -1,0 +1,569 @@
+package dev.playerhistory.bluemap;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.LogSink;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.security.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.imageio.ImageIO;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.Equipable;
+
+/**
+ * Publishes resolved resource models only for item ids that have actually appeared in
+ * Player History's registry.
+ *
+ * <p>Descriptors contain expanded triangles in centered one-block model space and direct
+ * normalized UVs, so the browser only needs BufferGeometry plus the named texture.
+ */
+final class EquipmentAssetPublisher {
+  private static final int FORMAT = 1;
+  private static final int ARMOR_FORMAT = 2;
+  private static final long SCAN_INTERVAL_MS = 5_000;
+
+  private final LogSink log;
+  private final ExecutorService worker;
+  private final AtomicBoolean scanning = new AtomicBoolean();
+  private final Set<String> processedModels = ConcurrentHashMap.newKeySet();
+  private final Set<String> processedArmor = ConcurrentHashMap.newKeySet();
+
+  private volatile Path root;
+  private volatile Path registry;
+  private volatile BlueMap3DItemModelBridge bridge;
+  private volatile CustomArmorAssetResolver customArmor;
+  private volatile CompiledArmorAssetResolver compiledArmor;
+  private volatile EquipmentCompatibilityConfig.Data equipmentCompatibility =
+      EquipmentCompatibilityConfig.defaults();
+  private volatile long nextScan;
+
+  EquipmentAssetPublisher(LogSink log) {
+    this.log = log;
+    worker =
+        Executors.newSingleThreadExecutor(
+            runnable -> {
+              Thread thread = new Thread(runnable, "player-history-equipment-assets");
+              thread.setDaemon(true);
+              thread.setPriority(Thread.NORM_PRIORITY - 1);
+              return thread;
+            });
+  }
+
+  synchronized void configure(Path webRoot, Path worldRoot) {
+    disable();
+    root = webRoot.resolve("player-history/equipment").toAbsolutePath().normalize();
+    registry = worldRoot.resolve("player-history/registry.json").toAbsolutePath().normalize();
+    processedModels.clear();
+    processedArmor.clear();
+    equipmentCompatibility =
+        EquipmentCompatibilityConfig.load(Path.of("").toAbsolutePath().normalize(), log);
+    try {
+      Files.createDirectories(root);
+      writeAtomic(
+          root.resolve("wearables.json"),
+          JsonFiles.GSON.toJson(
+              new WearableConfig(
+                  FORMAT,
+                  equipmentCompatibility.wearableSlots(),
+                  equipmentCompatibility.wearableItems())));
+    } catch (IOException error) {
+      log.warn("Could not publish wearable equipment compatibility: " + error);
+    }
+    nextScan = 0;
+  }
+
+  synchronized void disable() {
+    root = null;
+    registry = null;
+    processedModels.clear();
+    processedArmor.clear();
+    BlueMap3DItemModelBridge current = bridge;
+    bridge = null;
+    customArmor = null;
+    compiledArmor = null;
+    if (current != null) current.close();
+  }
+
+  void tick(Path ignoredWorldRoot) {
+    if (root == null || registry == null) return;
+    long now = System.currentTimeMillis();
+    if (now < nextScan || !scanning.compareAndSet(false, true)) return;
+    nextScan = now + SCAN_INTERVAL_MS;
+    worker.execute(
+        () -> {
+          try {
+            scan();
+          } finally {
+            scanning.set(false);
+          }
+        });
+  }
+
+  private void scan() {
+    Path currentRoot = root;
+    Path currentRegistry = registry;
+    if (currentRoot == null || currentRegistry == null || !Files.isRegularFile(currentRegistry)) {
+      return;
+    }
+
+    BlueMap3DItemModelBridge currentBridge = bridge;
+    if (currentBridge == null) {
+      try {
+        currentBridge =
+            BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
+        bridge = currentBridge;
+        customArmor = new CustomArmorAssetResolver(currentBridge, log, equipmentCompatibility);
+        try {
+          compiledArmor = new CompiledArmorAssetResolver(log);
+        } catch (RuntimeException | LinkageError error) {
+          compiledArmor = null;
+          log.warn("Could not initialize compiled armor model discovery: " + error);
+        }
+      } catch (ClassNotFoundException error) {
+        log.debug("BlueMap3D is unavailable; Player History will keep simple equipment models");
+        nextScan = Long.MAX_VALUE;
+        return;
+      } catch (Exception error) {
+        log.warn("Could not initialize BlueMap3D equipment models: " + error);
+        return;
+      }
+    }
+
+    try (var reader = Files.newBufferedReader(currentRegistry)) {
+      JsonObject data = JsonFiles.GSON.fromJson(reader, JsonObject.class);
+      JsonArray items = data == null ? null : data.getAsJsonArray("items");
+      if (items == null) return;
+      for (var element : items) {
+        if (!element.isJsonObject()) continue;
+        var key = element.getAsJsonObject().get("key");
+        if (key == null || !key.isJsonPrimitive()) continue;
+        String item = key.getAsString();
+        ResourceLocation id = ResourceLocation.tryParse(item);
+        if (id == null) continue;
+        if (!processedModels.contains(item)
+            && publishItemModel(currentRoot, currentBridge, item, id)) {
+          processedModels.add(item);
+        }
+        if (!processedArmor.contains(item)
+            && publishArmor(currentRoot, currentBridge, item, id)) {
+          processedArmor.add(item);
+        }
+      }
+    } catch (IOException | RuntimeException error) {
+      log.warn("Could not inspect Player History item registry for equipment models: " + error);
+    }
+  }
+
+  private boolean publishItemModel(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id) {
+    List<BlueMap3DItemModelBridge.Quad> quads = currentBridge.model(item);
+    if (quads.isEmpty()) return true;
+
+    var groups = new LinkedHashMap<GroupKey, GroupBuilder>();
+    for (var quad : quads) {
+      GroupKey key = new GroupKey(quad.texture(), quad.tint());
+      groups.computeIfAbsent(key, ignored -> new GroupBuilder()).add(quad);
+    }
+
+    var output = new ArrayList<ModelGroup>();
+    try {
+      for (var entry : groups.entrySet()) {
+        ResourceLocation textureId = ResourceLocation.tryParse(entry.getKey().texture());
+        String texturePath = null;
+        if (textureId != null) {
+          BufferedImage image = currentBridge.texture(entry.getKey().texture());
+          if (image != null) {
+            texturePath =
+                "textures/"
+                    + textureId.getNamespace()
+                    + "/"
+                    + textureId.getPath()
+                    + ".png";
+            writePng(currentRoot, texturePath, image);
+          }
+        }
+        GroupBuilder group = entry.getValue();
+        output.add(
+            new ModelGroup(
+                texturePath,
+                entry.getKey().tint() & 0xFFFFFF,
+                group.positions(),
+                group.uvs()));
+      }
+
+      Path target =
+          safeResolve(
+              currentRoot,
+              "models/" + id.getNamespace() + "/" + id.getPath() + ".json");
+      Files.createDirectories(target.getParent());
+      writeAtomic(
+          target,
+          JsonFiles.GSON.toJson(
+              new ItemModel(FORMAT, item, output, fingerprint(item, output))));
+      return true;
+    } catch (IOException error) {
+      log.warn("Could not publish equipment model " + item + ": " + error);
+      return false;
+    }
+  }
+
+  private boolean publishArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id) {
+    var registered = BuiltInRegistries.ITEM.get(id);
+    CustomArmorAssetResolver resolver = customArmor;
+    CustomArmorAssetResolver.Model custom =
+        registered instanceof Equipable && resolver != null ? resolver.resolve(id) : null;
+    if (custom != null) {
+      return publishCustomArmor(currentRoot, currentBridge, item, id, custom);
+    }
+
+    if (!(registered instanceof ArmorItem armor)) return true;
+
+    CompiledArmorAssetResolver compiledResolver = compiledArmor;
+    CompiledArmorAssetResolver.Model compiled =
+        compiledResolver == null ? null : compiledResolver.resolve(id, armor.getType());
+    if (compiled != null) {
+      ResolvedArmorTexture texture =
+          firstArmorTexture(currentBridge, item, armor);
+      if (texture != null) {
+        return publishCompiledArmor(currentRoot, item, id, compiled, texture);
+      }
+    }
+
+    boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
+    var layers = armor.getMaterial().value().layers();
+    if (layers.isEmpty()) {
+      CustomArmorAssetResolver.LayeredModel layered =
+          resolver == null ? null : resolver.resolveLayered(id, armor.getType());
+      if (layered != null) {
+        return publishLayeredArmor(currentRoot, currentBridge, item, id, layered);
+      }
+      return false;
+    }
+
+    try {
+      var published = new ArrayList<ArmorLayer>();
+      for (var layer : layers) {
+        ResourceLocation textureFile = layer.texture(inner);
+        try {
+          ResourceLocation override =
+              armor.getArmorTexture(
+                  armor.getDefaultInstance(), null, armor.getType().getSlot(), layer, inner);
+          if (override != null) textureFile = override;
+        } catch (RuntimeException | LinkageError error) {
+          log.debug("Could not resolve per-item armor texture for " + item + ": " + error);
+        }
+        String texture = textureId(textureFile);
+        BufferedImage image = currentBridge.texture(texture);
+        if (image == null) continue;
+        String path = texturePath(texture);
+        writePng(currentRoot, path, image);
+
+        published.add(
+            new ArmorLayer(
+                path,
+                null,
+                layer.dyeable(),
+                layer.dyeable()
+                    ? equipmentCompatibility.defaultArmorColor(
+                        id.getNamespace(), armorFamily(id.getPath()))
+                    : null,
+                null,
+                null));
+      }
+      if (published.isEmpty()) return false;
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(ARMOR_FORMAT, item, "layers", inner ? 2 : 1, published, null, null));
+      return true;
+    } catch (IOException error) {
+      log.warn("Could not publish armor textures for " + item + ": " + error);
+      return false;
+    }
+  }
+
+
+  private ResolvedArmorTexture firstArmorTexture(
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ArmorItem armor) {
+    boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
+    for (var layer : armor.getMaterial().value().layers()) {
+      ResourceLocation textureFile = layer.texture(inner);
+      try {
+        ResourceLocation override =
+            armor.getArmorTexture(
+                armor.getDefaultInstance(), null, armor.getType().getSlot(), layer, inner);
+        if (override != null) textureFile = override;
+      } catch (RuntimeException | LinkageError error) {
+        log.debug("Could not resolve per-item armor texture for " + item + ": " + error);
+      }
+      String texture = textureId(textureFile);
+      BufferedImage image = currentBridge.texture(texture);
+      if (image != null) return new ResolvedArmorTexture(texture, image);
+    }
+    return null;
+  }
+
+  private boolean publishCompiledArmor(
+      Path currentRoot,
+      String item,
+      ResourceLocation id,
+      CompiledArmorAssetResolver.Model model,
+      ResolvedArmorTexture texture) {
+    try {
+      String texturePath = texturePath(texture.texture());
+      writePng(currentRoot, texturePath, texture.image());
+      var parts = new ArrayList<CustomArmorPart>();
+      for (var part : model.parts()) {
+        parts.add(
+            new CustomArmorPart(part.parent(), part.slot(), part.positions(), part.uvs()));
+      }
+      if (parts.isEmpty()) return false;
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(ARMOR_FORMAT, item, "custom", null, null, texturePath, parts));
+      return true;
+    } catch (IOException error) {
+      log.warn("Could not publish compiled armor geometry for " + item + ": " + error);
+      return false;
+    }
+  }
+
+  private boolean publishLayeredArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id,
+      CustomArmorAssetResolver.LayeredModel model) {
+    try {
+      var published = new ArrayList<ArmorLayer>();
+      for (var layer : model.layers()) {
+        BufferedImage image = currentBridge.texture(layer.texture());
+        if (image == null) continue;
+        String basePath = texturePath(layer.texture());
+        writePng(currentRoot, basePath, image);
+
+        String overlayPath = null;
+        if (layer.overlayTexture() != null) {
+          BufferedImage overlay = currentBridge.texture(layer.overlayTexture());
+          if (overlay != null) {
+            overlayPath = texturePath(layer.overlayTexture());
+            writePng(currentRoot, overlayPath, overlay);
+          }
+        }
+
+        published.add(
+            new ArmorLayer(
+                basePath,
+                overlayPath,
+                layer.dyeable(),
+                layer.dyeable()
+                    ? equipmentCompatibility.defaultArmorColor(
+                        id.getNamespace(), armorFamily(id.getPath()))
+                    : null,
+                layer.deformation(),
+                layer.headDeformation()));
+      }
+      if (published.isEmpty()) return false;
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(
+              ARMOR_FORMAT, item, "layers", model.layer(), published, null, null));
+      return true;
+    } catch (IOException error) {
+      log.warn("Could not publish segmented armor textures for " + item + ": " + error);
+      return false;
+    }
+  }
+
+  private boolean publishCustomArmor(
+      Path currentRoot,
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ResourceLocation id,
+      CustomArmorAssetResolver.Model custom) {
+    BufferedImage image = currentBridge.texture(custom.texture());
+    if (image == null) return false;
+    try {
+      String texturePath = texturePath(custom.texture());
+      writePng(currentRoot, texturePath, image);
+      var parts = new ArrayList<CustomArmorPart>();
+      for (var part : custom.parts())
+        parts.add(
+            new CustomArmorPart(part.parent(), part.slot(), part.positions(), part.uvs()));
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(ARMOR_FORMAT, item, "custom", null, null, texturePath, parts));
+      return true;
+    } catch (IOException error) {
+      log.warn("Could not publish custom armor geometry for " + item + ": " + error);
+      return false;
+    }
+  }
+
+  private static void writeArmorDescriptor(Path root, ResourceLocation id, ArmorModel model)
+      throws IOException {
+    Path target =
+        safeResolve(root, "armor/" + id.getNamespace() + "/" + id.getPath() + ".json");
+    Files.createDirectories(target.getParent());
+    writeAtomic(target, JsonFiles.GSON.toJson(model));
+  }
+
+
+  private static String armorFamily(String path) {
+    for (String suffix :
+        List.of(
+            "_chestplate", "_leggings", "_helmet", "_boots",
+            "_chest", "_legs", "_head", "_feet")) {
+      if (path.endsWith(suffix)) return path.substring(0, path.length() - suffix.length());
+    }
+    return path;
+  }
+
+  private static String textureId(ResourceLocation file) {
+    String path = file.getPath();
+    if (path.startsWith("textures/")) path = path.substring("textures/".length());
+    if (path.endsWith(".png")) path = path.substring(0, path.length() - ".png".length());
+    return file.getNamespace() + ":" + path;
+  }
+
+  private static String texturePath(String texture) throws IOException {
+    ResourceLocation id = ResourceLocation.tryParse(texture);
+    if (id == null) throw new IOException("Invalid armor texture id: " + texture);
+    return "textures/" + id.getNamespace() + "/" + id.getPath() + ".png";
+  }
+
+  private static void writePng(Path root, String relative, BufferedImage image) throws IOException {
+    Path target = safeResolve(root, relative);
+    Files.createDirectories(target.getParent());
+    Path temp = Files.createTempFile(target.getParent(), ".equipment-texture-", ".tmp");
+    try {
+      try (var output = Files.newOutputStream(temp)) {
+        if (!ImageIO.write(image, "PNG", output)) throw new IOException("No PNG writer available");
+      }
+      replace(temp, target);
+    } finally {
+      Files.deleteIfExists(temp);
+    }
+  }
+
+  private static void writeAtomic(Path target, String content) throws IOException {
+    Path temp = Files.createTempFile(target.getParent(), ".equipment-model-", ".tmp");
+    try {
+      Files.writeString(temp, content, StandardCharsets.UTF_8);
+      replace(temp, target);
+    } finally {
+      Files.deleteIfExists(temp);
+    }
+  }
+
+  private static void replace(Path source, Path target) throws IOException {
+    try {
+      Files.move(
+          source,
+          target,
+          StandardCopyOption.REPLACE_EXISTING,
+          StandardCopyOption.ATOMIC_MOVE);
+    } catch (AtomicMoveNotSupportedException ignored) {
+      Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+  }
+
+  private static Path safeResolve(Path root, String relative) throws IOException {
+    Path target = root.resolve(relative).toAbsolutePath().normalize();
+    if (!target.startsWith(root)) throw new IOException("Unsafe equipment asset path: " + relative);
+    return target;
+  }
+
+  private static String fingerprint(String item, List<ModelGroup> groups) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      digest.update(item.getBytes(StandardCharsets.UTF_8));
+      digest.update(JsonFiles.GSON.toJson(groups).getBytes(StandardCharsets.UTF_8));
+      return HexFormat.of().formatHex(digest.digest(), 0, 8);
+    } catch (NoSuchAlgorithmException impossible) {
+      return "unknown";
+    }
+  }
+
+  private record GroupKey(String texture, int tint) {}
+
+  private record ResolvedArmorTexture(String texture, BufferedImage image) {}
+
+  private record ArmorLayer(
+      String texture,
+      String overlayTexture,
+      boolean dyeable,
+      Integer defaultColor,
+      Float deformation,
+      Float headDeformation) {}
+
+  private record CustomArmorPart(String parent, String slot, float[] positions, float[] uvs) {}
+
+  private record ArmorModel(
+      int format,
+      String item,
+      String kind,
+      Integer layer,
+      List<ArmorLayer> layers,
+      String texture,
+      List<CustomArmorPart> parts) {}
+
+  private record WearableConfig(
+      int format,
+      Map<String, EquipmentCompatibilityConfig.Wearable> slots,
+      Map<String, EquipmentCompatibilityConfig.Wearable> items) {}
+
+  private record ItemModel(int format, String item, List<ModelGroup> groups, String fingerprint) {}
+
+  private record ModelGroup(String texture, int tint, float[] positions, float[] uvs) {}
+
+  private static final class GroupBuilder {
+    private final ArrayList<Float> positions = new ArrayList<>();
+    private final ArrayList<Float> uvs = new ArrayList<>();
+
+    void add(BlueMap3DItemModelBridge.Quad quad) {
+      int[] triangles = {0, 1, 2, 0, 2, 3};
+      for (int vertex : triangles) {
+        int p = vertex * 3;
+        positions.add((quad.positions()[p] - 8f) / 16f);
+        positions.add((quad.positions()[p + 1] - 8f) / 16f);
+        positions.add((quad.positions()[p + 2] - 8f) / 16f);
+        int uv = vertex * 2;
+        uvs.add(quad.uvs()[uv] / 16f);
+        uvs.add(1f - quad.uvs()[uv + 1] / 16f);
+      }
+    }
+
+    float[] positions() {
+      float[] result = new float[positions.size()];
+      for (int i = 0; i < result.length; i++) result[i] = positions.get(i);
+      return result;
+    }
+
+    float[] uvs() {
+      float[] result = new float[uvs.size()];
+      for (int i = 0; i < result.length; i++) result[i] = uvs.get(i);
+      return result;
+    }
+  }
+}

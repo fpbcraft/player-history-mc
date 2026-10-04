@@ -37,6 +37,17 @@ export interface MarkerSet {
   remove(marker: unknown): void;
 }
 
+export interface BlueMapPlayerMarker {
+  element: HTMLElement;
+}
+
+export interface BlueMapPopupMarker {
+  element?: HTMLElement;
+  cube?: { visible: boolean };
+  visible?: boolean;
+  onMapInteraction?: (event: unknown) => void;
+}
+
 export interface Geometry {
   setAttribute(name: string, value: unknown): void;
   setIndex?(value: unknown): void;
@@ -80,6 +91,7 @@ export interface Object3D {
   remove(child: Object3D): void;
   clone(recursive?: boolean): Object3D;
   children?: Object3D[];
+  onClick?: (event: unknown) => boolean;
 }
 
 export interface Mesh extends Object3D {
@@ -173,6 +185,10 @@ export interface BlueMapRuntime {
 
 export interface BlueMapApp {
   popupMarkerSet: MarkerSet;
+  popupMarker?: BlueMapPopupMarker;
+  playerMarkerManager?: {
+    getPlayerMarker?(uuid: string): BlueMapPlayerMarker | undefined;
+  };
   mapViewer: {
     markers: unknown;
     camera: unknown;
@@ -182,6 +198,11 @@ export interface BlueMapApp {
       position?: Position3;
       distance?: number;
       updateCamera?(): void;
+      controls?: {
+        data?: { followingPlayer?: unknown | null };
+        followPlayerMarker?(marker: unknown): void;
+        stopFollowingPlayerMarker?(): void;
+      };
     };
   };
 }

@@ -62,6 +62,8 @@ export interface HistoryManifest {
   activityBucketMs?: number;
   activityReady?: boolean;
   capabilities: Record<string, boolean>;
+  /** Current recorder tracker switches. Missing on older publishers. */
+  trackingEnabled: Record<string, boolean>;
   registry: HistoryRegistry;
 }
 
@@ -71,6 +73,34 @@ export interface LiveSnapshot {
   registry: HistoryRegistry;
   points: HistoryPoint[];
   events: HistoryEvent[];
+  /** Current reconstructed state keyed by numeric player id. Optional for older publishers. */
+  states?: Record<string, PlayerState>;
+}
+
+export interface ObjectHistoryInstance {
+  x: number;
+  y: number;
+  z: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
+  sx: number;
+  sy: number;
+  sz: number;
+}
+
+export interface ObjectHistoryInstanceGroup {
+  id: string;
+  geometry: number;
+  instances: ObjectHistoryInstance[];
+}
+
+export interface ObjectInstancePoseGroup {
+  id: string;
+  geometry: number;
+  /** [x,y,z,qx,qy,qz,qw,sx,sy,sz] */
+  instances: number[][];
 }
 
 export interface ObjectHistoryPoint {
@@ -89,6 +119,7 @@ export interface ObjectHistoryPoint {
   sz: number;
   geometry: number;
   flags: number;
+  groups: ObjectHistoryInstanceGroup[];
 }
 
 export interface ObjectRegistryEntry {
@@ -113,7 +144,7 @@ export interface ObjectGeometryEntry {
 }
 
 export interface ObjectHistoryManifest {
-  protocolVersion: 1 | 2;
+  protocolVersion: 1 | 2 | 3;
   earliestTimestamp: number;
   latestTimestamp: number;
   chunkDurationMs: number;
@@ -123,6 +154,7 @@ export interface ObjectHistoryManifest {
   scaleScale: number;
   geometryArchive: boolean;
   geometries?: ObjectGeometryEntry[];
+  pointsPerSecond?: number;
   registry: ObjectHistoryRegistry;
 }
 
@@ -141,6 +173,7 @@ export interface ObjectPose {
   sy: number;
   sz: number;
   geometry: number;
+  groups: ObjectInstancePoseGroup[];
   /** Signed object-local travel in blocks, relative to this loaded replay window. */
   travel: number;
 }

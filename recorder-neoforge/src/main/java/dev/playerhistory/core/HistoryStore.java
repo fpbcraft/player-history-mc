@@ -29,7 +29,7 @@ public final class HistoryStore implements AutoCloseable {
   private final Path root;
   private final Registry registry;
   private final Options options;
-  private final Consumer<String> log;
+  private final LogSink log;
   private final ArrayBlockingQueue<Envelope> queue;
   private final Thread worker;
   private final Map<Integer, Point> last = new HashMap<>();
@@ -51,6 +51,37 @@ public final class HistoryStore implements AutoCloseable {
   private final ArrayDeque<HistoryEvent> liveEvents = new ArrayDeque<>();
   private long lastLiveFlush, lastFullLiveFlush;
   private final ArrayDeque<Point> livePoints = new ArrayDeque<>();
+  private final Map<Integer, Map<String, Object>> liveStates = new HashMap<>();
+
+  private void applyLiveState(StateRecord record) {
+    if ("unknown".equals(record.kind())) {
+      liveStates.remove(record.player());
+      return;
+    }
+    if ("checkpoint".equals(record.kind())) {
+      var state = new LinkedHashMap<String, Object>();
+      record.values().forEach((key, value) -> {
+        if (value != null) state.put(key, value);
+      });
+      liveStates.put(record.player(), state);
+      return;
+    }
+    var state = liveStates.get(record.player());
+    if (state == null) return;
+    record.values().forEach((key, value) -> {
+      if (value == null) state.remove(key);
+      else state.put(key, value);
+    });
+  }
+
+  private Map<Integer, Map<String, Object>> liveStateSnapshot() {
+    var snapshot = new LinkedHashMap<Integer, Map<String, Object>>();
+    liveStates.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey())
+        .forEach(entry -> snapshot.put(entry.getKey(), Map.copyOf(entry.getValue())));
+    return snapshot;
+  }
+
   private void publishLive(long now) throws IOException {
     while (!liveEvents.isEmpty()
         && (liveEvents.size() > 1000 || liveEvents.peekFirst().point().time() < now - 300000))
@@ -79,6 +110,8 @@ public final class HistoryStore implements AutoCloseable {
               presencePoints,
               "events",
               chatEvents,
+              "states",
+              liveStateSnapshot(),
               "registry",
               registry.snapshot()));
 
@@ -94,6 +127,8 @@ public final class HistoryStore implements AutoCloseable {
                 List.copyOf(livePoints),
                 "events",
                 List.copyOf(liveEvents),
+                "states",
+                liveStateSnapshot(),
                 "registry",
                 registry.snapshot()));
         lastFullLiveFlush = now;
@@ -149,7 +184,7 @@ public final class HistoryStore implements AutoCloseable {
       written = new AtomicLong();
   public volatile long writerLatency;
 
-  public HistoryStore(Path root, Registry registry, Options options, Consumer<String> log)
+  public HistoryStore(Path root, Registry registry, Options options, LogSink log)
       throws IOException {
     this.root = root;
     this.registry = registry;
@@ -216,7 +251,7 @@ public final class HistoryStore implements AutoCloseable {
                         .orElse(0));
           }
       } catch (IOException e) {
-        log.accept("Cannot read newest chunk metadata: " + e);
+        log.warn("Cannot read newest chunk metadata: " + e);
       }
     }
     worker = new Thread(this::run, "player-history-writer");
@@ -235,7 +270,7 @@ public final class HistoryStore implements AutoCloseable {
     if (!queue.offer(new Envelope(List.copyOf(ps), List.copyOf(es), List.copyOf(ss), overflow))) {
       if (System.currentTimeMillis() - lastOverflowWarning > 5000) {
         lastOverflowWarning = System.currentTimeMillis();
-        log.accept("History queue full; recording gap begins (server thread will not block)");
+        log.warn("History queue full; recording gap begins (server thread will not block)");
       }
       overflow = true;
       dropped.incrementAndGet();
@@ -298,6 +333,7 @@ public final class HistoryStore implements AutoCloseable {
             for (var player : statePlayers.keySet())
               states.append(new StateRecord(player, gapTime, "unknown", Map.of()));
             statePlayers.clear();
+            liveStates.clear();
             for (var p : List.copyOf(last.values())) {
               append(p.with(p.time(), Point.OFFLINE | Point.BREAK));
               broken.add(p.player());
@@ -314,6 +350,7 @@ public final class HistoryStore implements AutoCloseable {
 
             states.append(record);
             statePlayers.put(record.player(), record.time());
+            applyLiveState(record);
             stateChanges.incrementAndGet();
             inventoryDeltas.addAndGet(
                 record.values().keySet().stream().filter(k -> k.startsWith("slot:")).count());
@@ -352,7 +389,7 @@ public final class HistoryStore implements AutoCloseable {
       states.close();
     } catch (Throwable e) {
       failure = e;
-      log.accept("History writer stopped after IO failure: " + e);
+      log.error("History writer stopped after IO failure: " + e);
       try {
         if (channel != null) channel.close();
         states.abort();
@@ -436,12 +473,7 @@ public final class HistoryStore implements AutoCloseable {
       JsonFiles.write(
           pub.resolve("chunks/" + start + ".json"), new BinaryCodec.Batch(points, events));
       publishedChunks.add(start);
-      ActivityIndex.publish(
-          pub,
-          start,
-          options.duration,
-          java.util.stream.Stream.concat(points.stream(), events.stream().map(HistoryEvent::point))
-              .toList());
+      ActivityIndex.publish(pub, start, options.duration, points);
       JsonFiles.write(pub.resolve("manifest.json"), publicManifest());
     }
     JsonFiles.write(
@@ -497,7 +529,7 @@ public final class HistoryStore implements AutoCloseable {
       try {
         states.publish(file, pub);
       } catch (IOException ex) {
-        log.accept("Skipping corrupt state chunk " + file + ": " + ex);
+        log.warn("Skipping corrupt state chunk " + file + ": " + ex);
       }
     }
     if (!backfill.isEmpty()) {
@@ -506,16 +538,9 @@ public final class HistoryStore implements AutoCloseable {
         var r = BinaryCodec.read(in);
         JsonFiles.write(pub.resolve("chunks/" + r.start() + ".json"), r.batch());
         publishedChunks.add(r.start());
-        ActivityIndex.publish(
-            pub,
-            r.start(),
-            options.duration,
-            java.util.stream.Stream.concat(
-                    r.batch().points().stream(),
-                    r.batch().events().stream().map(HistoryEvent::point))
-                .toList());
+        ActivityIndex.publish(pub, r.start(), options.duration, r.batch().points());
       } catch (IOException e) {
-        log.accept("Could not publish historical chunk " + f + ": " + e);
+        log.warn("Could not publish historical chunk " + f + ": " + e);
       }
     }
     if (channel == null && latest > 0 && System.currentTimeMillis() - lastFlush >= 5000)
@@ -546,12 +571,12 @@ public final class HistoryStore implements AutoCloseable {
               while (data.hasRemaining()) channel.write(data);
             });
         TemporaryChunkFiles.complete(file, read.start());
-        log.accept(
+        log.info(
             "Recovered history chunk "
                 + read.start()
                 + "; unfinished sessions closed at last durable sample");
       } catch (Exception error) {
-        log.accept("Quarantined corrupt history " + file + ": " + error);
+        log.warn("Quarantined corrupt history " + file + ": " + error);
         TemporaryChunkFiles.quarantine(file);
       }
     }
@@ -581,6 +606,6 @@ public final class HistoryStore implements AutoCloseable {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
-    if (worker.isAlive()) log.accept("History flush still running after 30 seconds");
+    if (worker.isAlive()) log.warn("History flush still running after 30 seconds");
   }
 }

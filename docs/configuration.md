@@ -32,9 +32,10 @@ saturation = false
 xp = true
 game-mode = true
 effects = true
-posture = false
+posture = true
 held-item = true
 equipment = true
+curios = true
 inventory = false
 block-break = true
 block-place = true
@@ -72,6 +73,7 @@ checkpoint-interval-minutes = 10
 | posture | Sprint/sneak/swim/elytra/sleep/fire/frozen state |
 | held-item | Selected slot and main-hand stack |
 | equipment | Main/offhand, helmet, chestplate, leggings, boots; independent of inventory |
+| curios | Visible Curios stacks, including cosmetic overrides, keyed by Curios slot identifier and index; no hard Curios dependency |
 | inventory | Inventory checkpoint plus changed slot keys, including empty slots |
 | block-break / block-place | Uncancelled block events, block ID and exact block coordinates |
 | container-open | Menu type and player position; container block position/first loot generation are explicitly unavailable |
@@ -83,6 +85,8 @@ checkpoint-interval-minutes = 10
 | item-pickup / item-drop | Picked-up quantity / uncancelled tossed stack |
 | item-damage / item-enchantments / item-custom-name | Optional stack metadata across enabled item categories |
 | track-deaths / track-teleports / track-dimension-changes | Original event annotation switches, retained at top level |
+
+Existing NeoForge config files keep their previously written values when defaults change. Builds before the 3D-pose work generated `tracking.posture = false`; if that value is still present, crouch, sprint, swim, elytra and sleep poses cannot be reconstructed. Set it to `true` (or remove the old entry and let NeoForge regenerate it). The viewer reports this condition from `manifest.json` instead of silently showing rigid avatars.
 
 State is sampled at the configured sample interval, but only changes/checkpoints enter the queue. Each chunk starts with a checkpoint, even if the periodic interval is longer. Rejoins/respawns reset checkpoints. Inventory shares that interval and encodes only changed slots between checkpoints. The snapshot reports slot state, not a reason for an inventory change.
 

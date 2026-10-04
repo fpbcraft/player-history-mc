@@ -1,6 +1,7 @@
 package dev.playerhistory.object;
 
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.LogSink;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -9,7 +10,6 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.function.Consumer;
 
 /**
  * Durable copy of BlueMap3D geometry versions referenced by object history.
@@ -30,13 +30,13 @@ public final class ObjectGeometryArchive {
   private record Key(String provider, String sourceId, long version) {}
 
   private final Path root;
-  private final Consumer<String> log;
+  private final LogSink log;
   private final Map<Key, Entry> entries = new LinkedHashMap<>();
   private final Map<Key, Long> references = new HashMap<>();
   private volatile Path publicRoot;
   private boolean dirty;
 
-  public ObjectGeometryArchive(Path root, Consumer<String> log) throws IOException {
+  public ObjectGeometryArchive(Path root, LogSink log) throws IOException {
     this.root = root;
     this.log = log;
     Files.createDirectories(root.resolve("geometry"));

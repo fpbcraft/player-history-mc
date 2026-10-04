@@ -3,6 +3,7 @@ import type {
   HistoryPoint,
   HistoryRegistry,
   LiveSnapshot,
+  PlayerState,
 } from "./types.js";
 
 export interface LiveFeedUpdate {
@@ -10,6 +11,7 @@ export interface LiveFeedUpdate {
   registry: HistoryRegistry;
   points: HistoryPoint[];
   events: HistoryEvent[];
+  states: Record<string, PlayerState>;
   newChats: HistoryEvent[];
 }
 
@@ -54,6 +56,7 @@ export class LiveFeedState {
       registry: data.registry,
       points,
       events,
+      states: data.states ?? {},
       newChats,
     };
   }

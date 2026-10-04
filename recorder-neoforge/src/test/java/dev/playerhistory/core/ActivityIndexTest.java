@@ -21,9 +21,17 @@ class ActivityIndexTest {
   }
 
   @Test
-  void countsExcludeContextAndReplacementDoesNotDoubleCount() throws Exception {
+  void countsOnlyOnlinePlayerSamplesAndReplacementDoesNotDoubleCount() throws Exception {
     ActivityIndex.publish(
-        root, 0, 300000, List.of(p(1000, 0), p(2000, 0), p(2000, Point.CONTEXT), p(120000, 0)));
+        root,
+        0,
+        300000,
+        List.of(
+            p(1000, 0),
+            p(2000, 0),
+            p(2000, Point.CONTEXT),
+            p(3000, Point.OFFLINE),
+            p(120000, 0)));
     var first = rows();
     assertEquals(2, first.length);
     assertArrayEquals(new long[] {0, 2}, first[0]);

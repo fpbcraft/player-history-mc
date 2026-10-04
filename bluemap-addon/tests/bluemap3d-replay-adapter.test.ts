@@ -104,6 +104,7 @@ test("historical object replay clones the live mesh and suppresses the present-d
         sy: 1,
         sz: 1,
         geometry: 7,
+        groups: [],
         travel: 3.5,
       },
     ],
@@ -199,6 +200,7 @@ test("historical replay owns all live rope/spring objects without hiding rigid s
         sy: 1,
         sz: 1,
         geometry: 7,
+        groups: [],
         travel: 0,
       },
     ],
@@ -240,6 +242,102 @@ test("historical replay owns all live rope/spring objects without hiding rigid s
   assert.equal(clone.position.z, 3);
 });
 
+test("logical instance history replays one spring from archived shared geometry", async () => {
+  const root = new FakeObject();
+  const loaded = new FakeObject();
+  const urls: string[] = [];
+  const instanceWrites: number[][][] = [];
+  const suppressions: string[][] = [];
+
+  window.__bluemap3d = {
+    root,
+    objects: {
+      "simulated_springs/world/1_2_3": {
+        mesh: new FakeObject(),
+        instanceGroups: {
+          segments: {
+            meshUrl: "assets/bluemap3d/meshes/simulated_springs/simulated-spring-medium-v1-7.bm3d",
+          },
+        },
+      },
+    },
+    setSuppressedObjects: (ids) => suppressions.push([...ids]),
+    createReplayInstanceGroup: async (url) => {
+      urls.push(url);
+      return loaded;
+    },
+    setReplayInstances: (_mesh, instances) => {
+      instanceWrites.push(instances.map((instance) => [...instance]));
+    },
+  };
+
+  const adapter = new BlueMap3DReplayAdapter(runtime());
+  const pose = {
+    object: 21,
+    time: 1000,
+    world: 0,
+    x: 0,
+    y: 0,
+    z: 0,
+    qx: 0,
+    qy: 0,
+    qz: 0,
+    qw: 1,
+    sx: 1,
+    sy: 1,
+    sz: 1,
+    geometry: 99,
+    groups: [
+      {
+        id: "segments",
+        geometry: 7,
+        instances: [[1, 2, 3, 0, 0, 0, 1, 1, 2, 1]],
+      },
+    ],
+    travel: 0,
+  };
+  const registry = [
+    {
+      id: 21,
+      provider: "simulated_springs",
+      sourceId: "world/1_2_3",
+      label: "Spring",
+    },
+  ];
+  const geometries = [
+    {
+      provider: "simulated_springs",
+      sourceId: "world/1_2_3/@group/segments",
+      version: 7,
+      mesh: "geometry/spring.bm3d",
+      atlas: "geometry/spring.png",
+      lastReferencedAt: 1000,
+    },
+  ];
+
+  const pending = adapter.setObjects(
+    [pose],
+    registry,
+    geometries,
+    "https://map.example/player-history/data/objects/",
+  );
+  assert.equal(pending.unavailable, 1);
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  const rendered = adapter.setObjects(
+    [pose],
+    registry,
+    geometries,
+    "https://map.example/player-history/data/objects/",
+  );
+  assert.equal(rendered.rendered, 1);
+  assert.deepEqual(urls, [
+    "https://map.example/player-history/data/objects/geometry/spring.bm3d",
+  ]);
+  assert.deepEqual(instanceWrites.at(-1), pose.groups[0]?.instances);
+  assert.deepEqual(suppressions[0], ["simulated_springs/world/1_2_3"]);
+});
+
 test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", () => {
   const root = new FakeObject();
   const source = new FakeObject();
@@ -279,6 +377,7 @@ test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", 
           qz: 0,
           qw: 1,
           geometry: 7,
+groups: [],
           travel: 0,
         },
       ],
@@ -340,6 +439,7 @@ test("historical renderer refuses mismatched live geometry when no archive exist
         sy: 1,
         sz: 1,
         geometry: 42,
+        groups: [],
         travel: 0,
       },
       {
@@ -357,6 +457,7 @@ test("historical renderer refuses mismatched live geometry when no archive exist
         sy: 1,
         sz: 1,
         geometry: 1,
+        groups: [],
         travel: 0,
       },
     ],
@@ -399,6 +500,7 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
     sy: 1.5,
     sz: 1,
     geometry: 42,
+    groups: [],
     travel: 0,
   };
   const registry = [

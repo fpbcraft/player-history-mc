@@ -1,0 +1,218 @@
+{
+  "format": 1,
+  "geometryAliases": {
+    "armory_rpgs:astral_robe": "tirisfal_robe",
+    "armory_rpgs:scarlet_robe": "tirisfal_robe",
+    "armory_rpgs:glacier_robe": "tirisfal_robe",
+    "armory_rpgs:smouldering_robe": "tempest_robe",
+    "armory_rpgs:rimeweave_robe": "tempest_robe",
+    "rogues:assassin_armor": "rogue_armor",
+    "rogues:netherite_assassin_armor": "rogue_armor",
+    "rogues:berserker_armor": "warrior_armor",
+    "rogues:netherite_berserker_armor": "warrior_armor",
+    "archers:netherite_ranger_armor": "ranger_armor",
+    "paladins:crusader_armor": "paladin_armor",
+    "paladins:netherite_crusader_armor": "paladin_armor",
+    "paladins:priest_robe": "priest_robes",
+    "paladins:prior_robe": "priest_robes",
+    "paladins:netherite_prior_robe": "priest_robes",
+    "wizards:wizard_robe": "wizard_robes",
+    "wizards:arcane_robe": "wizard_robes",
+    "wizards:fire_robe": "wizard_robes",
+    "wizards:frost_robe": "wizard_robes",
+    "wizards:netherite_arcane_robe": "wizard_robes",
+    "wizards:netherite_fire_robe": "wizard_robes",
+    "wizards:netherite_frost_robe": "wizard_robes"
+  },
+  "textureAliases": {},
+  "wearableSlots": {
+    "head": {
+      "parent": "head",
+      "position": [
+        0,
+        0.25,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.7
+    },
+    "back": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.36,
+        -0.28
+      ],
+      "rotationDegrees": [
+        0,
+        180,
+        0
+      ],
+      "scale": 0.78
+    },
+    "body": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.36,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.7
+    },
+    "belt": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.68,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.45
+    },
+    "necklace": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.2,
+        0.18
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.4
+    },
+    "hands": {
+      "parent": "rightArm",
+      "position": [
+        0,
+        -0.4,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.35
+    },
+    "bracelet": {
+      "parent": "rightArm",
+      "position": [
+        0,
+        -0.4,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.3
+    },
+    "ring": {
+      "parent": "rightArm",
+      "position": [
+        0,
+        -0.7,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.22
+    },
+    "charm": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.34,
+        0.18
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.32
+    },
+    "curio": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.34,
+        0.18
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        0
+      ],
+      "scale": 0.32
+    }
+  },
+  "wearableItems": {
+    "create:goggles": {
+      "parent": "head",
+      "position": [
+        0,
+        0.25,
+        0
+      ],
+      "rotationDegrees": [
+        0,
+        0,
+        180
+      ],
+      "scale": 0.625
+    },
+    "sophisticatedbackpacks:*_backpack": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.36,
+        -0.28
+      ],
+      "rotationDegrees": [
+        0,
+        180,
+        0
+      ],
+      "scale": 0.78
+    },
+    "sophisticatedbackpacks:backpack": {
+      "parent": "torso",
+      "position": [
+        0,
+        -0.36,
+        -0.28
+      ],
+      "rotationDegrees": [
+        0,
+        180,
+        0
+      ],
+      "scale": 0.78
+    }
+  },
+  "defaultArmorColors": {
+    "immersive_armors:robe": "0xA06540",
+    "immersive_armors:divine": "0xA06540"
+  }
+}

@@ -3,13 +3,13 @@ package dev.playerhistory.bluemap;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.LogSink;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 import net.minecraft.server.MinecraftServer;
 
@@ -20,7 +20,7 @@ import net.minecraft.server.MinecraftServer;
  * Reusing it means Player History never needs Mojang credentials or a second skin cache.
  */
 final class PlayerSkinPublisher implements AutoCloseable {
-  private final Consumer<String> log;
+  private final LogSink log;
   private final ExecutorService worker;
   private final Set<UUID> queued = ConcurrentHashMap.newKeySet();
   private final Set<UUID> published = ConcurrentHashMap.newKeySet();
@@ -28,7 +28,7 @@ final class PlayerSkinPublisher implements AutoCloseable {
   private volatile Path skinsRoot;
   private long nextRegistryScan;
 
-  PlayerSkinPublisher(Consumer<String> log) {
+  PlayerSkinPublisher(LogSink log) {
     this.log = log;
     this.worker =
         Executors.newSingleThreadExecutor(
@@ -50,7 +50,7 @@ final class PlayerSkinPublisher implements AutoCloseable {
       // Do not trust a PNG left by an older Player History build. Fetch each player's
       // complete skin once per server process so stale skin assets cannot survive upgrades.
     } catch (IOException error) {
-      log.accept("Cannot prepare historical player skins: " + error);
+      log.warn("Cannot prepare historical player skins: " + error);
     }
   }
 
@@ -86,7 +86,7 @@ final class PlayerSkinPublisher implements AutoCloseable {
         }
       }
     } catch (IOException | RuntimeException error) {
-      log.accept("Could not inspect Player History registry for skins: " + error);
+      log.warn("Could not inspect Player History registry for skins: " + error);
     }
   }
 
@@ -139,9 +139,9 @@ final class PlayerSkinPublisher implements AutoCloseable {
       published.add(uuid);
     } catch (InvocationTargetException error) {
       Throwable cause = error.getCause();
-      log.accept("Could not load skin for " + uuid + ": " + (cause == null ? error : cause));
+      log.warn("Could not load skin for " + uuid + ": " + (cause == null ? error : cause));
     } catch (ReflectiveOperationException | IOException | RuntimeException error) {
-      log.accept("Could not publish skin for " + uuid + ": " + error);
+      log.warn("Could not publish skin for " + uuid + ": " + error);
     }
   }
 

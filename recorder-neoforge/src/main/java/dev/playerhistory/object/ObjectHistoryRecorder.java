@@ -2,6 +2,7 @@ package dev.playerhistory.object;
 
 import dev.playerhistory.core.ChunkChannelIO;
 import dev.playerhistory.core.JsonFiles;
+import dev.playerhistory.core.LogSink;
 import dev.playerhistory.core.PublishedChunkIndex;
 import dev.playerhistory.core.RetentionFiles;
 import dev.playerhistory.core.TemporaryChunkFiles;
@@ -11,7 +12,6 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 /**
  * Generic moving-object history, independent of any particular vehicle mod.
@@ -59,7 +59,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private final ObjectRegistry registry;
   private final ObjectGeometryArchive geometryArchive;
   private final Options options;
-  private final Consumer<String> log;
+  private final LogSink log;
   private final ArrayBlockingQueue<Envelope> queue;
   private final Thread worker;
   private final Map<String, Map<String, Tracked>> tracked = new HashMap<>();
@@ -81,13 +81,16 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private long earliest = Long.MAX_VALUE, latest;
   private long lastFlush, lastLiveFlush, lastMaintenance;
   private volatile int retentionDays;
+  private long rateWindowStartedNanos = System.nanoTime();
+  private long rateWindowPoints;
+  private volatile double recentPointsPerSecond;
 
   public final AtomicLong written = new AtomicLong();
   public final AtomicLong dropped = new AtomicLong();
   public final AtomicLong skipped = new AtomicLong();
   public final AtomicLong bytes = new AtomicLong();
 
-  public ObjectHistoryRecorder(Path root, Options options, Consumer<String> log) throws IOException {
+  public ObjectHistoryRecorder(Path root, Options options, LogSink log) throws IOException {
     this.root = root;
     this.options = options;
     this.log = log;
@@ -136,7 +139,17 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
     for (ObjectSnapshot snapshot : snapshots) {
       if (!present.add(snapshot.sourceId())) continue;
-      geometryArchive.reference(provider, snapshot.sourceId(), snapshot.geometryVersion(), now);
+      if (snapshot.groups().isEmpty()) {
+        geometryArchive.reference(provider, snapshot.sourceId(), snapshot.geometryVersion(), now);
+      } else {
+        for (ObjectSnapshot.InstanceGroup group : snapshot.groups()) {
+          geometryArchive.reference(
+              provider,
+              snapshot.sourceId() + "/@group/" + group.id(),
+              group.geometryVersion(),
+              now);
+        }
+      }
       Tracked state = known.computeIfAbsent(snapshot.sourceId(), ignored -> new Tracked(snapshot));
       state.observed = snapshot;
 
@@ -154,6 +167,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
               || moved(state.emittedSnapshot, snapshot)
               || rotated(state.emittedSnapshot, snapshot)
               || scaled(state.emittedSnapshot, snapshot)
+              || !Objects.equals(state.emitted.groups(), point.groups())
               || now - state.lastWritten >= options.keyframeMs()
               || breakAll;
       if (changed) {
@@ -208,7 +222,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     try {
       geometryArchive.publishTo(target);
     } catch (IOException error) {
-      log.accept("Could not publish object geometry archive: " + error);
+      log.warn("Could not publish object geometry archive: " + error);
     }
   }
 
@@ -236,6 +250,8 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         + bytes
         + " objectGeometries="
         + geometryArchive.size()
+        + " objectPointsPerSecond="
+        + String.format(java.util.Locale.ROOT, "%.2f", recentPointsPerSecond)
         + " objectFailure="
         + failure;
   }
@@ -307,7 +323,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
       finish();
     } catch (Throwable error) {
       failure = error;
-      log.accept("Object-history writer stopped after failure: " + error);
+      log.error("Object-history writer stopped after failure: " + error);
       try {
         if (channel != null) channel.close();
       } catch (IOException ignored) {
@@ -326,6 +342,14 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     latest = Math.max(latest, point.time());
     earliest = Math.min(earliest, start);
     written.incrementAndGet();
+    rateWindowPoints++;
+    long rateNow = System.nanoTime();
+    long elapsed = rateNow - rateWindowStartedNanos;
+    if (elapsed >= 1_000_000_000L) {
+      recentPointsPerSecond = rateWindowPoints * 1_000_000_000.0 / elapsed;
+      rateWindowPoints = 0;
+      rateWindowStartedNanos = rateNow;
+    }
   }
 
   private void ensureChunk(long time) throws IOException {
@@ -413,6 +437,8 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
               1,
               "generatedAt",
               now,
+              "pointsPerSecond",
+              recentPointsPerSecond,
               "points",
               List.copyOf(live),
               "registry",
@@ -423,7 +449,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   private Map<String, Object> publicManifest() {
     var result = new LinkedHashMap<String, Object>();
     result.put("formatVersion", 1);
-    result.put("protocolVersion", 2);
+    result.put("protocolVersion", 3);
     result.put("generatedAt", System.currentTimeMillis());
     result.put("earliestTimestamp", earliest);
     result.put("latestTimestamp", latest);
@@ -435,6 +461,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     result.put("registry", registry.snapshot());
     result.put("geometryArchive", true);
     result.put("geometries", geometryArchive.entries());
+    result.put("pointsPerSecond", recentPointsPerSecond);
     return result;
   }
 
@@ -458,7 +485,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         JsonFiles.write(pub.resolve("chunks/" + read.start() + ".json"), read.points());
         publishedChunks.add(read.start());
       } catch (IOException error) {
-        log.accept("Could not publish object-history chunk " + file + ": " + error);
+        log.warn("Could not publish object-history chunk " + file + ": " + error);
       }
       JsonFiles.write(pub.resolve("manifest.json"), publicManifest());
     }
@@ -485,9 +512,9 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         }
         TemporaryChunkFiles.repair(file, read.validBytes(), channel -> {});
         TemporaryChunkFiles.complete(file, read.start());
-        log.accept("Recovered object-history chunk " + read.start());
+        log.info("Recovered object-history chunk " + read.start());
       } catch (Exception error) {
-        log.accept("Quarantined corrupt object history " + file + ": " + error);
+        log.warn("Quarantined corrupt object history " + file + ": " + error);
         TemporaryChunkFiles.quarantine(file);
       }
     }
@@ -538,6 +565,6 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     } catch (InterruptedException error) {
       Thread.currentThread().interrupt();
     }
-    if (worker.isAlive()) log.accept("Object-history flush still running after 30 seconds");
+    if (worker.isAlive()) log.warn("Object-history flush still running after 30 seconds");
   }
 }
