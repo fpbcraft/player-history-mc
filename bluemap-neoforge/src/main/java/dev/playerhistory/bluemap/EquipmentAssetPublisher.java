@@ -40,6 +40,7 @@ final class EquipmentAssetPublisher {
   private volatile Path registry;
   private volatile BlueMap3DItemModelBridge bridge;
   private volatile CustomArmorAssetResolver customArmor;
+  private volatile CompiledArmorAssetResolver compiledArmor;
   private volatile EquipmentCompatibilityConfig.Data equipmentCompatibility =
       EquipmentCompatibilityConfig.defaults();
   private volatile long nextScan;
@@ -87,6 +88,7 @@ final class EquipmentAssetPublisher {
     BlueMap3DItemModelBridge current = bridge;
     bridge = null;
     customArmor = null;
+    compiledArmor = null;
     if (current != null) current.close();
   }
 
@@ -119,6 +121,12 @@ final class EquipmentAssetPublisher {
             BlueMap3DItemModelBridge.open(Path.of("").toAbsolutePath().normalize(), log);
         bridge = currentBridge;
         customArmor = new CustomArmorAssetResolver(currentBridge, log, equipmentCompatibility);
+        try {
+          compiledArmor = new CompiledArmorAssetResolver(log);
+        } catch (RuntimeException | LinkageError error) {
+          compiledArmor = null;
+          log.warn("Could not initialize compiled armor model discovery: " + error);
+        }
       } catch (ClassNotFoundException error) {
         log.debug("BlueMap3D is unavailable; Player History will keep simple equipment models");
         nextScan = Long.MAX_VALUE;
@@ -224,6 +232,18 @@ final class EquipmentAssetPublisher {
     }
 
     if (!(registered instanceof ArmorItem armor)) return true;
+
+    CompiledArmorAssetResolver compiledResolver = compiledArmor;
+    CompiledArmorAssetResolver.Model compiled =
+        compiledResolver == null ? null : compiledResolver.resolve(id, armor.getType());
+    if (compiled != null) {
+      ResolvedArmorTexture texture =
+          firstArmorTexture(currentBridge, item, armor);
+      if (texture != null) {
+        return publishCompiledArmor(currentRoot, item, id, compiled, texture);
+      }
+    }
+
     boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
     var layers = armor.getMaterial().value().layers();
     if (layers.isEmpty()) {
@@ -277,6 +297,54 @@ final class EquipmentAssetPublisher {
     }
   }
 
+
+  private ResolvedArmorTexture firstArmorTexture(
+      BlueMap3DItemModelBridge currentBridge,
+      String item,
+      ArmorItem armor) {
+    boolean inner = armor.getType() == ArmorItem.Type.LEGGINGS;
+    for (var layer : armor.getMaterial().value().layers()) {
+      ResourceLocation textureFile = layer.texture(inner);
+      try {
+        ResourceLocation override =
+            armor.getArmorTexture(
+                armor.getDefaultInstance(), null, armor.getType().getSlot(), layer, inner);
+        if (override != null) textureFile = override;
+      } catch (RuntimeException | LinkageError error) {
+        log.debug("Could not resolve per-item armor texture for " + item + ": " + error);
+      }
+      String texture = textureId(textureFile);
+      BufferedImage image = currentBridge.texture(texture);
+      if (image != null) return new ResolvedArmorTexture(texture, image);
+    }
+    return null;
+  }
+
+  private boolean publishCompiledArmor(
+      Path currentRoot,
+      String item,
+      ResourceLocation id,
+      CompiledArmorAssetResolver.Model model,
+      ResolvedArmorTexture texture) {
+    try {
+      String texturePath = texturePath(texture.texture());
+      writePng(currentRoot, texturePath, texture.image());
+      var parts = new ArrayList<CustomArmorPart>();
+      for (var part : model.parts()) {
+        parts.add(
+            new CustomArmorPart(part.parent(), part.slot(), part.positions(), part.uvs()));
+      }
+      if (parts.isEmpty()) return false;
+      writeArmorDescriptor(
+          currentRoot,
+          id,
+          new ArmorModel(ARMOR_FORMAT, item, "custom", null, null, texturePath, parts));
+      return true;
+    } catch (IOException error) {
+      log.warn("Could not publish compiled armor geometry for " + item + ": " + error);
+      return false;
+    }
+  }
 
   private boolean publishLayeredArmor(
       Path currentRoot,
@@ -438,6 +506,8 @@ final class EquipmentAssetPublisher {
   }
 
   private record GroupKey(String texture, int tint) {}
+
+  private record ResolvedArmorTexture(String texture, BufferedImage image) {}
 
   private record ArmorLayer(
       String texture,
