@@ -261,32 +261,42 @@ final class CompiledArmorAssetResolver {
 
   private ParsedModel parse(ClassSource source) {
     try {
-      byte[] bytes = source.read();
-      LayerMethodInterpreter interpreter = new LayerMethodInterpreter();
-      final boolean[] found = {false};
-      new ClassReader(bytes)
-          .accept(
-              new ClassVisitor(Opcodes.ASM9) {
-                @Override
-                public MethodVisitor visitMethod(
-                    int access,
-                    String name,
-                    String descriptor,
-                    String signature,
-                    String[] exceptions) {
-                  if (name.equals("createBodyLayer") && (access & Opcodes.ACC_STATIC) != 0) {
-                    found[0] = true;
-                    return interpreter;
-                  }
-                  return null;
-                }
-              },
-              ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-      return found[0] && interpreter.valid() ? interpreter.model() : null;
+      return parseModel(source.read());
     } catch (IOException | RuntimeException error) {
       log.debug("Could not decode compiled armor model " + source.entry() + ": " + error);
       return null;
     }
+  }
+
+  static Model decodeModel(byte[] bytes, String slot) {
+    ParsedModel parsed = parseModel(bytes);
+    if (parsed == null) return null;
+    List<Part> parts = parsed.bake(slot);
+    return parts.isEmpty() ? null : new Model(parts);
+  }
+
+  private static ParsedModel parseModel(byte[] bytes) {
+    LayerMethodInterpreter interpreter = new LayerMethodInterpreter();
+    final boolean[] found = {false};
+    new ClassReader(bytes)
+        .accept(
+            new ClassVisitor(Opcodes.ASM9) {
+              @Override
+              public MethodVisitor visitMethod(
+                  int access,
+                  String name,
+                  String descriptor,
+                  String signature,
+                  String[] exceptions) {
+                if (name.equals("createBodyLayer") && (access & Opcodes.ACC_STATIC) != 0) {
+                  found[0] = true;
+                  return interpreter;
+                }
+                return null;
+              }
+            },
+            ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+    return found[0] && interpreter.valid() ? interpreter.model() : null;
   }
 
   private static String slot(ArmorItem.Type type) {
