@@ -2,6 +2,7 @@ package dev.playerhistory.bluemap;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
@@ -29,6 +30,31 @@ final class CompiledArmorAssetResolverTest {
     assertEquals(-0.125f, axisMin(part.positions(), 2), 0.0001f);
     assertEquals(0.125f, axisMax(part.positions(), 2), 0.0001f);
     for (float uv : part.uvs()) assertTrue(uv >= 0f && uv <= 1f);
+
+    // First polygon is the east face. These are the exact ModelPart.Cube UVs for an
+    // 8x12x4 box at texOffs(16, 16) on a 64x64 texture, triangulated as 0-1-2 / 0-2-3.
+    assertArrayEquals(
+        new float[] {
+          0.5f, 0.6875f,
+          0.4375f, 0.6875f,
+          0.4375f, 0.5f,
+          0.5f, 0.6875f,
+          0.4375f, 0.5f,
+          0.5f, 0.5f
+        },
+        Arrays.copyOfRange(part.uvs(), 0, 12),
+        0.0001f);
+    assertArrayEquals(
+        new float[] {
+          0.25f, 0f, -0.125f,
+          0.25f, 0f, 0.125f,
+          0.25f, -0.75f, 0.125f,
+          0.25f, 0f, -0.125f,
+          0.25f, -0.75f, 0.125f,
+          0.25f, -0.75f, -0.125f
+        },
+        Arrays.copyOfRange(part.positions(), 0, 18),
+        0.0001f);
   }
 
   private static byte[] generatedTorsoModel() {
