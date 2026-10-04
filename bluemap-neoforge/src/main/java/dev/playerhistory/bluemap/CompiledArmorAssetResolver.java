@@ -783,15 +783,26 @@ final class CompiledArmorAssetResolver {
       float x1 = cube.x() + cube.dx() + inflate;
       float y1 = cube.y() + cube.dy() + inflate;
       float z1 = cube.z() + cube.dz() + inflate;
+      // Match ModelPart.Cube exactly. Its box UV layout is not a generic quad unwrap:
+      // each face has a fixed vertex order, and mirrored cubes swap their X endpoints and then
+      // reverse each polygon. Keeping those semantics matters for Blockbench/MCreator armor.
+      float xa = x0;
+      float xb = x1;
+      if (cube.mirror()) {
+        float swap = xa;
+        xa = xb;
+        xb = swap;
+      }
+
       float[][] vertices = {
-        {x0, y0, z0},
-        {x0, y0, z1},
-        {x0, y1, z0},
-        {x0, y1, z1},
-        {x1, y1, z0},
-        {x1, y1, z1},
-        {x1, y0, z0},
-        {x1, y0, z1}
+        {xa, y0, z0},
+        {xb, y0, z0},
+        {xb, y1, z0},
+        {xa, y1, z0},
+        {xa, y0, z1},
+        {xb, y0, z1},
+        {xb, y1, z1},
+        {xa, y1, z1}
       };
       for (float[] vertex : vertices) {
         for (Pose pose : transforms) applyPose(vertex, pose);
@@ -805,50 +816,57 @@ final class CompiledArmorAssetResolver {
       float w = Math.max(0, cube.dx());
       float h = Math.max(0, cube.dy());
       float d = Math.max(0, cube.dz());
-      float[][] top = rect(u + d, v, w, d, cube.mirror());
-      float[][] bottom = rect(u + d + w, v, w, d, cube.mirror());
-      float[][] left = rect(u, v + d, d, h, cube.mirror());
-      float[][] front = rect(u + d, v + d, w, h, cube.mirror());
-      float[][] right = rect(u + d + w, v + d, d, h, cube.mirror());
-      float[][] back = rect(u + d * 2 + w, v + d, w, h, cube.mirror());
 
-      face(vertices, new int[] {4, 5, 7, 6}, ordered(right, false));
-      face(vertices, new int[] {3, 2, 0, 1}, ordered(left, false));
-      face(vertices, new int[] {0, 6, 7, 1}, ordered(top, false));
-      face(vertices, new int[] {3, 5, 4, 2}, ordered(bottom, true));
-      face(vertices, new int[] {2, 4, 6, 0}, ordered(front, false));
-      face(vertices, new int[] {5, 3, 1, 7}, ordered(back, false));
+      float u0 = u;
+      float u1 = u + d;
+      float u2 = u + d + w;
+      float u3 = u + d + w + w;
+      float u4 = u + d + w + d;
+      float u5 = u + d + w + d + w;
+      float v0 = v;
+      float v1 = v + d;
+      float v2 = v + d + h;
+
+      // ModelPart.Cube polygon order: east, west, down, up, north, south.
+      face(vertices, new int[] {5, 1, 2, 6}, u2, v1, u4, v2, cube.mirror());
+      face(vertices, new int[] {0, 4, 7, 3}, u0, v1, u1, v2, cube.mirror());
+      face(vertices, new int[] {5, 4, 0, 1}, u1, v0, u2, v1, cube.mirror());
+      face(vertices, new int[] {2, 3, 7, 6}, u2, v0, u3, v1, cube.mirror());
+      face(vertices, new int[] {1, 0, 3, 2}, u1, v1, u2, v2, cube.mirror());
+      face(vertices, new int[] {4, 5, 6, 7}, u4, v1, u5, v2, cube.mirror());
     }
 
-    private void face(float[][] vertices, int[] corners, float[][] uv) {
+    private void face(
+        float[][] vertices,
+        int[] corners,
+        float minU,
+        float minV,
+        float maxU,
+        float maxV,
+        boolean mirror) {
+      // ModelPart.Polygon assigns UVs in this order before optionally reversing the polygon.
+      float[][] faceUvs = {
+        uv(maxU, minV),
+        uv(minU, minV),
+        uv(minU, maxV),
+        uv(maxU, maxV)
+      };
+      int[] polygonOrder = mirror ? new int[] {3, 2, 1, 0} : new int[] {0, 1, 2, 3};
       int[] triangles = {0, 1, 2, 0, 2, 3};
-      for (int index : triangles) {
-        float[] vertex = vertices[corners[index]];
+      for (int triangleIndex : triangles) {
+        int polygonIndex = polygonOrder[triangleIndex];
+        float[] vertex = vertices[corners[polygonIndex]];
+        float[] faceUv = faceUvs[polygonIndex];
         positions.add(vertex[0]);
         positions.add(vertex[1]);
         positions.add(vertex[2]);
-        uvs.add(uv[index][0]);
-        uvs.add(uv[index][1]);
+        uvs.add(faceUv[0]);
+        uvs.add(faceUv[1]);
       }
     }
 
-    private float[][] rect(float u, float v, float width, float height, boolean mirror) {
-      float u0 = u / textureWidth;
-      float u1 = (u + width) / textureWidth;
-      float v0 = 1f - v / textureHeight;
-      float v1 = 1f - (v + height) / textureHeight;
-      if (mirror) {
-        float swap = u0;
-        u0 = u1;
-        u1 = swap;
-      }
-      return new float[][] {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
-    }
-
-    private static float[][] ordered(float[][] rect, boolean bottom) {
-      return bottom
-          ? new float[][] {rect[0], rect[1], rect[3], rect[2]}
-          : new float[][] {rect[3], rect[2], rect[0], rect[1]};
+    private float[] uv(float u, float v) {
+      return new float[] {u / textureWidth, 1f - v / textureHeight};
     }
 
     private static void applyPose(float[] point, Pose pose) {
