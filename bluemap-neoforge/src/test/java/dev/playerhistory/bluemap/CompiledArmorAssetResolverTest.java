@@ -57,6 +57,16 @@ final class CompiledArmorAssetResolverTest {
         0.0001f);
   }
 
+  @Test
+  void filtersNamedGeometryToTheEquippedArmorSlot() {
+    byte[] model = generatedTorsoModel();
+
+    assertNotNull(CompiledArmorAssetResolver.decodeModel(model, "chest"));
+    assertNotNull(CompiledArmorAssetResolver.decodeModel(model, "legs"));
+    assertNull(CompiledArmorAssetResolver.decodeModel(model, "head"));
+    assertNull(CompiledArmorAssetResolver.decodeModel(model, "feet"));
+  }
+
   private static byte[] generatedTorsoModel() {
     var writer = new ClassWriter(0);
     writer.visit(
