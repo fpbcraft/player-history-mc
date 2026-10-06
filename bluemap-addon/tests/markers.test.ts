@@ -98,6 +98,12 @@ class Vector {
     Object.assign(this, { x, y, z });
     return this;
   }
+  project() {
+    this.x = 0;
+    this.y = 0;
+    this.z = 0;
+    return this;
+  }
 }
 class Marker {
   constructor(id) {
@@ -185,7 +191,22 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       data: { position: new Vector() },
       element: new Element(),
     };
+    nativePlayerMarker.element.style.display = "";
+    const terrainScene = {
+      position: { x: 0, z: 0 },
+      updateMatrixWorld() {},
+    };
+    const appEvents = {
+      listeners: new Map(),
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      },
+      emit(type, detail) {
+        this.listeners.get(type)?.({ detail });
+      },
+    };
     const app = {
+      events: appEvents,
       popupMarker,
       popupMarkerSet,
       playerMarkerManager: {
@@ -195,9 +216,16 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       },
       mapViewer: {
         markers: {},
-        map: { data: { id: "world", mapDataRoot: "maps/world" } },
+        map: {
+          isLoaded: true,
+          data: { id: "world", mapDataRoot: "maps/world" },
+          hiresTileManager: { scene: terrainScene },
+        },
         renderer: { domElement: new Element() },
-        camera: {},
+        camera: {
+          position: { x: 0, y: 1, z: 10 },
+          updateMatrixWorld() {},
+        },
       },
     };
     const api = {
@@ -206,12 +234,14 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       LineMarker: Marker,
       Three: {
         Vector2: Vector,
+        Vector3: Vector,
         Raycaster: class {
           constructor() {
             this.params = {};
           }
           setFromCamera() {}
-          intersectObjects() {
+          intersectObjects(objects) {
+            this.lastObjects = objects;
             return this.hits ?? [];
           }
         },
@@ -401,11 +431,72 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
       "none",
       "native BlueMap marker is hidden while the close-up 3D model is visible",
     );
+    assert.equal(head.element.style.display, "none");
+
+    adapter.raycaster.hits = [
+      {
+        distance: 2,
+        point: { x: 0, y: 1, z: 8 },
+        object: {
+          visible: true,
+          userData: {},
+          material: { depthTest: true, opacity: 1 },
+        },
+      },
+    ];
+    appEvents.emit("bluemapRenderFrame", { delta: 100 });
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      "",
+      "occluded live 3D player falls back to the native 2D marker",
+    );
+    assert.equal(
+      head.element.style.display,
+      "none",
+      "live occlusion does not add a duplicate historical marker",
+    );
+    assert.equal(
+      adapter.raycaster.lastObjects.length,
+      2,
+      "occlusion checks include terrain and BlueMap's marker scene",
+    );
+
+    adapter.raycaster.hits = [];
+    appEvents.emit("bluemapRenderFrame", { delta: 100 });
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      "none",
+      "native marker hides again when the 3D player becomes visible",
+    );
+
+    adapter.raycaster.hits = [
+      {
+        distance: 2,
+        point: { x: 0, y: 1, z: 8 },
+        object: {
+          visible: true,
+          userData: {},
+          material: { depthTest: true, opacity: 1 },
+        },
+      },
+    ];
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], false);
+    assert.equal(
+      nativePlayerMarker.element.style.display,
+      "none",
+      "historical replay does not reveal the current live marker",
+    );
+    assert.equal(
+      head.element.style.display,
+      "",
+      "occluded historical 3D player falls back to its historical 2D marker",
+    );
+
     app.mapViewer.controlsManager.distance = 300;
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
     assert.equal(
       nativePlayerMarker.element.style.display,
-      undefined,
+      "",
       "native BlueMap marker returns when zooming back out",
     );
 

@@ -86,12 +86,13 @@ export interface Object3D {
   visible: boolean;
   name: string;
   userData: Record<string, unknown>;
-  parent?: { remove(child: Object3D): void };
+  parent?: Object3D;
   add(...children: Object3D[]): void;
   remove(child: Object3D): void;
   clone(recursive?: boolean): Object3D;
   children?: Object3D[];
   onClick?: (event: unknown) => boolean;
+  updateMatrixWorld?(): void;
 }
 
 export interface Mesh extends Object3D {
@@ -102,6 +103,7 @@ export interface Mesh extends Object3D {
 
 export interface RaycastHit {
   object: Object3D & { userData: Record<string, unknown> };
+  distance?: number;
   faceIndex?: number;
   index?: number;
   instanceId?: number;
@@ -129,7 +131,12 @@ export interface BlueMapRuntime {
       setHSL(h: number, s: number, l: number): { r: number; g: number; b: number };
       setStyle?(value: string): unknown;
     };
-    Vector3: new (x?: number, y?: number, z?: number) => unknown;
+    Vector3: new (x?: number, y?: number, z?: number) => {
+      x: number;
+      y: number;
+      z: number;
+      project?(camera: unknown): unknown;
+    };
     Matrix4: new () => Matrix4;
     BufferGeometry: new () => Geometry;
     BoxGeometry: new (width: number, height: number, depth: number) => Geometry & {
@@ -184,6 +191,7 @@ export interface BlueMapRuntime {
 }
 
 export interface BlueMapApp {
+  events?: EventTarget;
   popupMarkerSet: MarkerSet;
   popupMarker?: BlueMapPopupMarker;
   playerMarkerManager?: {
@@ -193,7 +201,12 @@ export interface BlueMapApp {
     markers: unknown;
     camera: unknown;
     renderer: { domElement: HTMLElement };
-    map?: { id?: string; data?: { id?: string; mapDataRoot?: string } };
+    map?: {
+      id?: string;
+      isLoaded?: boolean;
+      data?: { id?: string; mapDataRoot?: string };
+      hiresTileManager?: { scene?: Object3D };
+    };
     controlsManager?: {
       position?: Position3;
       distance?: number;
