@@ -86,7 +86,6 @@ export class BlueMapAdapter {
     | undefined;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
   private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
-  private static readonly PLAYER_OCCLUSION_INTERVAL_MS = 100;
 
   constructor(app: BlueMapApp, api: BlueMapRuntime) {
     this.app = app;
@@ -209,15 +208,10 @@ export class BlueMapAdapter {
       "bluemapRenderFrame",
       (event) => {
         if (!this.currentPlayerPositions.length) return;
-        const changed = this.updatePlayerRenderMode();
+        this.updatePlayerRenderMode();
         this.playerOcclusionElapsedMs +=
           Number((event as CustomEvent<{ delta?: number }>).detail?.delta) || 100;
-        if (
-          !changed &&
-          (this.playerIconMode ||
-            this.playerOcclusionElapsedMs < BlueMapAdapter.PLAYER_OCCLUSION_INTERVAL_MS)
-        )
-          return;
+        if (this.playerIconMode || this.playerOcclusionElapsedMs < 100) return;
         this.playerOcclusionElapsedMs = 0;
         this.syncPlayerMarkerVisibility();
       },
@@ -411,15 +405,14 @@ export class BlueMapAdapter {
     }
   }
 
-  private updatePlayerRenderMode(): boolean {
+  private updatePlayerRenderMode(): void {
     const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
     const next = this.playerIconMode
       ? distance > BlueMapAdapter.PLAYER_ICON_EXIT_DISTANCE
       : distance >= BlueMapAdapter.PLAYER_ICON_ENTER_DISTANCE;
-    if (next === this.playerIconMode) return false;
+    if (next === this.playerIconMode) return;
     this.playerIconMode = next;
     this.scene3d.setPlayersVisible(!next);
-    return true;
   }
 
   private canOccludePlayer(object: unknown): boolean {
