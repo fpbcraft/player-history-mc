@@ -444,7 +444,8 @@ export class BlueMapAdapter {
       !target ||
       !terrain ||
       !c ||
-      [p?.x, p?.y, p?.z, c.x, c.y, c.z].some((value) => !Number.isFinite(value))
+      !p ||
+      [p.x, p.y, p.z, c.x, c.y, c.z].some((value) => !Number.isFinite(value))
     )
       return false;
 
