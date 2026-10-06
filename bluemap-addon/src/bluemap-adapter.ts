@@ -73,8 +73,8 @@ export class BlueMapAdapter {
   private liveMode = false;
   private readonly playerUuids = new Map<number, string>();
   private readonly hiddenNativePlayerElements = new Map<HTMLElement, string>();
-  private currentPlayerPositions: readonly HistoryPoint[] = [];
-  private playerOcclusionElapsedMs = 0;
+  private playerPositions: readonly HistoryPoint[] = [];
+  private occlusionMs = 0;
   private popupOverride:
     | {
         marker: BlueMapPopupMarker;
@@ -207,12 +207,12 @@ export class BlueMapAdapter {
     app.events?.addEventListener(
       "bluemapRenderFrame",
       (event) => {
-        if (!this.currentPlayerPositions.length) return;
+        if (!this.playerPositions.length) return;
         this.updatePlayerRenderMode();
-        this.playerOcclusionElapsedMs +=
+        this.occlusionMs +=
           Number((event as CustomEvent<{ delta?: number }>).detail?.delta) || 100;
-        if (this.playerIconMode || this.playerOcclusionElapsedMs < 100) return;
-        this.playerOcclusionElapsedMs = 0;
+        if (this.playerIconMode || this.occlusionMs < 100) return;
+        this.occlusionMs = 0;
         this.syncPlayerMarkerVisibility();
       },
       { signal: this.hoverListeners.signal },
@@ -385,7 +385,7 @@ export class BlueMapAdapter {
 
   private syncNativePlayerMarkers(hidden: ReadonlySet<number>): void {
     const active = new Set<HTMLElement>();
-    for (const { player } of this.currentPlayerPositions) {
+    for (const { player } of this.playerPositions) {
       const element = this.nativePlayerElement(player);
       if (!element) continue;
       active.add(element);
@@ -488,7 +488,7 @@ export class BlueMapAdapter {
 
   private syncPlayerMarkerVisibility(): void {
     const hiddenNative = new Set<number>();
-    for (const { player } of this.currentPlayerPositions) {
+    for (const { player } of this.playerPositions) {
       const occluded = !this.playerIconMode && this.playerOccluded(player);
       const useNative =
         occluded && this.liveMode && Boolean(this.nativePlayerElement(player));
@@ -553,7 +553,7 @@ export class BlueMapAdapter {
     liveMode = false,
   ): void {
     this.liveMode = liveMode;
-    this.currentPlayerPositions = [...positions];
+    this.playerPositions = [...positions];
     this.playerUuids.clear();
     for (const player of players) {
       if (player.uuid) this.playerUuids.set(player.id, player.uuid);
