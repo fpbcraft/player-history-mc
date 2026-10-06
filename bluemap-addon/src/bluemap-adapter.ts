@@ -73,6 +73,8 @@ export class BlueMapAdapter {
   private liveMode = false;
   private readonly playerUuids = new Map<number, string>();
   private readonly hiddenNativePlayerElements = new Map<HTMLElement, string>();
+  private currentPlayerPositions: readonly HistoryPoint[] = [];
+  private playerOcclusionElapsedMs = 0;
   private popupOverride:
     | {
         marker: BlueMapPopupMarker;
@@ -84,6 +86,9 @@ export class BlueMapAdapter {
     | undefined;
   private static readonly PLAYER_ICON_ENTER_DISTANCE = 220;
   private static readonly PLAYER_ICON_EXIT_DISTANCE = 170;
+  private static readonly PLAYER_OCCLUSION_INTERVAL_MS = 100;
+  private static readonly PLAYER_OCCLUSION_SAMPLE_HEIGHTS = [1.65, 1.05] as const;
+  private static readonly PLAYER_OCCLUSION_EPSILON = 0.15;
 
   constructor(app: BlueMapApp, api: BlueMapRuntime) {
     this.app = app;
@@ -198,6 +203,38 @@ export class BlueMapAdapter {
         this.hoverActive = false;
         this.tooltip.hidden = true;
         this.hoverDot.element.hidden = true;
+      },
+      { signal: this.hoverListeners.signal },
+    );
+
+    app.events?.addEventListener(
+      "bluemapRenderFrame",
+      (event) => {
+        if (!this.currentPlayerPositions.length) return;
+
+        const modeChanged = this.updatePlayerRenderMode();
+        if (modeChanged) {
+          this.playerOcclusionElapsedMs = 0;
+          this.syncPlayerMarkerVisibility();
+          return;
+        }
+        if (this.playerIconMode) return;
+
+        const delta = Number(
+          (event as CustomEvent<{ delta?: unknown }>).detail?.delta,
+        );
+        this.playerOcclusionElapsedMs +=
+          Number.isFinite(delta) && delta > 0
+            ? delta
+            : BlueMapAdapter.PLAYER_OCCLUSION_INTERVAL_MS;
+        if (
+          this.playerOcclusionElapsedMs <
+          BlueMapAdapter.PLAYER_OCCLUSION_INTERVAL_MS
+        )
+          return;
+
+        this.playerOcclusionElapsedMs = 0;
+        this.syncPlayerMarkerVisibility();
       },
       { signal: this.hoverListeners.signal },
     );
@@ -362,28 +399,38 @@ export class BlueMapAdapter {
     this.hiddenNativePlayerElements.clear();
   }
 
-  private syncNativePlayerMarkers(
-    positions: readonly HistoryPoint[],
-    players: HistoryRegistry["players"],
-    hide: boolean,
-  ): void {
-    if (!hide) {
-      this.restoreNativePlayerMarkers();
-      return;
-    }
+  private nativePlayerElement(player: number): HTMLElement | undefined {
+    const uuid = this.playerUuids.get(player);
+    return uuid
+      ? this.app.playerMarkerManager?.getPlayerMarker?.(uuid)?.element
+      : undefined;
+  }
 
-    const visiblePlayers = new Set(positions.map((point) => point.player));
-    const keep = new Set<HTMLElement>();
-    for (const player of players) {
-      if (!player.uuid || !visiblePlayers.has(player.id)) continue;
-      const marker = this.app.playerMarkerManager?.getPlayerMarker?.(player.uuid);
-      const element = marker?.element;
-      if (!element) continue;
-      keep.add(element);
+  private setNativePlayerMarkerHidden(element: HTMLElement, hidden: boolean): void {
+    if (hidden) {
       if (!this.hiddenNativePlayerElements.has(element)) {
         this.hiddenNativePlayerElements.set(element, element.style.display);
       }
       element.style.display = "none";
+      return;
+    }
+
+    const display = this.hiddenNativePlayerElements.get(element);
+    if (display === undefined) return;
+    element.style.display = display;
+    this.hiddenNativePlayerElements.delete(element);
+  }
+
+  private syncNativePlayerMarkers(
+    positions: readonly HistoryPoint[],
+    hiddenPlayers: ReadonlySet<number>,
+  ): void {
+    const keep = new Set<HTMLElement>();
+    for (const point of positions) {
+      const element = this.nativePlayerElement(point.player);
+      if (!element) continue;
+      keep.add(element);
+      this.setNativePlayerMarkerHidden(element, hiddenPlayers.has(point.player));
     }
 
     for (const [element, display] of [...this.hiddenNativePlayerElements]) {
@@ -391,6 +438,195 @@ export class BlueMapAdapter {
       element.style.display = display;
       this.hiddenNativePlayerElements.delete(element);
     }
+  }
+
+  private updatePlayerRenderMode(): boolean {
+    const previous = this.playerIconMode;
+    const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
+    if (
+      !this.playerIconMode &&
+      distance >= BlueMapAdapter.PLAYER_ICON_ENTER_DISTANCE
+    ) {
+      this.playerIconMode = true;
+    } else if (
+      this.playerIconMode &&
+      distance <= BlueMapAdapter.PLAYER_ICON_EXIT_DISTANCE
+    ) {
+      this.playerIconMode = false;
+    }
+
+    if (previous !== this.playerIconMode) {
+      this.scene3d.setPlayersVisible(!this.playerIconMode);
+      return true;
+    }
+    return false;
+  }
+
+  private deeplyVisible(object: unknown): boolean {
+    let current = object as
+      | { visible?: boolean; parent?: unknown }
+      | null
+      | undefined;
+    while (current) {
+      if (current.visible === false) return false;
+      current = current.parent as
+        | { visible?: boolean; parent?: unknown }
+        | null
+        | undefined;
+    }
+    return true;
+  }
+
+  private belongsToPlayerHistory(object: unknown): boolean {
+    let current = object as
+      | { userData?: Record<string, unknown>; parent?: unknown }
+      | null
+      | undefined;
+    while (current) {
+      if (current.userData?.playerHistory === true) return true;
+      current = current.parent as
+        | { userData?: Record<string, unknown>; parent?: unknown }
+        | null
+        | undefined;
+    }
+    return false;
+  }
+
+  private blocksPlayerVisibility(object: unknown): boolean {
+    if (!this.deeplyVisible(object) || this.belongsToPlayerHistory(object)) return false;
+    const material = (
+      object as {
+        material?:
+          | { depthTest?: boolean; opacity?: number }
+          | Array<{ depthTest?: boolean; opacity?: number }>;
+      }
+    ).material;
+    if (!material) return true;
+    const materials = Array.isArray(material) ? material : [material];
+    return materials.some(
+      (candidate) => candidate.depthTest !== false && candidate.opacity !== 0,
+    );
+  }
+
+  private playerOccluded(player: number): boolean {
+    const target = this.scene3d.playerTarget(player);
+    const map = this.app.mapViewer.map;
+    const terrain = map?.hiresTileManager?.scene;
+    const camera = this.app.mapViewer.camera as {
+      position?: { x?: number; y?: number; z?: number };
+      updateMatrixWorld?(): void;
+    };
+    const cameraPosition = camera.position;
+    const tx = target?.position.x;
+    const ty = target?.position.y;
+    const tz = target?.position.z;
+
+    if (
+      !target ||
+      !terrain ||
+      map?.isLoaded === false ||
+      !cameraPosition ||
+      !Number.isFinite(tx) ||
+      !Number.isFinite(ty) ||
+      !Number.isFinite(tz) ||
+      !Number.isFinite(cameraPosition.x) ||
+      !Number.isFinite(cameraPosition.y) ||
+      !Number.isFinite(cameraPosition.z)
+    )
+      return false;
+
+    camera.updateMatrixWorld?.();
+    terrain.position.x = 0;
+    terrain.position.z = 0;
+    terrain.updateMatrixWorld?.();
+
+    const occlusionScenes: unknown[] = [terrain];
+    const markerScene = this.app.mapViewer.markers;
+    if (markerScene && markerScene !== terrain) occlusionScenes.push(markerScene);
+
+    let testedSamples = 0;
+    for (const height of BlueMapAdapter.PLAYER_OCCLUSION_SAMPLE_HEIGHTS) {
+      const sampleX = tx as number;
+      const sampleY = (ty as number) + height;
+      const sampleZ = tz as number;
+      const projected = new this.api.Three.Vector3(sampleX, sampleY, sampleZ);
+      if (typeof projected.project !== "function") return false;
+      projected.project(camera);
+
+      if (
+        !Number.isFinite(projected.x) ||
+        !Number.isFinite(projected.y) ||
+        !Number.isFinite(projected.z) ||
+        Math.abs(projected.x) > 1 ||
+        Math.abs(projected.y) > 1 ||
+        projected.z < -1 ||
+        projected.z > 1
+      )
+        continue;
+
+      testedSamples += 1;
+      const targetDistance = Math.hypot(
+        sampleX - (cameraPosition.x as number),
+        sampleY - (cameraPosition.y as number),
+        sampleZ - (cameraPosition.z as number),
+      );
+      if (!Number.isFinite(targetDistance) || targetDistance <= 0) return false;
+
+      this.raycaster.setFromCamera(projected, camera);
+      const hit = this.raycaster
+        .intersectObjects(occlusionScenes, true)
+        .find((candidate) => this.blocksPlayerVisibility(candidate.object));
+      if (!hit) return false;
+
+      const hitDistance =
+        typeof hit.distance === "number" && Number.isFinite(hit.distance)
+          ? hit.distance
+          : Math.hypot(
+              hit.point.x - (cameraPosition.x as number),
+              hit.point.y - (cameraPosition.y as number),
+              hit.point.z - (cameraPosition.z as number),
+            );
+
+      if (
+        !Number.isFinite(hitDistance) ||
+        hitDistance >=
+          targetDistance - BlueMapAdapter.PLAYER_OCCLUSION_EPSILON
+      )
+        return false;
+    }
+
+    return testedSamples > 0;
+  }
+
+  private setHistoryPlayerMarkerVisible(player: number, visible: boolean): void {
+    const marker = this.players.markers.get(`p${player}`);
+    if (!marker) return;
+    (marker as HtmlMarker & { visible?: boolean }).visible = visible;
+    marker.element.style.display = visible ? "" : "none";
+  }
+
+  private syncPlayerMarkerVisibility(): void {
+    const hiddenNativePlayers = new Set<number>();
+    const closeUp = !this.playerIconMode;
+
+    for (const point of this.currentPlayerPositions) {
+      const occluded = closeUp && this.playerOccluded(point.player);
+      const nativeElement = this.nativePlayerElement(point.player);
+      const useNativeFallback =
+        closeUp && occluded && this.liveMode && Boolean(nativeElement);
+
+      this.setHistoryPlayerMarkerVisible(
+        point.player,
+        this.playerIconMode || (occluded && !useNativeFallback),
+      );
+
+      if (closeUp && !useNativeFallback) hiddenNativePlayers.add(point.player);
+    }
+
+    this.syncNativePlayerMarkers(
+      this.currentPlayerPositions,
+      hiddenNativePlayers,
+    );
   }
 
   private followPlayer(player: number): void {
@@ -443,6 +679,7 @@ export class BlueMapAdapter {
     liveMode = false,
   ): void {
     this.liveMode = liveMode;
+    this.currentPlayerPositions = [...positions];
     this.playerUuids.clear();
     for (const player of players) {
       if (player.uuid) this.playerUuids.set(player.id, player.uuid);
@@ -458,27 +695,7 @@ export class BlueMapAdapter {
     }
     this.updatePlayerBar(positions, names, players);
 
-    const distance = this.app.mapViewer.controlsManager?.distance ?? 0;
-    if (
-      !this.playerIconMode &&
-      distance >= BlueMapAdapter.PLAYER_ICON_ENTER_DISTANCE
-    ) {
-      this.playerIconMode = true;
-    } else if (
-      this.playerIconMode &&
-      distance <= BlueMapAdapter.PLAYER_ICON_EXIT_DISTANCE
-    ) {
-      this.playerIconMode = false;
-    }
-
-    const show3dPlayers = !this.playerIconMode;
-    this.scene3d.setPlayersVisible(show3dPlayers);
-    this.syncNativePlayerMarkers(positions, players, show3dPlayers && positions.length > 0);
-
-    if (!this.playerIconMode) {
-      this.clear(this.players);
-      return;
-    }
+    this.updatePlayerRenderMode();
 
     const keep = new Set<string>();
     for (const p of positions) {
@@ -532,6 +749,8 @@ export class BlueMapAdapter {
     for (const [id, marker] of this.players.markers) {
       if (!keep.has(id)) this.players.remove(marker);
     }
+
+    this.syncPlayerMarkerVisibility();
   }
   setPlayerVitals(
     player: number,
