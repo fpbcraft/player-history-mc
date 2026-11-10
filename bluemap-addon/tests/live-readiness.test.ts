@@ -153,8 +153,10 @@ it("paints the activity summary before a blocked object-history manifest", async
   expect(fetcher.mock.calls.some(([url]) => String(url).includes("objects/manifest.json"))).toBe(
     true,
   );
-  expect(panel.querySelector(".history-histogram")?.getAttribute("aria-label")).toContain(
-    "samples across",
+  await vi.waitFor(() =>
+    expect(panel.querySelector(".history-histogram")?.getAttribute("aria-label")).toContain(
+      "samples across",
+    ),
   );
   expect(playerCalls.mock.calls.at(-1)?.[0][0]).toMatchObject({ player: 1 });
 });
