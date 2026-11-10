@@ -1,4 +1,4 @@
-import { mkdir, rm, stat, watch } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, watch, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
@@ -24,9 +24,7 @@ async function projectVersion() {
     .map((tag) => /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag.trim()))
     .filter(Boolean)
     .map((match) => match.slice(1).map(Number))
-    .sort((left, right) =>
-      right[0] - left[0] || right[1] - left[1] || right[2] - left[2],
-    );
+    .sort((left, right) => right[0] - left[0] || right[1] - left[1] || right[2] - left[2]);
   // Hosted/shallow Git checkouts (for example Vercel) may not contain release tags.
   // The SHA still gives the frontend an immutable cache-busting version; normal CI and
   // release builds continue to derive the dev version from the latest stable tag.
@@ -56,7 +54,10 @@ export async function copyStyles() {
 
 export async function verifyBundleSize(file = scriptOutput) {
   const bundle = await stat(file);
-  if (bundle.size > maximumBundleSize) {
+  const metrics = JSON.parse(
+    await readFile(join(outputDirectory, "player-history-build.json"), "utf8"),
+  );
+  if (bundle.size + metrics.initialBytes > maximumBundleSize) {
     throw new Error(`Frontend bundle is too large: ${bundle.size} bytes`);
   }
   return bundle.size;
@@ -65,11 +66,19 @@ export async function verifyBundleSize(file = scriptOutput) {
 export async function createFrontendBuild({ onResult, outfile = scriptOutput } = {}) {
   await mkdir(outputDirectory, { recursive: true });
   const version = await projectVersion();
+  if (!/^[A-Za-z0-9.+-]+$/.test(version)) throw new Error("Invalid frontend asset version");
+  const modules = join(outputDirectory, "modules", version);
   return context({
-    entryPoints: [join(source, "player-history.ts")],
-    outfile,
+    entryPoints: {
+      live: join(source, "player-history.ts"),
+      history: join(source, "history-runtime.ts"),
+    },
+    outdir: modules,
+    splitting: true,
+    metafile: true,
+    chunkNames: "chunks/[name]-[hash]",
     bundle: true,
-    format: "iife",
+    format: "esm",
     target: "es2022",
     legalComments: "none",
     sourcemap: false,
@@ -78,16 +87,55 @@ export async function createFrontendBuild({ onResult, outfile = scriptOutput } =
     define: {
       __PLAYER_HISTORY_VERSION__: JSON.stringify(version),
     },
-    plugins: onResult
-      ? [
-          {
-            name: "player-history-build-status",
-            setup(build) {
-              build.onEnd((result) => onResult(result));
-            },
-          },
-        ]
-      : [],
+    plugins: [
+      {
+        name: "player-history-build-assets",
+        setup(build) {
+          build.onEnd(async (result) => {
+            if (!result.errors.length) {
+              const files = (await readdir(modules, { recursive: true }))
+                .filter((file) => file.endsWith(".js"))
+                .sort();
+              const outputs = result.metafile.outputs;
+              const live = Object.keys(outputs).find((file) =>
+                outputs[file].entryPoint?.endsWith("player-history.ts"),
+              );
+              const visited = new Set();
+              const initialSize = (file) => {
+                if (visited.has(file)) return 0;
+                visited.add(file);
+                return (
+                  outputs[file].bytes +
+                  outputs[file].imports
+                    .filter((entry) => entry.kind !== "dynamic-import" && outputs[entry.path])
+                    .reduce((total, entry) => total + initialSize(entry.path), 0)
+                );
+              };
+              await writeFile(
+                join(outputDirectory, "player-history-build.json"),
+                JSON.stringify({
+                  initialBytes: initialSize(live),
+                  totalBytes: Object.values(outputs).reduce(
+                    (total, output) => total + output.bytes,
+                    0,
+                  ),
+                }),
+              );
+              await writeFile(
+                join(outputDirectory, "player-history-assets.json"),
+                JSON.stringify(files.map((file) => `modules/${version}/${file}`)),
+              );
+              const url = `player-history/modules/${version}/live.js`;
+              await writeFile(
+                outfile,
+                `(()=>{const s=document.createElement("script");s.type="module";s.src=new URL(${JSON.stringify(url)},document.baseURI).href;s.onerror=()=>console.error("Player History live module could not load");document.body.append(s)})();\n`,
+              );
+            }
+            if (onResult) await onResult(result);
+          });
+        },
+      },
+    ],
   });
 }
 

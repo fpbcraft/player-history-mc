@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { lanDevelopmentUrls, parseDevOptions, playerHistoryAsset } from "../dev-options.mjs";
 import { startDevelopmentProxy } from "../dev-server.mjs";
-import { scriptOutput, styleOutput } from "../frontend-build.mjs";
+import { outputDirectory, scriptOutput, styleOutput } from "../frontend-build.mjs";
 
 function listen(server: Server, port = 0): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -157,6 +157,13 @@ describe("development proxy", () => {
       "data: online\n\n",
     );
 
+    const assets = JSON.parse(await readFile(`${outputDirectory}/player-history-assets.json`, "utf8"));
+    for (const asset of assets) {
+      const response = await fetch(`${base}/player-history/${asset}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("javascript");
+      expect(await response.text()).toBe(await readFile(`${outputDirectory}/${asset}`, "utf8"));
+    }
     const expectedScript = await readFile(scriptOutput, "utf8");
     const expectedStyle = await readFile(styleOutput, "utf8");
     for (const filename of [

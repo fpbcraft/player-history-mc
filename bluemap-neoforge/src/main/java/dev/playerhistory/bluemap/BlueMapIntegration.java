@@ -193,6 +193,7 @@ public final class BlueMapIntegration {
         serverOverlays.start(server, webRoot);
         worldStatus.start(server, webRoot);
       }
+      FrontendModuleInstaller.install(getClass(), root, version);
       for (String name : List.of("player-history.js", "player-history.css")) {
         try (var in = getClass().getResourceAsStream("/" + name)) {
           if (in == null) throw new IllegalStateException("Missing asset " + name);

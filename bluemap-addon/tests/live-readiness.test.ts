@@ -14,6 +14,11 @@ vi.mock("../src/bluemap-adapter.js", async (original) => ({
   },
 }));
 
+vi.mock("../src/history-runtime-loader.js", async () => {
+  const runtime = await import("../src/history-runtime.js");
+  return { loadHistoryRuntime: () => Promise.resolve(runtime) };
+});
+
 customElements.define("test-live-replay", ReplayPanel);
 const registry = {
   players: [{ id: 1, uuid: "00000000-0000-0000-0000-000000000001", name: "Player" }],
@@ -116,7 +121,8 @@ it("closing historical mode restores live on every subsequent frame", async () =
     tickFrame(t: number): void;
   };
   state.isLive = false;
-  const clear = vi.spyOn(state.objectAdapter, "clear");
+  const clear = vi.fn();
+  state.objectAdapter = { clear, dispose() {} };
   panel.close();
   state.tickFrame(16);
   state.tickFrame(32);
@@ -153,8 +159,10 @@ it("paints the activity summary before a blocked object-history manifest", async
   expect(fetcher.mock.calls.some(([url]) => String(url).includes("objects/manifest.json"))).toBe(
     true,
   );
-  expect(panel.querySelector(".history-histogram")?.getAttribute("aria-label")).toContain(
-    "samples across",
+  await vi.waitFor(() =>
+    expect(panel.querySelector(".history-histogram")?.getAttribute("aria-label")).toContain(
+      "samples across",
+    ),
   );
   expect(playerCalls.mock.calls.at(-1)?.[0][0]).toMatchObject({ player: 1 });
 });
