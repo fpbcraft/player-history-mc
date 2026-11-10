@@ -112,6 +112,7 @@ export interface RaycastHit {
 }
 
 export interface Raycaster {
+  far?: number;
   params: { Line2: { threshold: number }; Line?: { threshold: number } };
   setFromCamera(position: unknown, camera: unknown): void;
   intersectObjects(objects: unknown[], recursive: boolean): RaycastHit[];
@@ -191,6 +192,7 @@ export interface BlueMapRuntime {
 }
 
 export interface BlueMapApp {
+  switchMap?(mapId: string, resetCamera?: boolean): Promise<void>;
   events?: EventTarget;
   popupMarkerSet: MarkerSet;
   popupMarker?: BlueMapPopupMarker;

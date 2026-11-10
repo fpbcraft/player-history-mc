@@ -62,7 +62,7 @@ jobs:
           if-no-files-found: error
 
   visual:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
@@ -78,8 +78,16 @@ jobs:
       - name: Install viewer dependencies
         working-directory: bluemap-addon
         run: npm ci
+      - name: Install Chrome for visual checks
+        uses: browser-actions/setup-chrome@v2
+        id: chrome
+        with:
+          chrome-version: stable
+          install-dependencies: true
       - name: Capture deterministic viewer screenshots
         working-directory: bluemap-addon
+        env:
+          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
         run: npm run visual:test
       - name: Upload viewer visual evidence
         if: always()

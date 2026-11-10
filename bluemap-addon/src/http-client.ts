@@ -26,7 +26,9 @@ export class HistoryClient {
   private async json(path: string, signal?: AbortSignal): Promise<unknown> {
     const response = await this.fetcher(new URL(path, this.base), {
       cache: "no-store",
-      ...(signal ? { signal } : {}),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error(`History HTTP ${response.status}`);
     if (!response.json) throw new Error("History response is not JSON");

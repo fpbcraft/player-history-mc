@@ -1314,3 +1314,37 @@ bluemap-player-replay .history-chat-death > span {
     min-width: 30px;
   }
 }
+
+/* Cards retain their DOM across interpolation frames and dimension switches. */
+.history-player-followbar > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 116px;
+  width: 116px;
+  height: auto;
+  min-height: 112px;
+  padding: 6px;
+  color: #eee;
+  border-color: #9ca3af;
+  gap: 3px;
+}
+.history-player-followbar > button[data-dimension="minecraft:overworld"] { border-color: #70c98a; }
+.history-player-followbar > button[data-dimension="minecraft:the_nether"] { border-color: #ef826f; }
+.history-player-followbar > button[data-dimension="minecraft:the_end"] { border-color: #c4a2ef; }
+.history-player-followbar > button[data-offline="true"] { border-style: dashed; opacity: .7; }
+.history-player-followbar > button[aria-pressed="true"] { box-shadow: 0 0 0 2px white; }
+.history-roster-face { display: block; position: relative; width: 32px; height: 32px; overflow: hidden; flex-shrink: 0; }
+.history-player-followbar > button .history-roster-face img,
+.history-offline-location .history-roster-face img {
+  position: absolute; width: 256px; height: auto; max-width: none;
+  left: -32px; top: -32px; image-rendering: pixelated;
+}
+.history-player-followbar > button .history-roster-face .history-roster-hat,
+.history-offline-location .history-roster-face .history-roster-hat { left: -160px; }
+.history-player-followbar > button .history-roster-fallback img,
+.history-offline-location .history-roster-fallback img { width: 32px; height: 32px; left: 0; top: 0; }
+.history-roster-name { font-weight: bold; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.history-roster-dimension, .history-roster-health, .history-roster-action { font-size: 10px; }
+.history-roster-action { max-width: 100%; white-space: normal; }
+.history-offline-location { display: flex; align-items: center; gap: 5px; padding: 3px; background: #181818db; color: white; border: 1px dashed #aaa; border-radius: 4px; opacity: .8; white-space: nowrap; font-size: 11px; }
