@@ -37,6 +37,7 @@ import type {
   HistoryEvent,
   HistoryManifest,
   HistoryPoint,
+  HistoryRegistry,
   IntegrationMapping,
   PlayerState,
 } from "./types.js";
@@ -74,6 +75,8 @@ export class ReplayPanel extends HTMLElement {
   private liveStates: Record<string, PlayerState> = {};
   private manifest?: HistoryManifest;
   private integration?: IntegrationMapping;
+  private integrationLoading: Promise<IntegrationMapping> | undefined;
+  private liveRegistry: HistoryRegistry | undefined;
   private cache: ChunkCache | undefined;
   private telemetryCache: TelemetryCache | undefined;
   private adapter: BlueMapAdapter | undefined;
@@ -95,6 +98,9 @@ export class ReplayPanel extends HTMLElement {
   private lastMap: string | undefined;
   private heatVersion = 0;
   private chatTimer: PanelTimer | undefined;
+  private chatSessionLoading = false;
+  private chatSessionStatus = "";
+  private chatFeedError = "";
   private seekTimer: PanelTimer | undefined;
   private trailDataKey: string | null = null;
   private healthKey: string | null = null;
@@ -254,6 +260,11 @@ export class ReplayPanel extends HTMLElement {
     this.liveEvents = [];
     this.livePoints = [];
     this.chatNotifications = [];
+    this.chatSessionLoading = false;
+    this.chatSessionStatus = "";
+    this.chatFeedError = "";
+    this.liveRegistry = undefined;
+    this.integrationLoading = undefined;
     this.liveFeed.reset();
     this.liveReplay.reset();
     this.mobileQuery = matchMedia("(max-width: 600px)");
@@ -484,9 +495,7 @@ export class ReplayPanel extends HTMLElement {
     document.addEventListener(
       "player-history:heatmap-toggle",
       (event) => {
-        const enabled = Boolean(
-          (event as CustomEvent<{ enabled?: boolean }>).detail?.enabled,
-        );
+        const enabled = Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled);
         void this.setHeatmapOverlay(enabled);
       },
       { signal: this.lifecycle.signal },
@@ -555,11 +564,23 @@ export class ReplayPanel extends HTMLElement {
     this.restoreVisibility();
     this.sync();
     this.lifecycle.frame((time) => this.tickFrame(time));
-    const startLivePolling = () => {
+    void this.pollLive();
+    this.lifecycle.interval(() => this.pollLive(), LIVE_POLL_INTERVAL_MS);
+    void this.loadIntegration()
+      .then(() => this.render())
+      .catch((error) => this.report(error));
+    if (this.opened || this.heatEnabled) void this.refresh(true);
+    const resumeLive = () => {
+      if (document.visibilityState === "hidden") return;
       void this.pollLive();
-      this.lifecycle.interval(() => this.pollLive(), LIVE_POLL_INTERVAL_MS);
+      if (!this.integration)
+        void this.loadIntegration()
+          .then(() => this.render())
+          .catch((error) => this.report(error));
+      if (!this.require<HTMLElement>(".history-chat-panel").hidden) void this.pollChat();
     };
-    void this.refresh(true).then(startLivePolling);
+    window.addEventListener("online", resumeLive, { signal: this.lifecycle.signal });
+    document.addEventListener("visibilitychange", resumeLive, { signal: this.lifecycle.signal });
     this.lifecycle.interval(() => {
       if (this.opened || this.heatEnabled) void this.refresh();
     }, 45000);
@@ -606,23 +627,49 @@ export class ReplayPanel extends HTMLElement {
     for (const element of days) element.hidden = !editingDays;
   }
   private async pollChat(): Promise<void> {
-    if (this.chatLoading) return;
-    this.chatLoading = true;
+    await Promise.all([this.pollChatSession(), this.pollChatFeed()]);
+  }
+
+  private async pollChatSession(): Promise<void> {
+    if (this.chatSessionLoading) return;
+    this.chatSessionLoading = true;
+    const signal = this.lifecycle.signal;
     try {
       const session = await this.chatClient.session();
+      if (signal.aborted) return;
       this.q("chat-connect").hidden = session.linked;
       this.q("chat-logout").hidden = !session.linked;
       this.require<HTMLFormElement>(".history-chat-form").hidden = !session.linked;
-      if (session.linked) this.q("chat-status").textContent = `Connected as ${session.name}`;
+      this.chatSessionStatus = session.linked ? `Connected as ${session.name}` : "";
+    } catch (error) {
+      if (!signal.aborted) this.chatSessionStatus = errorMessage(error);
+    } finally {
+      if (!signal.aborted) {
+        this.chatSessionLoading = false;
+        this.q("chat-status").textContent = this.chatFeedError || this.chatSessionStatus;
+      }
+    }
+  }
+
+  private async pollChatFeed(): Promise<void> {
+    if (this.chatLoading) return;
+    this.chatLoading = true;
+    const signal = this.lifecycle.signal;
+    try {
       const data = await this.chatClient.feed();
+      if (signal.aborted) return;
       const feed = this.require<HTMLElement>(".history-webchat-feed");
       const shouldFollow = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 20;
       renderWebChatFeed(feed, data.messages);
       if (shouldFollow) feed.scrollTop = feed.scrollHeight;
+      this.chatFeedError = "";
     } catch (error) {
-      this.q("chat-status").textContent = errorMessage(error);
+      if (!signal.aborted) this.chatFeedError = errorMessage(error);
     } finally {
-      this.chatLoading = false;
+      if (!signal.aborted) {
+        this.chatLoading = false;
+        this.q("chat-status").textContent = this.chatFeedError || this.chatSessionStatus;
+      }
     }
   }
   async open() {
@@ -653,11 +700,11 @@ export class ReplayPanel extends HTMLElement {
       if (this.opened) this.close();
       this.q("open").hidden = true;
     }
-    await this.loadRangeEvents();
-    this.updateOverlays();
     this.lifecycle.clearInterval(this.chatTimer);
-    this.pollChat();
+    void this.pollChat();
     this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2000);
+    void this.loadRangeEvents();
+    this.updateOverlays();
   }
   close() {
     this.closeChoices();
@@ -667,8 +714,7 @@ export class ReplayPanel extends HTMLElement {
     this.objectAdapter?.clear();
     this.opened = false;
     preferences.saveHistoryOpen(false);
-    this.lifecycle.clearInterval(this.chatTimer);
-    this.clock.isPlaying = false;
+    this.goNow();
     this.togglePlayers(false);
     this.requests.abort("heatmap");
     this.requests.abort("activity");
@@ -808,6 +854,24 @@ export class ReplayPanel extends HTMLElement {
     });
     this.sync();
   }
+  private async loadIntegration(): Promise<IntegrationMapping> {
+    if (this.integration) return this.integration;
+    if (!this.integrationLoading) {
+      const signal = this.lifecycle.signal;
+      this.integrationLoading = this.historyClient
+        .integration(signal)
+        .then((mapping) => {
+          if (signal.aborted) throw new DOMException("Disconnected", "AbortError");
+          this.integration = mapping;
+          return mapping;
+        })
+        .finally(() => {
+          if (!signal.aborted) this.integrationLoading = undefined;
+        });
+    }
+    return this.integrationLoading;
+  }
+
   async refresh(reset = false) {
     if (this.refreshing) return;
     this.refreshing = true;
@@ -841,14 +905,9 @@ export class ReplayPanel extends HTMLElement {
         }
       }
       if (!this.integration) {
-        this.integration = await this.historyClient.integration(controller.signal);
+        await this.loadIntegration();
       }
 
-      if (this.opened) {
-        const objectManifest = await this.historyClient.objectManifest(controller.signal);
-        this.objectReplay.configure(objectManifest ?? undefined);
-        if (!objectManifest) this.objectAdapter?.clear();
-      }
       if (!this.cache || this.cache.duration !== m.chunkDurationMs) {
         this.cache?.clear();
         this.cache = new ChunkCache(
@@ -871,8 +930,14 @@ export class ReplayPanel extends HTMLElement {
       if (calendar) this.clock.customRange = { from: calendar.from, to: calendar.to };
       this.clock.refresh(m.earliestTimestamp, latest, reset);
       this.renderPlayers();
-      if (changed) await this.reloadRange();
-      else if (this.opened) this.loadActivity();
+      if (this.opened) {
+        void this.loadActivity();
+        const objectManifest = await this.historyClient.objectManifest(controller.signal);
+        if (!this.requests.current("manifest", controller) || !this.opened) return;
+        this.objectReplay.configure(objectManifest ?? undefined);
+        if (!objectManifest) this.objectAdapter?.clear();
+      }
+      if (changed) await this.reloadRange(false);
       this.render();
       this.updateOverlays();
     } catch (error) {
@@ -968,9 +1033,10 @@ export class ReplayPanel extends HTMLElement {
       this.requests.finish("activity", controller);
     }
   }
-  async reloadRange() {
-    if (this.opened) this.loadActivity();
-    else this.requests.abort("activity");
+  async reloadRange(loadSummary = true) {
+    if (this.opened) {
+      if (loadSummary) void this.loadActivity();
+    } else this.requests.abort("activity");
     if (!this.cache) return;
     this.cache.clear();
     this.objectReplay.resetWindow();
@@ -1059,12 +1125,12 @@ export class ReplayPanel extends HTMLElement {
       await window.bluemap.switchMap(mapId, false);
     this.adapter?.focusPoint(event.point);
   }
-  seek(time: number): void {
+  seek(time: number, render = true): void {
     this.isLive = false;
     if (!this.manifest || !Number.isFinite(time)) return;
     this.clock.seek(time);
     this.sync();
-    this.render();
+    if (render) this.render();
     if (!this.cache) return;
     if (this.windowState.needsLoad(this.clock.time, this.cache.duration)) {
       // Throttle, rather than debounce: a held drag keeps updating the map.
@@ -1103,10 +1169,7 @@ export class ReplayPanel extends HTMLElement {
     } catch (error) {
       if (this.windowState.isCurrent(request)) this.report(error);
     } finally {
-      const needsFollowUp = this.windowState.needsLoad(
-        this.clock.time,
-        this.cache.duration,
-      );
+      const needsFollowUp = this.windowState.needsLoad(this.clock.time, this.cache.duration);
       if (this.windowState.finish(request) && needsFollowUp) this.loadWindow();
     }
   }
@@ -1121,15 +1184,15 @@ export class ReplayPanel extends HTMLElement {
         const previousTime = this.clock.time;
         this.clock.tick(delta);
         this.notifyPlaybackChats(previousTime, this.clock.time);
-        this.seek(this.clock.time);
+        this.seek(this.clock.time, false);
       }
-      this.render();
       if (!this.lastOverlay || time - this.lastOverlay > 500) {
         this.updateOverlays();
         this.adapter?.layoutEvents();
         this.lastOverlay = time;
       }
     }
+    this.render();
   }
   private worldKey(): string | undefined {
     if (!this.adapter) return undefined;
@@ -1137,16 +1200,24 @@ export class ReplayPanel extends HTMLElement {
     return mapId ? this.integration?.mapWorlds?.[mapId] : undefined;
   }
   world() {
-    if (!this.manifest) return undefined;
+    const registry = this.isLive
+      ? (this.liveRegistry ?? this.manifest?.registry)
+      : this.manifest?.registry;
     const key = this.worldKey();
-    return this.manifest.registry.worlds.find((world) => world.key === key)?.id;
+    return registry?.worlds.find((world) => world.key === key)?.id;
   }
   render() {
-    if (!this.manifest || !this.cache) return;
+    const registry = this.isLive
+      ? (this.liveRegistry ?? this.manifest?.registry)
+      : this.manifest?.registry;
+    if (!registry || !this.integration) return;
     try {
       if (!this.adapter) {
         this.adapter = new BlueMapAdapter(window.bluemap, window.BlueMap);
         this.objectAdapter = new BlueMap3DReplayAdapter(window.BlueMap);
+        this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
+      }
+      if (this.manifest && !this.telemetryCache) {
         const manifest = this.manifest;
         const telemetryCache = new TelemetryCache(BASE_URL, manifest.chunkDurationMs);
         this.telemetryCache = telemetryCache;
@@ -1156,10 +1227,9 @@ export class ReplayPanel extends HTMLElement {
             manifest.registry,
             manifest.capabilities,
           );
-        this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       }
       const world = this.world();
-      const ready = this.windowState.isLoaded(this.clock.time, this.cache.duration);
+      const ready = this.cache && this.windowState.isLoaded(this.clock.time, this.cache.duration);
       let positions: HistoryPoint[] = [];
       if (this.isLive) {
         positions = this.liveReplay.positions(this.selection, world);
@@ -1169,14 +1239,9 @@ export class ReplayPanel extends HTMLElement {
           .filter((point): point is HistoryPoint => point !== null && point.world === world)
           .map((point) => ({ ...point, time: this.clock.time }));
       }
-      this.adapter.setPlayers(
-        positions,
-        this.names,
-        this.manifest.registry.players,
-        this.isLive,
-      );
+      this.adapter.setPlayers(positions, this.names, registry.players, this.isLive);
 
-      if (this.objectAdapter && !this.isLive) {
+      if (this.objectAdapter && this.opened && !this.isLive) {
         const objectFrame = this.objectReplay.frame(this.clock.time, this.worldKey());
         if (objectFrame) {
           this.objectAdapter.setObjects(
@@ -1196,7 +1261,7 @@ export class ReplayPanel extends HTMLElement {
           this.adapter.setPlayerVitals(
             position.player,
             this.liveStates[String(position.player)] ?? {},
-            this.manifest.registry.items,
+            registry.items,
           );
         }
       } else {
@@ -1212,7 +1277,10 @@ export class ReplayPanel extends HTMLElement {
           Promise.all(
             positions.map(
               async (position) =>
-                [position.player, await telemetryCache.at(position.player, this.clock.time)] as const,
+                [
+                  position.player,
+                  await telemetryCache.at(position.player, this.clock.time),
+                ] as const,
             ),
           ).then((states) => {
             if (this.healthToken !== token || this.isLive) return;
@@ -1289,8 +1357,9 @@ export class ReplayPanel extends HTMLElement {
         ? await this.historyClient.live(controller.signal)
         : await this.historyClient.presence(controller.signal);
       const update = this.liveFeed.apply(data);
-      if (!this.isConnected || !update) return;
+      if (!this.isConnected || !this.requests.current("live", controller) || !update) return;
 
+      this.liveRegistry = update.registry;
       this.livePoints = update.points;
       this.liveEvents = update.events;
       this.liveStates = update.states;
@@ -1301,23 +1370,29 @@ export class ReplayPanel extends HTMLElement {
       for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
       this.eventRevision++;
 
-      if (!this.manifest && (this.opened || this.heatEnabled)) await this.refresh();
+      if (!this.integration)
+        void this.loadIntegration()
+          .then(() => this.render())
+          .catch((error) => this.report(error));
+      if (!this.manifest && (this.opened || this.heatEnabled)) void this.refresh();
       if (this.manifest) this.manifest.registry = update.registry;
       for (const player of update.registry.players) {
         if (!this.names.has(player.id)) this.selection.add(player.id);
         this.names.set(player.id, player.name);
       }
-      if (this.isLive && this.manifest && this.cache) {
-        this.clock.refresh(
-          this.manifest.earliestTimestamp,
-          Math.max(this.manifest.latestTimestamp, update.generatedAt, Date.now()),
-        );
+      if (this.isLive) {
+        if (this.manifest && this.cache)
+          this.clock.refresh(
+            this.manifest.earliestTimestamp,
+            Math.max(this.manifest.latestTimestamp, update.generatedAt, Date.now()),
+          );
         this.clock.seek(this.clock.to);
         this.sync();
         this.render();
         this.updateOverlays();
         if (
           this.opened &&
+          this.cache &&
           this.windowState.needsLoad(this.clock.time, this.cache.duration)
         )
           void this.loadWindow();

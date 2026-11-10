@@ -52,8 +52,7 @@ class FakeObject implements Object3D {
     copy.position.set(this.position.x ?? 0, this.position.y ?? 0, this.position.z ?? 0);
     copy.scale.set(this.scale.x ?? 1, this.scale.y ?? 1, this.scale.z ?? 1);
     copy.quaternion.set(...this.quaternion.values);
-    if (recursive)
-      for (const child of this.children) copy.add(child.clone(true));
+    if (recursive) for (const child of this.children) copy.add(child.clone(true));
     return copy;
   }
 }
@@ -137,7 +136,6 @@ test("historical object replay clones the live mesh and suppresses the present-d
   assert.equal(historyRoot.children.length, 0);
 });
 
-
 test("historical replay owns all live rope/spring objects without hiding rigid siblings", () => {
   const root = new FakeObject();
   const historicalSegment = new FakeObject();
@@ -220,13 +218,15 @@ test("historical replay owns all live rope/spring objects without hiding rigid s
     ],
   );
 
-  assert.deepEqual(suppressions, [[
-    "create_contraptions/train/0",
-    "simulated_ropes/current-rope/segment-0",
-    "simulated_springs/world/1_2_3/segment-0",
-    "simulated_springs/world/1_2_3/segment-7",
-    "simulated_springs/world/99_99_99/segment-0",
-  ]]);
+  assert.deepEqual(suppressions, [
+    [
+      "create_contraptions/train/0",
+      "simulated_ropes/current-rope/segment-0",
+      "simulated_springs/world/1_2_3/segment-0",
+      "simulated_springs/world/1_2_3/segment-7",
+      "simulated_springs/world/99_99_99/segment-0",
+    ],
+  ]);
 
   assert.equal(historicalSegment.visible, false);
   assert.equal(sameFamilyExtra.visible, true); // BlueMap3D owns visibility via suppression API.
@@ -331,9 +331,7 @@ test("logical instance history replays one spring from archived shared geometry"
     "https://map.example/player-history/data/objects/",
   );
   assert.equal(rendered.rendered, 1);
-  assert.deepEqual(urls, [
-    "https://map.example/player-history/data/objects/geometry/spring.bm3d",
-  ]);
+  assert.deepEqual(urls, ["https://map.example/player-history/data/objects/geometry/spring.bm3d"]);
   assert.deepEqual(instanceWrites.at(-1), pose.groups[0]?.instances);
   assert.deepEqual(suppressions[0], ["simulated_springs/world/1_2_3"]);
 });
@@ -377,7 +375,7 @@ test("fallback suppression re-hides a live mesh after an older BlueMap3D poll", 
           qz: 0,
           qw: 1,
           geometry: 7,
-groups: [],
+          groups: [],
           travel: 0,
         },
       ],
@@ -503,9 +501,7 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
     groups: [],
     travel: 0,
   };
-  const registry = [
-    { id: 8, provider: "sable_ships", sourceId: "old-ship", label: "Old ship" },
-  ];
+  const registry = [{ id: 8, provider: "sable_ships", sourceId: "old-ship", label: "Old ship" }];
   const geometry = [
     {
       provider: "sable_ships",
@@ -552,3 +548,32 @@ test("historical renderer loads an archived mesh when live geometry is gone", as
   assert.equal(loaded.scale.y, 1.5);
 });
 
+test("replay reuses catalog indexes but notices replacement catalogs and new live objects", () => {
+  const root = new FakeObject();
+  const calls: string[][] = [];
+  window.__bluemap3d = { root, objects: {}, setSuppressedObjects: (ids) => calls.push([...ids]) };
+  const adapter = new BlueMap3DReplayAdapter(runtime());
+  const registry = [{ id: 1, provider: "create_contraptions", sourceId: "train", label: "Train" }];
+  const geometries = [];
+  let registryMaps = 0;
+  const originalMap = registry.map.bind(registry);
+  registry.map = (...args) => {
+    registryMaps++;
+    return originalMap(...args);
+  };
+  adapter.setObjects([], registry, geometries);
+  adapter.setObjects([], registry, geometries);
+  assert.equal(registryMaps, 2, "identity and suppression indexes are built once for the catalog");
+  assert.equal(calls.length, 1, "unchanged suppression does not rescan BlueMap visibility");
+  window.__bluemap3d.objects["create_contraptions/train"] = { mesh: new FakeObject() };
+  adapter.setObjects([], registry, geometries);
+  assert.deepEqual(
+    calls.at(-1),
+    ["create_contraptions/train"],
+    "a new live identity is suppressed immediately",
+  );
+  adapter.setObjects([], [], geometries);
+  assert.deepEqual(calls.at(-1), [], "a new registry replaces the old suppression index");
+  adapter.clear();
+  adapter.dispose();
+});

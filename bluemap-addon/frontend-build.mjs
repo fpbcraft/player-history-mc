@@ -49,7 +49,7 @@ export async function copyStyles() {
     entryPoints: [join(source, "player-history.css")],
     outfile: styleOutput,
     bundle: true,
-    minify: false,
+    minify: true,
     logLevel: "warning",
   });
 }
@@ -73,7 +73,7 @@ export async function createFrontendBuild({ onResult, outfile = scriptOutput } =
     target: "es2022",
     legalComments: "none",
     sourcemap: false,
-    minify: false,
+    minify: true,
     logLevel: onResult ? "silent" : "warning",
     define: {
       __PLAYER_HISTORY_VERSION__: JSON.stringify(version),
