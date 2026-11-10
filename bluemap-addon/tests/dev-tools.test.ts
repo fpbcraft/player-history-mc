@@ -33,6 +33,24 @@ async function availablePort(): Promise<number> {
 }
 
 describe("development options", () => {
+  it("routes every built preview module to its local deployment asset", async () => {
+    const config = JSON.parse(await readFile(new URL("../../vercel.json", import.meta.url), "utf8"));
+    const assets: string[] = JSON.parse(
+      await readFile(`${outputDirectory}/player-history-assets.json`, "utf8"),
+    );
+    expect(assets.length).toBeGreaterThan(0);
+    for (const asset of assets) {
+      const path = `/player-history/${asset}`;
+      const route = config.routes.find(
+        (candidate: { src?: string }) => candidate.src && new RegExp(`^${candidate.src}$`).test(path),
+      );
+      expect(route, path).toBeDefined();
+      const destination = path.replace(new RegExp(`^${route.src}$`), route.dest);
+      expect(destination).toBe(`/${asset}`);
+      expect(await readFile(`${outputDirectory}${destination}`, "utf8")).not.toBe("");
+    }
+  });
+
   it("requires a valid HTTP target and applies defaults", () => {
     expect(parseDevOptions(["--target", "http://127.0.0.1:8100"])).toEqual({
       target: "http://127.0.0.1:8100/",
