@@ -542,7 +542,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
     assert.equal(adapter.bar.children[0].ariaPressed, "false", "manual pan still clears follow");
     const foreignPoint = { ...point, player: 2, world: 1 };
-    let selectedWorld;
+    let selectedWorld: number | undefined;
     adapter.navigatePlayer = async (target) => {
       selectedWorld = target.world;
     };
