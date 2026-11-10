@@ -312,7 +312,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
 
     assert.equal(adapter.bar.children.length, 1);
     const followButton = adapter.bar.children[0];
-    assert.equal(followButton.title, "Test player");
+    assert.match(followButton.title, /Test player/);
     followButton.onclick({ stopPropagation() {} });
     assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
     assert.equal(followButton.attributes["aria-pressed"], "true");
@@ -442,7 +442,11 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
 
     const occlusionCalls = adapter.raycaster.calls;
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
-    assert.equal(adapter.raycaster.calls, occlusionCalls, "position interpolation respects the occlusion budget");
+    assert.equal(
+      adapter.raycaster.calls,
+      occlusionCalls,
+      "position interpolation respects the occlusion budget",
+    );
     adapter.raycaster.hits = [
       {
         distance: 2,
@@ -504,7 +508,11 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
 
     app.mapViewer.controlsManager.distance = 300;
     appEvents.emit("bluemapRenderFrame", { delta: 16 });
-    assert.equal(head.element.style.display, "", "crossing the zoom threshold updates icons immediately");
+    assert.equal(
+      head.element.style.display,
+      "",
+      "crossing the zoom threshold updates icons immediately",
+    );
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
     appEvents.emit("bluemapRenderFrame", { delta: 100 });
     assert.equal(
@@ -533,6 +541,30 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     mapControls.data.followingPlayer = null;
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
     assert.equal(adapter.bar.children[0].ariaPressed, "false", "manual pan still clears follow");
+    const foreignPoint = { ...point, player: 2, world: 1 };
+    let selectedWorld;
+    adapter.navigatePlayer = async (target) => {
+      selectedWorld = target.world;
+    };
+    adapter.setRoster([
+      {
+        point: foreignPoint,
+        name: "Nether player",
+        uuid: "nether",
+        dimension: "minecraft:the_nether",
+        offline: false,
+      },
+    ]);
+    const foreignButton = adapter.bar.children.find((button) => button.value === "2");
+    foreignButton.onclick();
+    assert.equal(selectedWorld, 1, "foreign card requests its own dimension");
+    assert.equal(adapter.following, 2);
+    adapter.setPlayers([], names, [{ id: 2, uuid: "nether" }]);
+    assert.equal(adapter.following, 2, "follow intent survives dimension loading");
+    app.mapViewer.map.data.id = "nether";
+    adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
+    assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 2);
+
     adapter.dispose();
     assert.equal(
       popupMarker.onMapInteraction,

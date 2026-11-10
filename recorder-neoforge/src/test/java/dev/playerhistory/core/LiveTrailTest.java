@@ -60,4 +60,32 @@ class LiveTrailTest {
       assertFalse(Files.exists(historical), "historical batch is not flushed early");
     }
   }
+  @Test void lastLocationsPersistAcrossRestartWithoutBecomingOnlinePresence() throws Exception {
+    var registry = new Registry(root.resolve("registry.json"));
+    int player = registry.player(UUID.randomUUID(), "Tester");
+    int world = registry.world("minecraft:the_nether");
+    var options = new HistoryStore.Options(300000, -1, 64, 8, false);
+    long now = System.currentTimeMillis();
+    try (var store = new HistoryStore(root, registry, options, ignored -> {})) {
+      store.publishTo(root.resolve("public"));
+      assertTrue(store.offer(List.of(Point.at(player, now, world, 10, 60, 20, Point.BREAK)), List.of()));
+    }
+    assertTrue(Files.exists(root.resolve("last-locations.json")));
+    Files.deleteIfExists(root.resolve("public/presence.json"));
+    try (var store = new HistoryStore(root, registry, options, ignored -> {})) {
+      store.publishTo(root.resolve("public"));
+      Path file = root.resolve("public/presence.json");
+      for (int i = 0; i < 40 && !Files.exists(file); i++) Thread.sleep(50);
+      assertTrue(Files.exists(file));
+      var snapshot = com.google.gson.JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+      assertEquals(0, snapshot.getAsJsonArray("points").size());
+      var locations = snapshot.getAsJsonArray("lastLocations");
+      assertEquals(1, locations.size());
+      var location = locations.get(0).getAsJsonObject();
+      assertEquals(world, location.get("world").getAsInt());
+      assertEquals(320, location.get("x").getAsInt());
+      assertEquals(now, location.get("time").getAsLong());
+      assertNotEquals(0, location.get("flags").getAsInt() & Point.OFFLINE);
+    }
+  }
 }

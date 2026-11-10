@@ -2,12 +2,18 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ReplayPanel } from "../src/replay-panel.js";
 
-const { playerCalls } = vi.hoisted(() => ({ playerCalls: vi.fn() }));
+const { playerCalls, rosterCalls, offlineCalls } = vi.hoisted(() => ({
+  playerCalls: vi.fn(),
+  rosterCalls: vi.fn(),
+  offlineCalls: vi.fn(),
+}));
 vi.mock("../src/bluemap-adapter.js", async (original) => ({
   ...(await original()),
   BlueMapAdapter: class {
     mapId = "world";
     setPlayers = playerCalls;
+    setRoster = rosterCalls;
+    setOfflineLocations = offlineCalls;
     setPlayerVitals() {}
     layoutEvents() {}
     dispose() {}
@@ -34,6 +40,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   localStorage.clear();
   playerCalls.mockClear();
+  rosterCalls.mockClear();
+  offlineCalls.mockClear();
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
     addEventListener() {},
@@ -198,4 +206,50 @@ it("a pending account request does not slow public-message polling", async () =>
   await vi.advanceTimersByTimeAsync(4_000);
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/messages"))).toHaveLength(3);
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/session"))).toHaveLength(1);
+});
+
+it("keeps foreign-dimension roster cards separate from map players and hides offline locations during replay", async () => {
+  const original = fetcher.getMockImplementation();
+  fetcher.mockImplementation((input, options) => {
+    if (String(input).includes("presence.json"))
+      return Promise.resolve(
+        Response.json({
+          protocolVersion: 2,
+          generatedAt: Date.now(),
+          registry: {
+            players: [
+              ...registry.players,
+              { id: 2, uuid: "nether", name: "Nether player" },
+              { id: 3, uuid: "offline", name: "Offline player" },
+            ],
+            worlds: [...registry.worlds, { id: 1, key: "minecraft:the_nether" }],
+            items: [],
+          },
+          points: [1, 2].map((player) => ({
+            player,
+            world: player - 1,
+            time: Date.now(),
+            x: 32,
+            y: 2048,
+            z: 0,
+            flags: 0,
+          })),
+          lastLocations: [
+            { player: 3, world: 0, time: Date.now() - 10000, x: 64, y: 2048, z: 0, flags: 2 },
+          ],
+          events: [],
+          states: {},
+        }),
+      );
+    return original(input, options);
+  });
+  document.body.append(panel);
+  await flush();
+  expect(playerCalls.mock.calls.at(-1)?.[0].map((point) => point.player)).toEqual([1]);
+  expect(rosterCalls.mock.calls.at(-1)?.[0].map((row) => row.point.player)).toEqual([1, 2, 3]);
+  expect(offlineCalls.mock.calls.at(-1)?.[0].map((row) => row.point.player)).toEqual([3]);
+  (panel as unknown as { isLive: boolean }).isLive = false;
+  panel.render();
+  expect(offlineCalls.mock.calls.at(-1)?.[0]).toEqual([]);
+  expect(rosterCalls.mock.calls.at(-1)?.[0]).toEqual([]);
 });

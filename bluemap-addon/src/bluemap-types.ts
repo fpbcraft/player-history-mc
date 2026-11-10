@@ -192,6 +192,7 @@ export interface BlueMapRuntime {
 }
 
 export interface BlueMapApp {
+  switchMap?(mapId: string, resetCamera?: boolean): Promise<void>;
   events?: EventTarget;
   popupMarkerSet: MarkerSet;
   popupMarker?: BlueMapPopupMarker;

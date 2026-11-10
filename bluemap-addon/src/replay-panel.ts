@@ -1,3 +1,4 @@
+import { rosterPlayers } from "./player-roster.js";
 import { activityRangeTooLarge, loadActivityDensity } from "./activity-density.js";
 import { BlueMapAdapter } from "./bluemap-adapter.js";
 import type { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
@@ -71,6 +72,11 @@ export class ReplayPanel extends HTMLElement {
   private liveEvents: HistoryEvent[] = [];
   private livePoints: HistoryPoint[] = [];
   private liveStates: Record<string, PlayerState> = {};
+  private lastLocations: HistoryPoint[] = [];
+  private liveOnline = new Set<number>();
+  private lastRosterUpdate = -Infinity;
+  private rosterMode: boolean | undefined;
+  private rosterStates: Record<string, PlayerState> = {};
   private manifest?: HistoryManifest;
   private integration?: IntegrationMapping;
   private integrationLoading: Promise<IntegrationMapping> | undefined;
@@ -258,6 +264,10 @@ export class ReplayPanel extends HTMLElement {
       this.clock.playbackRate = savedSpeed;
     this.isLive = true;
     this.liveEvents = [];
+    this.lastLocations = [];
+    this.liveOnline.clear();
+    this.lastRosterUpdate = -Infinity;
+    this.rosterStates = {};
     this.livePoints = [];
     this.chatNotifications = [];
     this.chatSessionLoading = false;
@@ -1229,11 +1239,60 @@ export class ReplayPanel extends HTMLElement {
     const key = this.worldKey();
     return registry?.worlds.find((world) => world.key === key)?.id;
   }
+  private updateRoster(
+    positions: HistoryPoint[],
+    registry: HistoryRegistry,
+    world: number | undefined,
+  ): void {
+    const adapter = this.adapter;
+    if (
+      !adapter ||
+      (this.rosterMode === this.isLive && performance.now() - this.lastRosterUpdate < 200)
+    )
+      return;
+    this.rosterMode = this.isLive;
+    this.lastRosterUpdate = performance.now();
+    adapter.navigatePlayer = async (point) => {
+      const key = registry.worlds.find((item) => item.id === point.world)?.key;
+      if (!key || key === this.worldKey()) return;
+      const mapId = Object.entries(this.integration?.mapWorlds ?? {}).find(
+        ([, value]) => value === key,
+      )?.[0];
+      if (!mapId || !window.bluemap.switchMap) return;
+      try {
+        await window.bluemap.switchMap(mapId);
+        if (this.isConnected) this.render();
+      } catch (error) {
+        this.report(error);
+      }
+    };
+    const offline = this.isLive
+      ? this.lastLocations.filter(
+          (point) => !this.liveOnline.has(point.player) && this.selection.has(point.player),
+        )
+      : [];
+    const offlineRows = rosterPlayers(offline, registry, {}, true);
+    if (
+      !this.isLive &&
+      this.healthKey !==
+        `${Math.floor(this.clock.time / 1000)}:${positions.map((position) => position.player).join(",")}`
+    )
+      this.rosterStates = {};
+    adapter.setRoster?.([
+      ...rosterPlayers(positions, registry, this.isLive ? this.liveStates : this.rosterStates),
+      ...offlineRows,
+    ]);
+    adapter.setOfflineLocations?.(offlineRows.filter((row) => row.point.world === world));
+  }
   render() {
     const registry = this.isLive
       ? (this.liveRegistry ?? this.manifest?.registry)
       : this.manifest?.registry;
-    if (!registry || !this.integration) return;
+    if (!this.isLive) this.adapter?.setOfflineLocations?.([]);
+    if (!registry || !this.integration) {
+      if (!this.isLive) this.adapter?.setRoster?.([]);
+      return;
+    }
     try {
       if (!this.adapter) {
         this.adapter = new BlueMapAdapter(window.bluemap, window.BlueMap);
@@ -1257,14 +1316,20 @@ export class ReplayPanel extends HTMLElement {
       const ready = this.cache && this.windowState.isLoaded(this.clock.time, this.cache.duration);
       let positions: HistoryPoint[] = [];
       if (this.isLive) {
-        positions = this.liveReplay.positions(this.selection, world);
+        positions = this.liveReplay.positions(this.selection, undefined);
       } else if (ready) {
         positions = [...this.selection]
           .map((id) => this.engine.position(id, this.clock.time))
-          .filter((point): point is HistoryPoint => point !== null && point.world === world)
+          .filter((point): point is HistoryPoint => point !== null)
           .map((point) => ({ ...point, time: this.clock.time }));
       }
-      this.adapter.setPlayers(positions, this.names, registry.players, this.isLive);
+      this.adapter.setPlayers(
+        positions.filter((point) => point.world === world),
+        this.names,
+        registry.players,
+        this.isLive,
+      );
+      this.updateRoster(positions, registry, world);
 
       if (this.objectAdapter && this.opened && !this.isLive) {
         const objectFrame = this.objectReplay?.frame(this.clock.time, this.worldKey());
@@ -1295,6 +1360,7 @@ export class ReplayPanel extends HTMLElement {
           .join(",")}`;
         if (healthKey !== this.healthKey) {
           this.healthKey = healthKey;
+          this.rosterStates = {};
           const token = {};
           this.healthToken = token;
           const telemetryCache = this.telemetryCache;
@@ -1309,6 +1375,9 @@ export class ReplayPanel extends HTMLElement {
             ),
           ).then((states) => {
             if (this.healthToken !== token || this.isLive) return;
+            this.rosterStates = Object.fromEntries(
+              states.filter(([, state]) => state !== null && state !== undefined),
+            ) as Record<string, PlayerState>;
             for (const [player, state] of states)
               this.adapter?.setPlayerVitals(
                 player,
@@ -1388,6 +1457,12 @@ export class ReplayPanel extends HTMLElement {
       this.livePoints = update.points;
       this.liveEvents = update.events;
       this.liveStates = update.states;
+      this.lastLocations = update.lastLocations;
+      const latestLive = new Map(update.points.map((point) => [point.player, point]));
+      this.liveOnline = new Set(
+        [...latestLive.values()].filter((point) => !(point.flags & 2)).map((point) => point.player),
+      );
+      this.lastRosterUpdate = -Infinity;
       // Presence snapshots still contain the latest point for each online player.
       // Feed them into the live replay even while History is closed so the 3D avatar
       // and floating follow bar do not disappear between full-live sessions.

@@ -19,6 +19,7 @@ import {
   playerColor,
 } from "./event-presentation.js";
 import { createVitals, meterLevels, renderVitals } from "./player-vitals.js";
+import { PlayerRoster, createRosterHead, type RosterPlayer } from "./player-roster.js";
 import { HistoryScene3D } from "./history-scene3d.js";
 import { eventDetails, trailPoint } from "./telemetry.js";
 import type {
@@ -70,6 +71,10 @@ export class BlueMapAdapter {
   expandedGroup: HtmlMarker | null = null;
   heat: Mesh | null = null;
   stateDetails?: (player: number, time: number) => Promise<string>;
+  private roster?: PlayerRoster;
+  private explicitRoster = false;
+  private readonly offlineMarkers = new Map<number, HtmlMarker>();
+  navigatePlayer?: (point: HistoryPoint) => Promise<void>;
   private playerIconMode = false;
   private following: number | null = null;
   private followSuspended = false;
@@ -547,23 +552,69 @@ export class BlueMapAdapter {
     names: ReadonlyMap<number, string>,
     players: HistoryRegistry["players"],
   ): void {
-    const key = `${this.mapId}:${positions.map((p) => p.player).join(",")}`;
-    if (this.bar.dataset.players !== key) {
-      this.bar.dataset.players = key;
-      this.bar.replaceChildren();
-      for (const { player } of positions) {
-        const button = document.createElement("button");
-        button.value = String(player);
-        button.title = names.get(player) ?? button.value;
-        button.onclick = () => this.followPlayer(player);
-        const image = document.createElement("img");
-        image.src = this.playerHeadUrl(player, players);
-        image.onerror = () => (image.src = FALLBACK_HEAD);
-        button.append(image);
-        this.bar.append(button);
-      }
-    }
+    if (this.explicitRoster) return;
+    this.setRoster(
+      positions.map((point) => ({
+        point,
+        name: names.get(point.player) ?? String(point.player),
+        uuid: players.find((player) => player.id === point.player)?.uuid,
+        dimension: "Unknown dimension",
+        offline: false,
+      })),
+      false,
+    );
     this.syncFollowButtons();
+  }
+
+  setRoster(rows: readonly RosterPlayer[], explicit = true): void {
+    this.explicitRoster ||= explicit;
+    this.roster ??= new PlayerRoster(this.bar, (row) => {
+      if (row.offline) {
+        this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
+        this.following = null;
+        if (this.navigatePlayer)
+          void this.navigatePlayer(row.point).then(() => this.focusPoint(row.point));
+        else this.focusPoint(row.point);
+      } else if (this.playerPositions.some((point) => point.player === row.point.player)) {
+        this.followPlayer(row.point.player);
+      } else if (this.following === row.point.player) {
+        this.following = null;
+        this.followSuspended = false;
+        this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
+      } else {
+        this.following = row.point.player;
+        this.followSuspended = true;
+        void this.navigatePlayer?.(row.point);
+      }
+      this.syncFollowButtons();
+    });
+    this.roster.update(rows);
+    this.syncFollowButtons();
+  }
+
+  setOfflineLocations(rows: readonly RosterPlayer[]): void {
+    const keep = new Set(rows.map((row) => row.point.player));
+    for (const [id, marker] of this.offlineMarkers)
+      if (!keep.has(id)) {
+        this.root.remove(marker);
+        this.offlineMarkers.delete(id);
+      }
+    for (const row of rows) {
+      let marker = this.offlineMarkers.get(row.point.player);
+      if (!marker) {
+        marker = new this.api.HtmlMarker(`offline-${row.point.player}`);
+        marker.element.className = "history-offline-location";
+        marker.element.append(createRosterHead(row.uuid));
+        const label = document.createElement("span");
+        label.textContent = `${row.name} · Offline`;
+        marker.element.append(label);
+        marker.element.title = `Last recorded location · ${new Date(row.point.time).toLocaleString()}`;
+        marker.anchor.set(16, 16);
+        this.offlineMarkers.set(row.point.player, marker);
+        this.root.add(marker);
+      }
+      marker.position.set(row.point.x / 32, row.point.y / 32, row.point.z / 32);
+    }
   }
 
   setPlayers(
@@ -916,6 +967,7 @@ export class BlueMapAdapter {
     }
     this.clearHeatmap();
     this.scene3d.dispose();
+    this.setOfflineLocations([]);
     this.clear(this.players);
     this.clear(this.trails);
     this.clear(this.events);
