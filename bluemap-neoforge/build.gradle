@@ -17,10 +17,11 @@ tasks.register('buildViewer', Exec) {
  inputs.file('../bluemap-addon/package-lock.json')
  inputs.file('../bluemap-addon/tsconfig.json')
  inputs.file('../bluemap-addon/build.mjs')
+ inputs.file('../bluemap-addon/frontend-build.mjs')
  inputs.property 'playerHistoryVersion', project.version.toString()
  outputs.dir('../bluemap-addon/dist')
 }
-sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', 'player-history.js', 'player-history.css', 'playerhistory-equipment-compat.json' }
+sourceSets.main.resources { srcDir('../bluemap-addon/dist'); include '**/*.toml', 'player-history.js', 'player-history.css', 'player-history-assets.json', 'modules/**/*.js', 'playerhistory-equipment-compat.json' }
 tasks.named('processResources') {
  dependsOn 'buildViewer'
  inputs.property 'version', project.version

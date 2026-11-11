@@ -33,6 +33,8 @@ public final class HistoryStore implements AutoCloseable {
   private final ArrayBlockingQueue<Envelope> queue;
   private final Thread worker;
   private final Map<Integer, Point> last = new HashMap<>();
+  private final Map<Integer, Point> lastLocations = new HashMap<>();
+  private boolean locationsDirty;
   private final Set<Integer> broken = new HashSet<>();
   private final List<Point> points = new ArrayList<>();
   private final List<HistoryEvent> events = new ArrayList<>();
@@ -96,6 +98,12 @@ public final class HistoryStore implements AutoCloseable {
       for (var point : livePoints) latest.put(point.player(), point);
       var presencePoints =
           latest.values().stream().sorted(Comparator.comparingLong(Point::time)).toList();
+      long cutoff = retentionDays < 0 ? Long.MIN_VALUE : RetentionFiles.cutoffUtcDay(now, retentionDays);
+      var locations = lastLocations.values().stream()
+          .filter(point -> point.time() >= cutoff)
+          .sorted(Comparator.comparingInt(Point::player))
+          .map(point -> point.with(point.time(), point.flags() | Point.OFFLINE))
+          .toList();
       var chatEvents =
           liveEvents.stream().filter(event -> "CHAT".equals(event.type())).toList();
 
@@ -108,6 +116,8 @@ public final class HistoryStore implements AutoCloseable {
               now,
               "points",
               presencePoints,
+              "lastLocations",
+              locations,
               "events",
               chatEvents,
               "states",
@@ -125,6 +135,8 @@ public final class HistoryStore implements AutoCloseable {
                 now,
                 "points",
                 List.copyOf(livePoints),
+                "lastLocations",
+                locations,
                 "events",
                 List.copyOf(liveEvents),
                 "states",
@@ -214,6 +226,17 @@ public final class HistoryStore implements AutoCloseable {
       }
     retentionDays = options.retentionDays;
     recover();
+    Path locationsFile = root.resolve("last-locations.json");
+    if (Files.exists(locationsFile)) {
+      try (var reader = Files.newBufferedReader(locationsFile)) {
+        Point[] saved = JsonFiles.GSON.fromJson(reader, Point[].class);
+        if (saved != null) for (Point point : saved) {
+          if (point != null) lastLocations.put(point.player(), point);
+        }
+      } catch (RuntimeException error) {
+        log.warn("Ignoring unreadable last locations: " + error);
+      }
+    }
     states = new StateStore(root, options.duration);
     Path publication = root.resolve("publication.json");
     if (Files.exists(publication))
@@ -445,6 +468,8 @@ public final class HistoryStore implements AutoCloseable {
     points.add(p);
     pendingPoints.add(p);
     last.put(p.player(), p);
+    lastLocations.put(p.player(), p);
+    locationsDirty = true;
     latest = Math.max(latest, p.time());
     earliest = Math.min(earliest, start);
     written.incrementAndGet();
@@ -455,6 +480,12 @@ public final class HistoryStore implements AutoCloseable {
   }
 
   private void flush() throws IOException {
+    if (locationsDirty) {
+      long cutoff = retentionDays < 0 ? Long.MIN_VALUE : RetentionFiles.cutoffUtcDay(System.currentTimeMillis(), retentionDays);
+      lastLocations.values().removeIf(point -> point.time() < cutoff);
+      JsonFiles.write(root.resolve("last-locations.json"), List.copyOf(lastLocations.values()));
+      locationsDirty = false;
+    }
     if (channel == null) return;
     // Identities must reach disk before batches referencing newly allocated IDs.
     JsonFiles.write(root.resolve("registry.json"), registry.snapshot());

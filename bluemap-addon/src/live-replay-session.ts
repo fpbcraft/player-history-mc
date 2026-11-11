@@ -67,7 +67,7 @@ export class LiveReplaySession {
     now = performance.now(),
   ): HistoryPoint[] {
     const time = this.playbackTime(now);
-    if (time === null || world === undefined) return [];
+    if (time === null) return [];
 
     const positions: HistoryPoint[] = [];
     for (const player of players) {
@@ -90,7 +90,7 @@ export class LiveReplaySession {
         }
       }
 
-      if (point?.world !== world) continue;
+      if (!point || (world !== undefined && point.world !== world)) continue;
       positions.push(firstSampleFallback ? point : { ...point, time });
     }
     return positions;

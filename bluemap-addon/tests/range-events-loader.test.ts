@@ -40,7 +40,10 @@ test("range event loader aggregates and sorts chunk events", async () => {
 
   assert.equal(result.kind, "ready");
   if (result.kind !== "ready") return;
-  assert.deepEqual(result.events.map((row) => row.point.time), [5, 10, 20]);
+  assert.deepEqual(
+    result.events.map((row) => row.point.time),
+    [5, 10, 20],
+  );
 });
 
 test("range event loader enforces the browser event cap", async () => {
@@ -56,4 +59,23 @@ test("range event loader enforces the browser event cap", async () => {
       }),
     /Too many events in this range/,
   );
+});
+
+test("oversized recording stops after the first bounded batch", async () => {
+  let reads = 0;
+  await assert.rejects(
+    loadRangeEvents({
+      from: 0,
+      to: 5_000,
+      concurrency: 3,
+      maxEvents: 2,
+      chunkStarts: () => Array.from({ length: 5_000 }, (_, i) => i),
+      readChunk: async (time) => {
+        reads++;
+        return { events: [event(time), event(time)] };
+      },
+    }),
+    /Too many events/,
+  );
+  assert.equal(reads, 3);
 });

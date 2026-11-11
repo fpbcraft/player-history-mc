@@ -68,6 +68,8 @@ export interface HistoryManifest {
 }
 
 export interface LiveSnapshot {
+  /** Bounded last recorded locations; never interpreted as online presence. */
+  lastLocations?: HistoryPoint[];
   protocolVersion: 2;
   generatedAt: number;
   registry: HistoryRegistry;

@@ -152,7 +152,7 @@ export class WorldStatusController {
       if (!this.integration) {
         const integration = await fetch(
           new URL("player-history/integration.json", document.baseURI),
-          { cache: "no-cache" },
+          { cache: "no-cache", signal: AbortSignal.timeout(15_000) },
         );
         if (!integration.ok) throw new Error(`integration.json HTTP ${integration.status}`);
         this.integration = (await integration.json()) as IntegrationMapping;
@@ -160,7 +160,7 @@ export class WorldStatusController {
 
       const statusUrl = new URL("player-history/world-status.json", document.baseURI);
       statusUrl.searchParams.set("_ph", String(Date.now()));
-      const response = await fetch(statusUrl, { cache: "no-store" });
+      const response = await fetch(statusUrl, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
       if (!response.ok) throw new Error(`world-status.json HTTP ${response.status}`);
       const snapshot = (await response.json()) as WorldStatusSnapshot;
       if (snapshot.version !== 1) throw new Error("Unsupported world status version");

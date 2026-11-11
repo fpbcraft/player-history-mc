@@ -1,0 +1,19 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="fpbmotd"
+version="${version}"
+displayName="FPBCraft Dynamic MOTD"
+description="Server-side rotating MOTD with persistent activity statistics."
+displayTest="IGNORE_SERVER_VERSION"
+[[dependencies.fpbmotd]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.248,)"
+side="SERVER"
+[[dependencies.fpbmotd]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+side="SERVER"
