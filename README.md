@@ -1,11 +1,12 @@
 # Player History
 
-Two server-side **Minecraft 1.21.1 / NeoForge 21.1.248+ / Java 21** mods:
+Three server-side **Minecraft 1.21.1 / NeoForge 21.1.248+ / Java 21** mods:
 
 - **Player History Recorder** records movement, configurable state and activity, and publishes a versioned dataset. It does not depend on BlueMap.
+- **FPBCraft Dynamic MOTD** is an independent, optional server-only JAR for rotating server-list messages and persisted activity statistics. It needs neither of the Player History mods.
 - **Player History BlueMap** installs the replay viewer into **BlueMap 5.x**, links the public dataset, and maps BlueMap map IDs to Minecraft dimensions. It does not depend on recorder classes and can view an existing compatible dataset.
 
-Install `player-history-recorder-<version>.jar` for recording. Add BlueMap and `player-history-bluemap-<version>.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
+Install `fpbcraft-motd-<version>.jar` for the dynamic MOTD (see [Dynamic MOTD setup](docs/dynamic-motd.md)). Install `player-history-recorder-<version>.jar` for recording. Add BlueMap and `player-history-bluemap-<version>.jar` for map visualization. Neither mod is required on clients. Remove the previous combined Player History JAR before upgrading; the recorder retains its `playerhistory` mod ID and `config/playerhistory-common.toml`.
 
 The default dataset remains `<world>/player-history/`. Existing movement/event binary **v1** recordings remain readable. New typed state/inventory records use an independent binary **v1** stream. The browser protocol is **v2**.
 

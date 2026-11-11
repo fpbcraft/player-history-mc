@@ -1,4 +1,4 @@
-import { mapConcurrent } from "./history-loading.js";
+import { consumeConcurrent } from "./history-loading.js";
 import { BREAK, CONTEXT } from "./replay-core.js";
 import type { HistoryChunk, HistoryEvent, HistoryPoint } from "./types.js";
 
@@ -43,10 +43,7 @@ export const loadTrailData = async ({
   const from =
     trailMode === Infinity
       ? clockFrom
-      : Math.max(
-          clockFrom,
-          Math.floor(clockTime / duration) * duration - (trailMode || 30_000),
-        );
+      : Math.max(clockFrom, Math.floor(clockTime / duration) * duration - (trailMode || 30_000));
   const to =
     trailMode === Infinity
       ? clockTo
@@ -60,44 +57,47 @@ export const loadTrailData = async ({
     );
   }
 
-  const chunks = await mapConcurrent(starts, concurrency, readChunk, onProgress);
   const points: HistoryPoint[] = [];
   const events: HistoryEvent[] = [];
   let previousPlayers = new Set<number>();
   let previousStart: number | undefined;
 
-  for (let index = 0; index < chunks.length; index++) {
-    const data = chunks[index];
-    const start = starts[index];
-    if (!data || start === undefined) continue;
+  await consumeConcurrent(
+    starts,
+    concurrency,
+    readChunk,
+    (data, index) => {
+      const start = starts[index];
+      if (start === undefined) return;
 
-    if (previousStart !== undefined && start !== previousStart + duration) {
-      previousPlayers = new Set<number>();
-    }
-
-    const seen = new Set<number>();
-    events.push(...data.events);
-    if (events.length > maxEvents) {
-      throw Error("Too many events in this range. Choose a shorter trail duration.");
-    }
-
-    for (const point of data.points) {
-      seen.add(point.player);
-      if ((point.flags & CONTEXT) !== 0 && start !== starts[0]) continue;
-      points.push(
-        !previousPlayers.has(point.player)
-          ? { ...point, flags: point.flags | BREAK }
-          : point,
-      );
-      previousPlayers.add(point.player);
-      if (points.length > maxPoints) {
-        throw Error("Full trails exceed the browser limit. Use 30s or 5m trails.");
+      if (previousStart !== undefined && start !== previousStart + duration) {
+        previousPlayers = new Set<number>();
       }
-    }
 
-    previousPlayers = seen;
-    previousStart = start;
-  }
+      const seen = new Set<number>();
+      if (events.length + data.events.length > maxEvents) {
+        throw Error("Too many events in this range. Choose a shorter trail duration.");
+      }
+
+      for (const event of data.events) events.push(event);
+
+      for (const point of data.points) {
+        seen.add(point.player);
+        if ((point.flags & CONTEXT) !== 0 && start !== starts[0]) continue;
+        points.push(
+          !previousPlayers.has(point.player) ? { ...point, flags: point.flags | BREAK } : point,
+        );
+        previousPlayers.add(point.player);
+        if (points.length > maxPoints) {
+          throw Error("Full trails exceed the browser limit. Use 30s or 5m trails.");
+        }
+      }
+
+      previousPlayers = seen;
+      previousStart = start;
+    },
+    onProgress,
+  );
 
   points.sort((a, b) => a.time - b.time);
   return { from, to, points, events };

@@ -1,9 +1,5 @@
 import type { BlueMapRuntime, Object3D } from "./bluemap-types.js";
-import type {
-  ObjectGeometryEntry,
-  ObjectPose,
-  ObjectRegistryEntry,
-} from "./types.js";
+import type { ObjectGeometryEntry, ObjectPose, ObjectRegistryEntry } from "./types.js";
 
 interface BlueMap3DLiveInstanceGroup {
   mesh?: Object3D | null;
@@ -21,11 +17,7 @@ interface BlueMap3DDiagnostics {
   objects: Record<string, BlueMap3DLiveEntry>;
   root: Object3D;
   createReplayMesh?: (url: string, label?: string) => Promise<Object3D>;
-  createReplayInstanceGroup?: (
-    url: string,
-    count: number,
-    label?: string,
-  ) => Promise<Object3D>;
+  createReplayInstanceGroup?: (url: string, count: number, label?: string) => Promise<Object3D>;
   setReplayInstances?: (mesh: Object3D, instances: readonly number[][]) => void;
   setReplayAnimation?: (mesh: Object3D, travel: number, timeSeconds: number) => void;
   setSuppressedObjects?: (ids: readonly string[]) => void;
@@ -68,6 +60,12 @@ export class BlueMap3DReplayAdapter {
   private suppressedIds = new Set<string>();
   private fallbackFrame: number | undefined;
   private generation = 0;
+  private registry: readonly ObjectRegistryEntry[] | undefined;
+  private geometries: readonly ObjectGeometryEntry[] | undefined;
+  private identities = new Map<number, ObjectRegistryEntry>();
+  private exactSuppressed = new Set<string>();
+  private archivedByKey = new Map<string, ObjectGeometryEntry>();
+  private suppressionOwner: BlueMap3DDiagnostics | undefined;
 
   constructor(private readonly api: BlueMapRuntime) {}
 
@@ -89,7 +87,23 @@ export class BlueMap3DReplayAdapter {
     }
 
     this.ensureRoot(diagnostics.root);
-    const identities = new Map(registry.map((entry) => [entry.id, entry]));
+    if (this.registry !== registry) {
+      this.registry = registry;
+      this.identities = new Map(registry.map((entry) => [entry.id, entry]));
+      this.exactSuppressed = new Set(
+        registry.map((entry) => `${entry.provider}/${entry.sourceId}`),
+      );
+    }
+    if (this.geometries !== geometries) {
+      this.geometries = geometries;
+      this.archivedByKey = new Map(
+        geometries.map((entry) => [
+          geometryKey(entry.provider, entry.sourceId, entry.version),
+          entry,
+        ]),
+      );
+    }
+    const { identities, exactSuppressed, archivedByKey } = this;
 
     // Historical replay owns the complete live surface of providers whose topology is
     // itself dynamic. A current rope/spring can have a different family id or child count
@@ -99,16 +113,10 @@ export class BlueMap3DReplayAdapter {
     //
     // Normal rigid providers remain exact-id only: replaying one Create contraption must
     // never hide an unrelated present-day train/cable car.
-    const exactSuppressed = new Set(
-      registry.map((entry) => `${entry.provider}/${entry.sourceId}`),
-    );
     const suppressed = Object.keys(diagnostics.objects).filter((id) => {
       const slash = id.indexOf("/");
       const provider = slash < 0 ? id : id.slice(0, slash);
-      return (
-        exactSuppressed.has(id) ||
-        REPLAY_OWNED_DYNAMIC_PROVIDERS.has(provider)
-      );
+      return exactSuppressed.has(id) || REPLAY_OWNED_DYNAMIC_PROVIDERS.has(provider);
     });
 
     // BlueMap3D owns live-object visibility. Suppressing inside its visibility pass avoids
@@ -116,12 +124,6 @@ export class BlueMap3DReplayAdapter {
     // after Player History hid a mesh.
     this.syncLiveSuppression(diagnostics, suppressed);
 
-    const archivedByKey = new Map(
-      geometries.map((entry) => [
-        geometryKey(entry.provider, entry.sourceId, entry.version),
-        entry,
-      ]),
-    );
     const keep = new Set<number>();
     const hiddenNow = new Set<Object3D>();
     let rendered = 0;
@@ -140,8 +142,7 @@ export class BlueMap3DReplayAdapter {
       const live = diagnostics.objects[`${identity.provider}/${identity.sourceId}`];
       const source = live?.mesh;
       const liveVersion = geometryVersion(live?.meshUrl);
-      const liveMatches =
-        !!source && (liveVersion === null || liveVersion === pose.geometry);
+      const liveMatches = !!source && (liveVersion === null || liveVersion === pose.geometry);
 
       if (source) {
         hiddenNow.add(source);
@@ -150,27 +151,14 @@ export class BlueMap3DReplayAdapter {
         source.visible = false;
       }
 
-      if (source && liveVersion !== null && liveVersion !== pose.geometry)
-        geometryMismatch++;
+      if (source && liveVersion !== null && liveVersion !== pose.geometry) geometryMismatch++;
 
       if (pose.groups.length) {
-        const resolved = resolveInstanceGeometry(
-          identity,
-          pose,
-          live,
-          archivedByKey,
-          archiveBase,
-        );
-        if (
-          resolved &&
-          diagnostics.createReplayInstanceGroup &&
-          diagnostics.setReplayInstances
-        ) {
+        const resolved = resolveInstanceGeometry(identity, pose, live, archivedByKey, archiveBase);
+        if (resolved && diagnostics.createReplayInstanceGroup && diagnostics.setReplayInstances) {
           const key =
-            "instances:"
-            + resolved
-                .map((group) => `${group.id}=${group.url}#${group.count}`)
-                .join("|");
+            "instances:" +
+            resolved.map((group) => `${group.id}=${group.url}#${group.count}`).join("|");
           this.desired.set(pose.object, key);
 
           const historical = this.meshes.get(pose.object);
@@ -226,11 +214,7 @@ export class BlueMap3DReplayAdapter {
       const archivedGeometry = archivedByKey.get(
         geometryKey(identity.provider, identity.sourceId, pose.geometry),
       );
-      if (
-        archivedGeometry &&
-        archiveBase &&
-        diagnostics.createReplayMesh
-      ) {
+      if (archivedGeometry && archiveBase && diagnostics.createReplayMesh) {
         archived++;
         const url = new URL(archivedGeometry.mesh, archiveBase).href;
         const key = `archive:${url}`;
@@ -246,13 +230,7 @@ export class BlueMap3DReplayAdapter {
             this.root?.remove(historical.clone);
             this.meshes.delete(pose.object);
           }
-          this.loadArchived(
-            diagnostics,
-            pose.object,
-            key,
-            url,
-            identity.label,
-          );
+          this.loadArchived(diagnostics, pose.object, key, url, identity.label);
           unavailable++;
         }
         continue;
@@ -294,12 +272,24 @@ export class BlueMap3DReplayAdapter {
     if (this.root && this.parentRoot) this.parentRoot.remove(this.root);
     this.root = undefined;
     this.parentRoot = undefined;
+    this.registry = undefined;
+    this.geometries = undefined;
+    this.identities.clear();
+    this.exactSuppressed.clear();
+    this.archivedByKey.clear();
   }
 
   private syncLiveSuppression(
     diagnostics: BlueMap3DDiagnostics | undefined,
     ids: readonly string[],
   ): void {
+    if (
+      this.suppressionOwner === diagnostics &&
+      ids.length === this.suppressedIds.size &&
+      ids.every((id) => this.suppressedIds.has(id))
+    )
+      return;
+    this.suppressionOwner = diagnostics;
     this.suppressedIds = new Set(ids);
 
     if (diagnostics?.setSuppressedObjects) {
@@ -316,10 +306,7 @@ export class BlueMap3DReplayAdapter {
   }
 
   private ensureFallbackSuppression(): void {
-    if (
-      this.fallbackFrame !== undefined ||
-      typeof window.requestAnimationFrame !== "function"
-    )
+    if (this.fallbackFrame !== undefined || typeof window.requestAnimationFrame !== "function")
       return;
 
     const enforce = () => {
@@ -334,10 +321,7 @@ export class BlueMap3DReplayAdapter {
         }
       }
 
-      if (
-        this.suppressedIds.size > 0 &&
-        typeof window.requestAnimationFrame === "function"
-      )
+      if (this.suppressedIds.size > 0 && typeof window.requestAnimationFrame === "function")
         this.fallbackFrame = window.requestAnimationFrame(enforce);
     };
 
@@ -413,10 +397,7 @@ export class BlueMap3DReplayAdapter {
       })
       .catch((error: unknown) => {
         if (this.pending.get(object) === key) this.pending.delete(object);
-        console.warn(
-          "[Player History] Could not load archived BlueMap3D instance geometry",
-          error,
-        );
+        console.warn("[Player History] Could not load archived BlueMap3D instance geometry", error);
       });
   }
 
@@ -500,9 +481,7 @@ const resolveInstanceGeometry = (
 
   for (const group of pose.groups) {
     const sourceId = `${identity.sourceId}/@group/${group.id}`;
-    const archived = archivedByKey.get(
-      geometryKey(identity.provider, sourceId, group.geometry),
-    );
+    const archived = archivedByKey.get(geometryKey(identity.provider, sourceId, group.geometry));
 
     if (archived && archiveBase) {
       result.push({
@@ -514,10 +493,7 @@ const resolveInstanceGeometry = (
     }
 
     const liveGroup = live?.instanceGroups?.[group.id];
-    if (
-      liveGroup?.meshUrl &&
-      geometryVersion(liveGroup.meshUrl) === group.geometry
-    ) {
+    if (liveGroup?.meshUrl && geometryVersion(liveGroup.meshUrl) === group.geometry) {
       result.push({
         id: group.id,
         url: liveGroup.meshUrl,
@@ -532,10 +508,7 @@ const resolveInstanceGeometry = (
   return result;
 };
 
-const REPLAY_OWNED_DYNAMIC_PROVIDERS = new Set([
-  "simulated_ropes",
-  "simulated_springs",
-]);
+const REPLAY_OWNED_DYNAMIC_PROVIDERS = new Set(["simulated_ropes", "simulated_springs"]);
 
 const geometryKey = (provider: string, sourceId: string, version: number): string =>
   `${provider}\u0000${sourceId}\u0000${version}`;
