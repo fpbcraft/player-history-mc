@@ -1377,7 +1377,7 @@ bluemap-player-replay .history-chat-death > span {
 }
 
 /* In-map labels never enlarge the resting icon or capture map gestures. */
-.history-offline-location { position: relative; }
+.history-offline-location { position: relative; pointer-events: auto; }
 .history-map-player-label {
   display: none;
   position: absolute;
@@ -1389,7 +1389,9 @@ bluemap-player-replay .history-chat-death > span {
   background: #181818ed;
   pointer-events: none;
 }
+.bm-marker-player { pointer-events: auto; }
 .bm-marker-player .bm-player-name { display: none; }
+#map-container .bm-marker-player[distance-data] .bm-player-name { opacity: 1; }
 .history-offline-location[data-history-label-open="true"] .history-map-player-label,
 .history-offline-location:focus-visible .history-map-player-label,
 .bm-marker-player[data-history-label-open="true"] .bm-player-name,
@@ -1398,3 +1400,7 @@ bluemap-player-replay .history-chat-death > span {
   .history-offline-location:hover .history-map-player-label,
   .bm-marker-player:hover .bm-player-name { display: block; }
 }
+
+.history-chat-pairing { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--theme-bg-hover, #444); border-radius: 4px; }
+.history-chat-pairing code { overflow-wrap: anywhere; user-select: all; }
+.history-chat-pairing button { justify-self: start; }

@@ -38,3 +38,23 @@ test("map labels toggle on tap, dismiss outside and ignore map drags", () => {
   tap(offline);
   assert.equal(offline.dataset.historyLabelOpen, undefined);
 });
+
+test("marker gesture starts do not bubble into map controls", () => {
+  document.body.innerHTML = '<main><div class="history-offline-location"></div></main>';
+  const controller = new AbortController();
+  new MapPlayerLabels(controller.signal);
+  const map = document.querySelector("main");
+  assert.ok(map);
+  const marker = map.firstElementChild;
+  assert.ok(marker);
+  let starts = 0;
+  for (const type of ["pointerdown", "touchstart", "mousedown"])
+    map.addEventListener(type, () => starts++, { signal: controller.signal });
+  pointer(marker, "pointerdown");
+  marker.dispatchEvent(new Event("touchstart", { bubbles: true }));
+  marker.dispatchEvent(new Event("mousedown", { bubbles: true }));
+  assert.equal(starts, 0);
+  pointer(map, "pointerdown");
+  assert.equal(starts, 1, "normal map gestures remain available");
+  controller.abort();
+});

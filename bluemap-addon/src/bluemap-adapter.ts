@@ -687,6 +687,12 @@ export class BlueMapAdapter {
 
     const keep = new Set<string>();
     for (const p of positions) {
+      const native = this.nativePlayerElement(p.player);
+      if (native) {
+        const name = names.get(p.player) || String(p.player);
+        if (native.getAttribute("aria-label") !== name) native.setAttribute("aria-label", name);
+        if (!native.hasAttribute("tabindex")) native.tabIndex = 0;
+      }
       const id = `p${p.player}`;
       keep.add(id);
       let marker = this.players.markers.get(id);

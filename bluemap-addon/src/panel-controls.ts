@@ -3,6 +3,9 @@ export interface ReplayControls {
   back: HTMLButtonElement;
   "chat-close": HTMLButtonElement;
   "chat-connect": HTMLButtonElement;
+  "chat-copy": HTMLButtonElement;
+  "chat-copy-status": HTMLOutputElement;
+  "chat-pair-command": HTMLElement;
   "chat-logout": HTMLButtonElement;
   "chat-message": HTMLInputElement;
   "chat-status": HTMLOutputElement;

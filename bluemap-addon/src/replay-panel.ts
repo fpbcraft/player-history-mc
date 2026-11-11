@@ -104,6 +104,7 @@ export class ReplayPanel extends HTMLElement {
   private lastMap: string | undefined;
   private heatVersion = 0;
   private chatTimer: PanelTimer | undefined;
+  private chatPairTimer: PanelTimer | undefined;
   private chatSessionLoading = false;
   private chatSessionStatus = "";
   private chatFeedError = "";
@@ -312,20 +313,35 @@ export class ReplayPanel extends HTMLElement {
     this.chatToken = preferences.chatToken();
     this.q("webchat").onclick = () => this.openChat();
     this.q("chat-close").onclick = () => this.closeChat();
+    this.q("chat-copy").onclick = () => this.copyChatPairing();
     this.q("chat-connect").onclick = async () => {
+      const signal = this.lifecycle.signal;
+      const expiresAt = Date.now() + 300_000;
+      this.q("chat-connect").disabled = true;
       try {
         const pair = await this.chatClient.pair();
+        if (signal.aborted) return;
         this.chatToken = pair.token;
         preferences.saveChatToken(pair.token);
-        this.q("chat-status").textContent =
-          `Run /webchat link ${pair.code} in Minecraft (expires in 5 minutes).`;
+        this.lifecycle.clearTimeout(this.chatPairTimer);
+        this.q("chat-pair-command").textContent = `/webchat link ${pair.code}`;
+        this.q("chat-copy-status").textContent = "";
+        this.q("chat-copy").disabled = false;
+        this.require<HTMLElement>(".history-chat-pairing").hidden = false;
+        this.chatPairTimer = this.lifecycle.timeout(
+          () => this.clearChatPairing(),
+          Math.max(0, expiresAt - Date.now()),
+        );
       } catch (error) {
-        this.q("chat-status").textContent = errorMessage(error);
+        if (!signal.aborted) this.q("chat-status").textContent = errorMessage(error);
+      } finally {
+        if (!signal.aborted) this.q("chat-connect").disabled = false;
       }
     };
     this.q("chat-logout").onclick = async () => {
       try {
         await this.chatClient.logout();
+        this.clearChatPairing();
         this.chatToken = "";
         preferences.saveChatToken("");
         this.q("chat-status").textContent = "Logged out";
@@ -637,6 +653,35 @@ export class ReplayPanel extends HTMLElement {
     for (const element of dates) element.hidden = !editingDates;
     for (const element of days) element.hidden = !editingDays;
   }
+  private clearChatPairing(): void {
+    this.lifecycle.clearTimeout(this.chatPairTimer);
+    this.chatPairTimer = undefined;
+    this.require<HTMLElement>(".history-chat-pairing").hidden = true;
+    this.q("chat-pair-command").textContent = "";
+    this.q("chat-copy-status").textContent = "";
+  }
+
+  private async copyChatPairing(): Promise<void> {
+    const code = this.q("chat-pair-command");
+    const command = code.textContent;
+    if (!command) return;
+    const signal = this.lifecycle.signal;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(command);
+      if (!signal.aborted && code.textContent === command)
+        this.q("chat-copy-status").textContent = "Copied!";
+    } catch {
+      if (signal.aborted || code.textContent !== command) return;
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      this.q("chat-copy-status").textContent = "Select and copy the command above.";
+    }
+  }
+
   private async pollChat(): Promise<void> {
     await Promise.all([this.pollChatSession(), this.pollChatFeed()]);
   }
@@ -645,9 +690,11 @@ export class ReplayPanel extends HTMLElement {
     if (this.chatSessionLoading) return;
     this.chatSessionLoading = true;
     const signal = this.lifecycle.signal;
+    const token = this.chatToken;
     try {
       const session = await this.chatClient.session();
-      if (signal.aborted) return;
+      if (signal.aborted || token !== this.chatToken) return;
+      if (session.linked) this.clearChatPairing();
       this.q("chat-connect").hidden = session.linked;
       this.q("chat-logout").hidden = !session.linked;
       this.require<HTMLFormElement>(".history-chat-form").hidden = !session.linked;

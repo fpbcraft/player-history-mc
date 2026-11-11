@@ -7,17 +7,34 @@ export class MapPlayerLabels {
 
   constructor(signal: AbortSignal) {
     document.addEventListener(
+      "mousedown",
+      (event) => {
+        if (event.target instanceof Element && event.target.closest(selector))
+          event.stopPropagation();
+      },
+      { signal, capture: true },
+    );
+    document.addEventListener(
+      "touchstart",
+      (event) => {
+        if (event.target instanceof Element && event.target.closest(selector))
+          event.stopPropagation();
+      },
+      { signal, capture: true, passive: true },
+    );
+    document.addEventListener(
       "pointerdown",
       (event) => {
         const marker =
           event.target instanceof Element ? event.target.closest<HTMLElement>(selector) : null;
+        if (marker && event.pointerType === "touch") event.stopPropagation();
         if (!marker || marker !== this.open) this.close();
         this.pressed =
           event.pointerType === "touch" && marker
             ? { element: marker, x: event.clientX, y: event.clientY }
             : undefined;
       },
-      { signal },
+      { signal, capture: true },
     );
     document.addEventListener(
       "pointerup",
