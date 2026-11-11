@@ -1375,3 +1375,26 @@ bluemap-player-replay .history-chat-death > span {
 @media (prefers-reduced-motion: reduce) {
   .history-player-followbar > button, .history-player-followbar .history-roster-face, .history-roster-name { transition: none; }
 }
+
+/* In-map labels never enlarge the resting icon or capture map gestures. */
+.history-offline-location { position: relative; }
+.history-map-player-label {
+  display: none;
+  position: absolute;
+  left: calc(100% + 5px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: #181818ed;
+  pointer-events: none;
+}
+.bm-marker-player .bm-player-name { display: none; }
+.history-offline-location[data-history-label-open="true"] .history-map-player-label,
+.history-offline-location:focus-visible .history-map-player-label,
+.bm-marker-player[data-history-label-open="true"] .bm-player-name,
+.bm-marker-player:focus-visible .bm-player-name { display: block; }
+@media (hover: hover) and (pointer: fine) {
+  .history-offline-location:hover .history-map-player-label,
+  .bm-marker-player:hover .bm-player-name { display: block; }
+}

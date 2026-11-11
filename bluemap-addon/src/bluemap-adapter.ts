@@ -20,6 +20,7 @@ import {
 } from "./event-presentation.js";
 import { createVitals, meterLevels, renderVitals } from "./player-vitals.js";
 import { PlayerRoster, createRosterHead, type RosterPlayer } from "./player-roster.js";
+import { MapPlayerLabels } from "./map-player-labels.js";
 import { HistoryScene3D } from "./history-scene3d.js";
 import { eventDetails, trailPoint } from "./telemetry.js";
 import type {
@@ -152,6 +153,7 @@ export class BlueMapAdapter {
     this.hoverDot.element.hidden = true;
     document.body.append(this.tooltip);
     this.hoverListeners = new AbortController();
+    new MapPlayerLabels(this.hoverListeners.signal);
     this.raycaster = new api.Three.Raycaster();
     this.raycaster.params.Line2 = { threshold: 6 };
     if (this.raycaster.params.Line) this.raycaster.params.Line.threshold = 0.2;
@@ -621,7 +623,10 @@ export class BlueMapAdapter {
         marker.element.className = "history-offline-location";
         marker.element.append(createRosterHead(row.uuid));
         const label = document.createElement("span");
+        label.className = "history-map-player-label";
         label.textContent = `${row.name} · Offline`;
+        marker.element.tabIndex = 0;
+        marker.element.setAttribute("aria-label", label.textContent);
         marker.element.append(label);
         marker.element.title = `Last recorded location · ${new Date(row.point.time).toLocaleString()}`;
         marker.anchor.set(16, 16);
