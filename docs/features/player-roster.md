@@ -1,6 +1,6 @@
 # Player roster and live offline locations
 
-The follow bar is an all-dimension selector, separate from the active map's 3D players and markers. It starts as an unboxed strip of 16-pixel heads. The first click/tap expands the heads smoothly to 32 pixels and reveals full names; it does not start following a player. Selecting an expanded player preserves normal follow/navigation behavior. Clicking elsewhere or pressing Escape collapses the strip.
+The follow bar is an all-dimension selector, separate from the active map's 3D players and markers. It starts as an strip of 22-pixel heads on a light-grey group background. Scrollbars are hidden while horizontal swiping remains available. The first click/tap expands the heads smoothly to 32 pixels and reveals full names; it does not start following a player. Selecting an expanded player preserves normal follow/navigation behavior. Clicking elsewhere or pressing Escape collapses the strip.
 
 Desktop details use hover (plus keyboard focus for accessibility), never click-pinning. Touch-only devices use taps, with synthetic mouse hover ignored. The popup contains only HP or a compact last-seen time: no repeated name, dimension or online/offline label. Dimension stays on the head outline; offline skins are gray. Dates omit today's date, seconds and redundant current year. Activity text is absent. Expanded names use their natural width and can wrap, with horizontal scrolling for narrow displays instead of ellipsis. History uses the cursor's positions and historical telemetry, not live health.
 

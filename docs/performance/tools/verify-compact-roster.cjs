@@ -33,13 +33,13 @@ await page.goto('https://map.fpbcraft.com/#world:-937:64:392:377:0:0:0:0:perspec
 await page.waitForFunction(()=>document.querySelectorAll('.history-player-followbar>button').length===8,null,{timeout:60000});
 await page.waitForTimeout(500);
 assert.equal(await page.evaluate(()=>matchMedia('(hover: hover) and (pointer: fine)').matches),true);
-results.desktopCollapsed=await geometry();assert((await faces()).every(w=>w===16));assert(results.desktopCollapsed.bar.height<=32);
-const unboxed=await page.locator('.history-player-followbar').evaluate(root=>{const style=getComputedStyle(root);return style.backgroundColor==='rgba(0, 0, 0, 0)'&&style.borderWidth==='0px'&&[...root.querySelectorAll('button')].every(b=>getComputedStyle(b).backgroundColor==='rgba(0, 0, 0, 0)'&&getComputedStyle(b).borderWidth==='0px');});assert.equal(unboxed,true);
+results.desktopCollapsed=await geometry();assert((await faces()).every(w=>Math.abs(w-22)<.05));assert(results.desktopCollapsed.bar.height<=42);
+const unboxed=await page.locator('.history-player-followbar').evaluate(root=>{const style=getComputedStyle(root);return style.backgroundColor!=='rgba(0, 0, 0, 0)'&&style.scrollbarWidth==='none'&&[...root.querySelectorAll('button')].every(b=>getComputedStyle(b).backgroundColor==='rgba(0, 0, 0, 0)'&&getComputedStyle(b).borderWidth==='0px');});assert.equal(unboxed,true);
 await page.screenshot({path:out+'/desktop-collapsed.png'});
 const first=page.locator('.history-player-followbar>button[value="9001"]');
 let box=await first.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);assert.equal(await details.isVisible(),false);
-await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(90);results.animationMidpoint=(await faces())[0];assert(results.animationMidpoint>16&&results.animationMidpoint<32);
-await page.waitForTimeout(250);results.desktopExpanded=await geometry();assert((await faces()).every(w=>w===32));assert.equal(await namesFit(),true);
+await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(90);results.animationMidpoint=(await faces())[0];assert(results.animationMidpoint>22&&results.animationMidpoint<32);
+await page.waitForTimeout(250);results.desktopExpanded=await geometry();results.expandedHeadWidths=await faces();assert(results.expandedHeadWidths.every(w=>Math.abs(w-32)<.05));assert.equal(await namesFit(),true);
 await page.screenshot({path:out+'/desktop-expanded.png'});
 await first.hover();await details.waitFor({state:'visible'});assert.equal(await details.innerText(),'17 / 20 HP');
 await first.click();await page.mouse.move(5,300);assert.equal(await details.isVisible(),false); // Desktop clicks never pin details.
@@ -48,7 +48,7 @@ await page.keyboard.press('Escape');assert.equal(await details.isVisible(),false
 await page.setViewportSize({width:390,height:844});await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
 await cdp.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await page.waitForTimeout(300);
 assert.equal(await page.evaluate(()=>matchMedia('(hover: hover) and (pointer: fine)').matches),false);
-results.mobileCollapsed=await geometry();assert((await faces()).every(w=>w===16));assert(results.mobileCollapsed.cards.every(c=>c.bounds.right<=results.mobileCollapsed.bar.right));
+results.mobileCollapsed=await geometry();assert((await faces()).every(w=>Math.abs(w-22)<.05));assert(results.mobileCollapsed.cards.every(c=>c.bounds.right<=results.mobileCollapsed.bar.right));
 assert(results.mobileCollapsed.bar.right<=results.mobileCollapsed.overlay.left);assert(results.mobileCollapsed.documentWidth<=390);
 await page.screenshot({path:out+'/mobile-collapsed.png'});
 await touch(first);await page.waitForTimeout(300);assert.equal(await namesFit(),true);assert.equal(await details.isVisible(),false);
@@ -63,7 +63,7 @@ for(const player of fixturePlayers){
 }
 await page.screenshot({path:out+'/mobile-details.png'});
 await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:20,y:350}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-await page.waitForTimeout(300);assert.equal(await details.isVisible(),false);assert((await faces()).every(w=>w===16));
+await page.waitForTimeout(300);assert.equal(await details.isVisible(),false);assert((await faces()).every(w=>Math.abs(w-22)<.05));
 assert.equal(errors.length,0);results.passed=true;
 }catch(e){results.passed=false;results.failure=e.stack;results.lastState=await state().catch(()=>null);await page.screenshot({path:out+'/failure.png'}).catch(()=>{});console.error(e);process.exitCode=1;}
 finally{results.errors=errors;results.requestFailures=failures;fs.writeFileSync(out+'/report.json',JSON.stringify(results,null,2));console.log(JSON.stringify({passed:results.passed,failure:results.failure,errors:errors.length,output:out}));await browser.close();}
