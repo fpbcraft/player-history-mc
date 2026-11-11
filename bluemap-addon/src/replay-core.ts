@@ -1,3 +1,4 @@
+import { SharedRequests } from "./shared-requests.js";
 import { parseChunk } from "./protocol.js";
 import type { Fetcher, HistoryChunk, HistoryPoint, PointSegment } from "./types.js";
 
@@ -100,6 +101,7 @@ export class ReplayEngine {
 export class ChunkCache {
   readonly cache = new Map<number, HistoryChunk>();
   private readonly fetcher: Fetcher;
+  private readonly requests = new SharedRequests<number, HistoryChunk>();
   private generation = 0;
   private controller?: AbortController;
   private availableRanges: readonly [number, number][] | undefined;
@@ -167,29 +169,38 @@ export class ChunkCache {
   }
 
   async read(start: number, signal?: AbortSignal): Promise<HistoryChunk> {
+    signal?.throwIfAborted();
     const cached = this.cache.get(start);
     if (cached) return cached;
     if (!this.isPublished(start)) {
       const gap = parseChunk({ points: [], events: [] });
       return this.remember(start, gap);
     }
-    const response = await this.fetcher(`${this.base}/chunks/${start}.json`, {
-      cache: "no-store",
-      ...(signal ? { signal } : {}),
-    });
-    if (!response.ok && response.status !== 404) throw new Error(`History HTTP ${response.status}`);
-    const text =
-      response.status === 404
-        ? '{"points":[],"events":[]}'
-        : response.text
-          ? await response.text()
-          : (() => {
-              throw new Error("History chunk response is not text");
-            })();
-    if (text.length > 64 * 1024 * 1024) throw new Error("Chunk exceeds browser size limit");
-    const chunk = parseChunk(JSON.parse(text) as unknown);
-    if (signal?.aborted) throw new DOMException("Obsolete read", "AbortError");
-    return this.remember(start, chunk);
+    return this.requests.read(
+      start,
+      async (requestSignal) => {
+        const deadline = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
+        const response = await this.fetcher(`${this.base}/chunks/${start}.json`, {
+          cache: "no-store",
+          signal: deadline,
+        });
+        if (!response.ok && response.status !== 404)
+          throw new Error(`History HTTP ${response.status}`);
+        const text =
+          response.status === 404
+            ? '{"points":[],"events":[]}'
+            : response.text
+              ? await response.text()
+              : (() => {
+                  throw new Error("History chunk response is not text");
+                })();
+        if (text.length > 64 * 1024 * 1024) throw new Error("Chunk exceeds browser size limit");
+        const chunk = parseChunk(JSON.parse(text) as unknown);
+        deadline.throwIfAborted();
+        return this.remember(start, chunk);
+      },
+      signal,
+    );
   }
 
   async window(time: number): Promise<HistoryChunk> {
@@ -214,6 +225,7 @@ export class ChunkCache {
   clear(): void {
     this.generation++;
     this.controller?.abort();
+    this.requests.clear();
     this.cache.clear();
   }
 }

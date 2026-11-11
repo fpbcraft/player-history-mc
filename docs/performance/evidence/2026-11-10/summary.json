@@ -1,0 +1,1257 @@
+{
+  "date": "2026-11-10",
+  "timezone": "America/Toronto",
+  "revisions": {
+    "player-history": "f129afd39bcb1bc7b5c51fdbc38efa57c791ed37",
+    "BlueMap_default": "0eddf853bc682ac437071186c2198009fa385932",
+    "BlueMap_relevant_branch": "24ca759d7ff914084b1246dc252ba3e61887bad1",
+    "patches": "183489bdd92e1660c5725678fc149f2bd3e5f562",
+    "bluemap3d_pinned": "f9a027de06f49384b86867b5c58b3630d29b1c9f"
+  },
+  "baselines": [
+    {
+      "run": "desktop-1-cold",
+      "resourceEntries": 2694,
+      "completedEntryTransferBytes": 142870718,
+      "firstTerrainEventMs": 420.10000014305115,
+      "firstMeshRootMs": 1182.7000000476837,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 216,
+          "duration": 0,
+          "navigationId": 4317,
+          "paintTime": 209.5,
+          "presentationTime": 216
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 216,
+          "duration": 0,
+          "navigationId": 4317,
+          "paintTime": 209.5,
+          "presentationTime": 216
+        }
+      ],
+      "taskSeconds": 19.541399,
+      "scriptSeconds": 12.895959,
+      "longTasks": 24,
+      "longTaskMs": 3608,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999999272,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 27,
+        "frames": 747,
+        "objects": 6749,
+        "meshesInScene": 6749,
+        "intervalMs": 1000,
+        "tilesVersion": 0,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 2433590,
+        "serverPerf": {
+          "previousFeedBytes": 2433591,
+          "bakeCount": 0,
+          "bakeMs": 0,
+          "bakesInFlight": 0,
+          "providers": {
+            "create_chain_conveyors": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "create_station_flags": {
+              "enumerateMs": 0.378,
+              "objects": 14,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 14
+            },
+            "simulated_coaster_tracks": {
+              "enumerateMs": 0.444,
+              "objects": 14,
+              "groups": 42,
+              "instances": 2220,
+              "allocationProxy": 2276
+            },
+            "computercraft_turtles": {
+              "enumerateMs": 0.708,
+              "objects": 6,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 6
+            },
+            "create_belts": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "sable_ships": {
+              "enumerateMs": 1.16,
+              "objects": 38,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 38
+            },
+            "create_contraptions": {
+              "enumerateMs": 0.528,
+              "objects": 19,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 19
+            },
+            "surface_mobs": {
+              "enumerateMs": 6.591,
+              "objects": 5944,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 5944
+            },
+            "simulated_springs": {
+              "enumerateMs": 0.337,
+              "objects": 4,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 4
+            },
+            "create_bearings": {
+              "enumerateMs": 3.622,
+              "objects": 1184,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 1184
+            },
+            "simulated_ropes": {
+              "enumerateMs": 1.093,
+              "objects": 9,
+              "groups": 17,
+              "instances": 381,
+              "allocationProxy": 407
+            },
+            "create_curved_track": {
+              "enumerateMs": 1.946,
+              "objects": 20,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 20
+            }
+          }
+        },
+        "scenePerf": {
+          "logicalObjects": 6749,
+          "normalMeshes": 6726,
+          "instanceGroups": 59,
+          "instances": 2601,
+          "estimatedDrawCalls": 6977
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 309,
+          "textures": 354
+        },
+        "render": {
+          "frame": 3767,
+          "calls": 3765,
+          "triangles": 696078,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 5
+      },
+      "heapMaxBytes": 172324661,
+      "resourceClasses": {
+        "other": {
+          "count": 1283,
+          "transferBytes": 5283028,
+          "decodedBytes": 4905827
+        },
+        "textureManifest": {
+          "count": 1,
+          "transferBytes": 18619502,
+          "decodedBytes": 37542465
+        },
+        "terrain": {
+          "count": 216,
+          "transferBytes": 36146006,
+          "decodedBytes": 36081206
+        },
+        "objectFeed": {
+          "count": 27,
+          "transferBytes": 65714858,
+          "decodedBytes": 65706758
+        },
+        "mesh": {
+          "count": 1167,
+          "transferBytes": 17107324,
+          "decodedBytes": 16757224
+        }
+      },
+      "errors": [
+        "TypeError: Cannot read properties of null (reading 'length')"
+      ]
+    },
+    {
+      "run": "desktop-1-warm",
+      "resourceEntries": 2691,
+      "completedEntryTransferBytes": 120797224,
+      "firstTerrainEventMs": 223.79999995231628,
+      "firstMeshRootMs": 858.9000000953674,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 112,
+          "duration": 0,
+          "navigationId": 166,
+          "paintTime": 106.40000009536743,
+          "presentationTime": 112
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 112,
+          "duration": 0,
+          "navigationId": 166,
+          "paintTime": 106.40000009536743,
+          "presentationTime": 112
+        }
+      ],
+      "taskSeconds": 17.246431,
+      "scriptSeconds": 10.445667,
+      "longTasks": 16,
+      "longTaskMs": 2780,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.700000000004366,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 27,
+        "frames": 643,
+        "objects": 6749,
+        "meshesInScene": 6747,
+        "intervalMs": 1000,
+        "tilesVersion": 0,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 2433570,
+        "serverPerf": {
+          "previousFeedBytes": 2433571,
+          "bakeCount": 0,
+          "bakeMs": 0,
+          "bakesInFlight": 0,
+          "providers": {
+            "create_chain_conveyors": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "create_station_flags": {
+              "enumerateMs": 0.334,
+              "objects": 14,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 14
+            },
+            "simulated_coaster_tracks": {
+              "enumerateMs": 0.452,
+              "objects": 14,
+              "groups": 42,
+              "instances": 2220,
+              "allocationProxy": 2276
+            },
+            "computercraft_turtles": {
+              "enumerateMs": 1.179,
+              "objects": 6,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 6
+            },
+            "create_belts": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "sable_ships": {
+              "enumerateMs": 0.368,
+              "objects": 38,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 38
+            },
+            "create_contraptions": {
+              "enumerateMs": 1.181,
+              "objects": 19,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 19
+            },
+            "surface_mobs": {
+              "enumerateMs": 11.396,
+              "objects": 5944,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 5944
+            },
+            "simulated_springs": {
+              "enumerateMs": 0.309,
+              "objects": 4,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 4
+            },
+            "create_bearings": {
+              "enumerateMs": 2.962,
+              "objects": 1184,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 1184
+            },
+            "simulated_ropes": {
+              "enumerateMs": 1.343,
+              "objects": 9,
+              "groups": 17,
+              "instances": 381,
+              "allocationProxy": 407
+            },
+            "create_curved_track": {
+              "enumerateMs": 2.833,
+              "objects": 20,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 20
+            }
+          }
+        },
+        "scenePerf": {
+          "logicalObjects": 6749,
+          "normalMeshes": 6724,
+          "instanceGroups": 59,
+          "instances": 2601,
+          "estimatedDrawCalls": 6974
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 308,
+          "textures": 353
+        },
+        "render": {
+          "frame": 3300,
+          "calls": 3764,
+          "triangles": 695858,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 5
+      },
+      "heapMaxBytes": 154531745,
+      "resourceClasses": {
+        "other": {
+          "count": 1280,
+          "transferBytes": 5277216,
+          "decodedBytes": 4900915
+        },
+        "textureManifest": {
+          "count": 1,
+          "transferBytes": 18619502,
+          "decodedBytes": 37542465
+        },
+        "terrain": {
+          "count": 216,
+          "transferBytes": 14093136,
+          "decodedBytes": 36081206
+        },
+        "objectFeed": {
+          "count": 27,
+          "transferBytes": 65714442,
+          "decodedBytes": 65706342
+        },
+        "mesh": {
+          "count": 1167,
+          "transferBytes": 17092928,
+          "decodedBytes": 16743428
+        }
+      },
+      "errors": []
+    },
+    {
+      "run": "desktop-2-cold",
+      "resourceEntries": 2694,
+      "completedEntryTransferBytes": 142870687,
+      "firstTerrainEventMs": 202.29999995231628,
+      "firstMeshRootMs": 941,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 116,
+          "duration": 0,
+          "navigationId": 2821,
+          "paintTime": 107.29999995231628,
+          "presentationTime": 116
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 116,
+          "duration": 0,
+          "navigationId": 2821,
+          "paintTime": 107.29999995231628,
+          "presentationTime": 116
+        }
+      ],
+      "taskSeconds": 17.651343,
+      "scriptSeconds": 11.059563,
+      "longTasks": 15,
+      "longTaskMs": 2714,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999999272,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 27,
+        "frames": 670,
+        "objects": 6749,
+        "meshesInScene": 6749,
+        "intervalMs": 1000,
+        "tilesVersion": 0,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 2433592,
+        "serverPerf": {
+          "previousFeedBytes": 2433580,
+          "bakeCount": 0,
+          "bakeMs": 0,
+          "bakesInFlight": 0,
+          "providers": {
+            "create_chain_conveyors": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "create_station_flags": {
+              "enumerateMs": 0.39,
+              "objects": 14,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 14
+            },
+            "simulated_coaster_tracks": {
+              "enumerateMs": 0.46,
+              "objects": 14,
+              "groups": 42,
+              "instances": 2220,
+              "allocationProxy": 2276
+            },
+            "computercraft_turtles": {
+              "enumerateMs": 0.796,
+              "objects": 6,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 6
+            },
+            "create_belts": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "sable_ships": {
+              "enumerateMs": 0.429,
+              "objects": 38,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 38
+            },
+            "create_contraptions": {
+              "enumerateMs": 0.641,
+              "objects": 19,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 19
+            },
+            "surface_mobs": {
+              "enumerateMs": 8.455,
+              "objects": 5944,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 5944
+            },
+            "simulated_springs": {
+              "enumerateMs": 0.348,
+              "objects": 4,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 4
+            },
+            "create_bearings": {
+              "enumerateMs": 2.896,
+              "objects": 1184,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 1184
+            },
+            "simulated_ropes": {
+              "enumerateMs": 1.103,
+              "objects": 9,
+              "groups": 17,
+              "instances": 381,
+              "allocationProxy": 407
+            },
+            "create_curved_track": {
+              "enumerateMs": 2.047,
+              "objects": 20,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 20
+            }
+          }
+        },
+        "scenePerf": {
+          "logicalObjects": 6749,
+          "normalMeshes": 6726,
+          "instanceGroups": 59,
+          "instances": 2601,
+          "estimatedDrawCalls": 6977
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 309,
+          "textures": 354
+        },
+        "render": {
+          "frame": 3442,
+          "calls": 3765,
+          "triangles": 696078,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 5
+      },
+      "heapMaxBytes": 161824984,
+      "resourceClasses": {
+        "other": {
+          "count": 1283,
+          "transferBytes": 5283028,
+          "decodedBytes": 4905827
+        },
+        "textureManifest": {
+          "count": 1,
+          "transferBytes": 18619502,
+          "decodedBytes": 37542465
+        },
+        "terrain": {
+          "count": 216,
+          "transferBytes": 36146006,
+          "decodedBytes": 36081206
+        },
+        "objectFeed": {
+          "count": 27,
+          "transferBytes": 65714827,
+          "decodedBytes": 65706727
+        },
+        "mesh": {
+          "count": 1167,
+          "transferBytes": 17107324,
+          "decodedBytes": 16757224
+        }
+      },
+      "errors": []
+    },
+    {
+      "run": "desktop-2-warm",
+      "resourceEntries": 2695,
+      "completedEntryTransferBytes": 139087950,
+      "firstTerrainEventMs": 222.5,
+      "firstMeshRootMs": 953.2000000476837,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 116,
+          "duration": 0,
+          "navigationId": 993,
+          "paintTime": 110.70000004768372,
+          "presentationTime": 116
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 116,
+          "duration": 0,
+          "navigationId": 993,
+          "paintTime": 110.70000004768372,
+          "presentationTime": 116
+        }
+      ],
+      "taskSeconds": 17.204731,
+      "scriptSeconds": 10.701627,
+      "longTasks": 15,
+      "longTaskMs": 2518,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999995634,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 27,
+        "frames": 675,
+        "objects": 6749,
+        "meshesInScene": 6749,
+        "intervalMs": 1000,
+        "tilesVersion": 0,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 2433570,
+        "serverPerf": {
+          "previousFeedBytes": 2433567,
+          "bakeCount": 0,
+          "bakeMs": 0,
+          "bakesInFlight": 0,
+          "providers": {
+            "create_chain_conveyors": {
+              "enumerateMs": 0.004,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "create_station_flags": {
+              "enumerateMs": 0.561,
+              "objects": 14,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 14
+            },
+            "simulated_coaster_tracks": {
+              "enumerateMs": 0.621,
+              "objects": 14,
+              "groups": 42,
+              "instances": 2220,
+              "allocationProxy": 2276
+            },
+            "computercraft_turtles": {
+              "enumerateMs": 0.968,
+              "objects": 6,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 6
+            },
+            "create_belts": {
+              "enumerateMs": 0.002,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "sable_ships": {
+              "enumerateMs": 0.613,
+              "objects": 38,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 38
+            },
+            "create_contraptions": {
+              "enumerateMs": 0.921,
+              "objects": 19,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 19
+            },
+            "surface_mobs": {
+              "enumerateMs": 7.438,
+              "objects": 5944,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 5944
+            },
+            "simulated_springs": {
+              "enumerateMs": 0.508,
+              "objects": 4,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 4
+            },
+            "create_bearings": {
+              "enumerateMs": 3.286,
+              "objects": 1184,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 1184
+            },
+            "simulated_ropes": {
+              "enumerateMs": 1.506,
+              "objects": 9,
+              "groups": 17,
+              "instances": 381,
+              "allocationProxy": 407
+            },
+            "create_curved_track": {
+              "enumerateMs": 2.416,
+              "objects": 20,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 20
+            }
+          }
+        },
+        "scenePerf": {
+          "logicalObjects": 6749,
+          "normalMeshes": 6726,
+          "instanceGroups": 59,
+          "instances": 2601,
+          "estimatedDrawCalls": 6977
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 309,
+          "textures": 354
+        },
+        "render": {
+          "frame": 3465,
+          "calls": 3765,
+          "triangles": 696078,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 5
+      },
+      "heapMaxBytes": 191227603,
+      "resourceClasses": {
+        "other": {
+          "count": 1284,
+          "transferBytes": 5234526,
+          "decodedBytes": 4905841
+        },
+        "textureManifest": {
+          "count": 1,
+          "transferBytes": 18619502,
+          "decodedBytes": 37542465
+        },
+        "terrain": {
+          "count": 216,
+          "transferBytes": 35714334,
+          "decodedBytes": 36081206
+        },
+        "objectFeed": {
+          "count": 27,
+          "transferBytes": 65714588,
+          "decodedBytes": 65706488
+        },
+        "mesh": {
+          "count": 1167,
+          "transferBytes": 13805000,
+          "decodedBytes": 16757224
+        }
+      },
+      "errors": []
+    },
+    {
+      "run": "mobile-1-cold",
+      "resourceEntries": 135,
+      "completedEntryTransferBytes": 9260783,
+      "firstTerrainEventMs": 3145.7000000476837,
+      "firstMeshRootMs": null,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 2456,
+          "duration": 0,
+          "navigationId": 6986,
+          "paintTime": 2446.7000000476837,
+          "presentationTime": 2456
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 2456,
+          "duration": 0,
+          "navigationId": 6986,
+          "paintTime": 2446.7000000476837,
+          "presentationTime": 2456
+        }
+      ],
+      "taskSeconds": 4.805524,
+      "scriptSeconds": 2.90475,
+      "longTasks": 2,
+      "longTaskMs": 218,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999999272,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 0,
+        "frames": 1256,
+        "objects": 0,
+        "meshesInScene": 0,
+        "intervalMs": 1000,
+        "tilesVersion": null,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 0,
+        "serverPerf": null,
+        "scenePerf": {
+          "logicalObjects": 0,
+          "normalMeshes": 0,
+          "instanceGroups": 0,
+          "instances": 0,
+          "estimatedDrawCalls": 0
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 5,
+          "textures": 23
+        },
+        "render": {
+          "frame": 7654,
+          "calls": 1,
+          "triangles": 24,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 3
+      },
+      "heapMaxBytes": 10696277,
+      "resourceClasses": {
+        "other": {
+          "count": 37,
+          "transferBytes": 1662543,
+          "decodedBytes": 1659142
+        },
+        "terrain": {
+          "count": 98,
+          "transferBytes": 7598240,
+          "decodedBytes": 7568840
+        }
+      },
+      "errors": []
+    },
+    {
+      "run": "mobile-1-warm",
+      "resourceEntries": 182,
+      "completedEntryTransferBytes": 8908931,
+      "firstTerrainEventMs": 426.2000000476837,
+      "firstMeshRootMs": null,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 184,
+          "duration": 0,
+          "navigationId": 483,
+          "paintTime": 176.60000014305115,
+          "presentationTime": 184
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 184,
+          "duration": 0,
+          "navigationId": 483,
+          "paintTime": 176.60000014305115,
+          "presentationTime": 184
+        }
+      ],
+      "taskSeconds": 5.782817,
+      "scriptSeconds": 3.637216,
+      "longTasks": 3,
+      "longTaskMs": 295,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999995634,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 0,
+        "frames": 1367,
+        "objects": 0,
+        "meshesInScene": 0,
+        "intervalMs": 1000,
+        "tilesVersion": null,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 0,
+        "serverPerf": null,
+        "scenePerf": {
+          "logicalObjects": 0,
+          "normalMeshes": 0,
+          "instanceGroups": 0,
+          "instances": 0,
+          "estimatedDrawCalls": 0
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 5,
+          "textures": 32
+        },
+        "render": {
+          "frame": 7749,
+          "calls": 1,
+          "triangles": 24,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 3
+      },
+      "heapMaxBytes": 13001853,
+      "resourceClasses": {
+        "other": {
+          "count": 46,
+          "transferBytes": 440005,
+          "decodedBytes": 1945672
+        },
+        "terrain": {
+          "count": 136,
+          "transferBytes": 8468926,
+          "decodedBytes": 16007466
+        }
+      },
+      "errors": [
+        "TypeError: Cannot read properties of null (reading 'length')"
+      ]
+    },
+    {
+      "run": "mobile-2-cold",
+      "resourceEntries": 135,
+      "completedEntryTransferBytes": 9260783,
+      "firstTerrainEventMs": 3117.9000000953674,
+      "firstMeshRootMs": null,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 2452,
+          "duration": 0,
+          "navigationId": 1324,
+          "paintTime": 2442.4000000953674,
+          "presentationTime": 2452
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 2452,
+          "duration": 0,
+          "navigationId": 1324,
+          "paintTime": 2442.4000000953674,
+          "presentationTime": 2452
+        }
+      ],
+      "taskSeconds": 4.554281,
+      "scriptSeconds": 2.735828,
+      "longTasks": 2,
+      "longTaskMs": 215,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999995634,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 0,
+        "frames": 1245,
+        "objects": 0,
+        "meshesInScene": 0,
+        "intervalMs": 1000,
+        "tilesVersion": null,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 0,
+        "serverPerf": null,
+        "scenePerf": {
+          "logicalObjects": 0,
+          "normalMeshes": 0,
+          "instanceGroups": 0,
+          "instances": 0,
+          "estimatedDrawCalls": 0
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 5,
+          "textures": 23
+        },
+        "render": {
+          "frame": 7597,
+          "calls": 1,
+          "triangles": 24,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 3
+      },
+      "heapMaxBytes": 10343659,
+      "resourceClasses": {
+        "other": {
+          "count": 37,
+          "transferBytes": 1662543,
+          "decodedBytes": 1659142
+        },
+        "terrain": {
+          "count": 98,
+          "transferBytes": 7598240,
+          "decodedBytes": 7568840
+        }
+      },
+      "errors": []
+    },
+    {
+      "run": "mobile-2-warm",
+      "resourceEntries": 183,
+      "completedEntryTransferBytes": 8971592,
+      "firstTerrainEventMs": 449.89999985694885,
+      "firstMeshRootMs": null,
+      "paint": [
+        {
+          "name": "first-paint",
+          "entryType": "paint",
+          "startTime": 208,
+          "duration": 0,
+          "navigationId": 2232,
+          "paintTime": 199.29999995231628,
+          "presentationTime": 208
+        },
+        {
+          "name": "first-contentful-paint",
+          "entryType": "paint",
+          "startTime": 208,
+          "duration": 0,
+          "navigationId": 2232,
+          "paintTime": 199.29999995231628,
+          "presentationTime": 208
+        }
+      ],
+      "taskSeconds": 5.891599,
+      "scriptSeconds": 3.663029,
+      "longTasks": 3,
+      "longTaskMs": 314,
+      "rafP50Ms": 16.69999999999891,
+      "rafP95Ms": 16.799999999999272,
+      "sceneStats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 0,
+        "frames": 1325,
+        "objects": 0,
+        "meshesInScene": 0,
+        "intervalMs": 1000,
+        "tilesVersion": null,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 0,
+        "serverPerf": null,
+        "scenePerf": {
+          "logicalObjects": 0,
+          "normalMeshes": 0,
+          "instanceGroups": 0,
+          "instances": 0,
+          "estimatedDrawCalls": 0
+        }
+      },
+      "lastRendererSample": {
+        "memory": {
+          "geometries": 5,
+          "textures": 32
+        },
+        "render": {
+          "frame": 7499,
+          "calls": 1,
+          "triangles": 24,
+          "points": 0,
+          "lines": 0
+        },
+        "programs": 3
+      },
+      "heapMaxBytes": 11290671,
+      "resourceClasses": {
+        "other": {
+          "count": 46,
+          "transferBytes": 440005,
+          "decodedBytes": 1945672
+        },
+        "terrain": {
+          "count": 137,
+          "transferBytes": 8531587,
+          "decodedBytes": 16069827
+        }
+      },
+      "errors": [
+        "TypeError: Cannot read properties of null (reading 'length')"
+      ]
+    }
+  ],
+  "feedSample": {
+    "decodedBytes": 2433585,
+    "objects": 6749,
+    "providers": {
+      "surface_mobs": 5838,
+      "computercraft_turtles": 4,
+      "create_contraptions": 19,
+      "create_curved_track": 20,
+      "create_bearings": 802,
+      "simulated_ropes": 9,
+      "simulated_coaster_tracks": 14,
+      "create_station_flags": 8,
+      "sable_ships": 35
+    },
+    "dimensions": {
+      "minecraft:overworld": 6658,
+      "minecraft:the_nether": 91
+    },
+    "perf": {
+      "previousFeedBytes": 2433582,
+      "bakeCount": 0,
+      "bakeMs": 0.0,
+      "bakesInFlight": 0,
+      "providers": {
+        "create_chain_conveyors": {
+          "enumerateMs": 0.001,
+          "objects": 0,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 0
+        },
+        "create_station_flags": {
+          "enumerateMs": 0.385,
+          "objects": 14,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 14
+        },
+        "simulated_coaster_tracks": {
+          "enumerateMs": 0.457,
+          "objects": 14,
+          "groups": 42,
+          "instances": 2220,
+          "allocationProxy": 2276
+        },
+        "computercraft_turtles": {
+          "enumerateMs": 0.691,
+          "objects": 6,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 6
+        },
+        "create_belts": {
+          "enumerateMs": 0.001,
+          "objects": 0,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 0
+        },
+        "sable_ships": {
+          "enumerateMs": 0.427,
+          "objects": 38,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 38
+        },
+        "create_contraptions": {
+          "enumerateMs": 0.523,
+          "objects": 19,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 19
+        },
+        "surface_mobs": {
+          "enumerateMs": 6.595,
+          "objects": 5944,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 5944
+        },
+        "simulated_springs": {
+          "enumerateMs": 0.344,
+          "objects": 4,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 4
+        },
+        "create_bearings": {
+          "enumerateMs": 2.763,
+          "objects": 1184,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 1184
+        },
+        "simulated_ropes": {
+          "enumerateMs": 1.073,
+          "objects": 9,
+          "groups": 17,
+          "instances": 381,
+          "allocationProxy": 407
+        },
+        "create_curved_track": {
+          "enumerateMs": 1.952,
+          "objects": 20,
+          "groups": 0,
+          "instances": 0,
+          "allocationProxy": 20
+        }
+      }
+    }
+  },
+  "presenceSample": {
+    "bytes": 47536,
+    "points": 0,
+    "states": 0,
+    "registryCounts": {
+      "players": 2,
+      "worlds": 2,
+      "items": 1056
+    }
+  },
+  "textureSample": {
+    "decodedBytes": 37542465,
+    "encodedGzipBodyBytes": 18619202,
+    "entries": 32449,
+    "externalTextureUrlEntries": 0
+  },
+  "activitySummarySample": {
+    "utcDay": 1794268800000,
+    "bytes": 1362,
+    "rows": 73
+  },
+  "offlineGzipLevel6": {
+    "bluemap-app.js": {
+      "original": 1014626,
+      "gzip": 258510
+    },
+    "player-history.js": {
+      "original": 294862,
+      "gzip": 66927
+    },
+    "bluemap3d.core.js": {
+      "original": 81342,
+      "gzip": 21694
+    },
+    "feed.json": {
+      "original": 2433585,
+      "gzip": 370150
+    },
+    "presence.json": {
+      "original": 47536,
+      "gzip": 11543
+    },
+    "textures.json": {
+      "original": 37542465,
+      "gzip": 18619202
+    }
+  }
+}

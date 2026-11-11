@@ -25,7 +25,15 @@ test("protocol parsers reject malformed public data", () => {
 test("live parser validates complete points and registry entries", () => {
   assert.deepEqual(
     parseLiveSnapshot({ protocolVersion: 2, generatedAt: 1, registry, points: [], events: [] }),
-    { protocolVersion: 2, generatedAt: 1, registry, points: [], events: [], states: {} },
+    {
+      protocolVersion: 2,
+      generatedAt: 1,
+      registry,
+      points: [],
+      events: [],
+      states: {},
+      lastLocations: [],
+    },
   );
   assert.throws(
     () =>

@@ -1,0 +1,197 @@
+{
+  "syntheticPlayers": true,
+  "productionChanged": false,
+  "desktop": {
+    "map": "world",
+    "following": null,
+    "followingTarget": false,
+    "players": [
+      9001
+    ],
+    "offline": 1,
+    "cards": [
+      {
+        "id": "9001",
+        "text": "Test OverworldOverworld17 / 40 HPSneaking",
+        "pressed": "false",
+        "dimension": "minecraft:overworld",
+        "offline": "false",
+        "images": [
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          },
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          }
+        ],
+        "bounds": {
+          "x": 540,
+          "y": 22.5,
+          "width": 116,
+          "height": 112,
+          "top": 22.5,
+          "right": 656,
+          "bottom": 134.5,
+          "left": 540
+        }
+      },
+      {
+        "id": "9002",
+        "text": "Test NetherNether20 / 20 HPSprinting",
+        "pressed": "false",
+        "dimension": "minecraft:the_nether",
+        "offline": "false",
+        "images": [
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/0a3d8b41-001e-4d3e-b60b-b64cab133a15.png",
+            "loaded": true
+          },
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/0a3d8b41-001e-4d3e-b60b-b64cab133a15.png",
+            "loaded": true
+          }
+        ],
+        "bounds": {
+          "x": 662,
+          "y": 22.5,
+          "width": 116,
+          "height": 112,
+          "top": 22.5,
+          "right": 778,
+          "bottom": 134.5,
+          "left": 662
+        }
+      },
+      {
+        "id": "9003",
+        "text": "Test OfflineOverworldOffline \u00b7 last locationSeen 11/10/2026, 8:29:09 PM",
+        "pressed": "false",
+        "dimension": "minecraft:overworld",
+        "offline": "true",
+        "images": [
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          },
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          }
+        ],
+        "bounds": {
+          "x": 784,
+          "y": 19,
+          "width": 116,
+          "height": 119,
+          "top": 19,
+          "right": 900,
+          "bottom": 138,
+          "left": 784
+        }
+      }
+    ]
+  },
+  "stableCard": true,
+  "passed": false,
+  "failure": "page.waitForFunction: Timeout 30000ms exceeded.\n    at /private/tmp/map-performance-investigation/verify-roster.cjs:32:12",
+  "lastState": {
+    "map": "world_the_nether",
+    "following": null,
+    "followingTarget": false,
+    "players": [
+      9002
+    ],
+    "offline": 0,
+    "cards": [
+      {
+        "id": "9001",
+        "text": "Test OverworldOverworld17 / 40 HPSneaking",
+        "pressed": "false",
+        "dimension": "minecraft:overworld",
+        "offline": "false",
+        "images": [
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          },
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          }
+        ],
+        "bounds": {
+          "x": 540,
+          "y": 22.5,
+          "width": 116,
+          "height": 112,
+          "top": 22.5,
+          "right": 656,
+          "bottom": 134.5,
+          "left": 540
+        }
+      },
+      {
+        "id": "9002",
+        "text": "Test NetherNether20 / 20 HPSprinting",
+        "pressed": "false",
+        "dimension": "minecraft:the_nether",
+        "offline": "false",
+        "images": [
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/0a3d8b41-001e-4d3e-b60b-b64cab133a15.png",
+            "loaded": true
+          },
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/0a3d8b41-001e-4d3e-b60b-b64cab133a15.png",
+            "loaded": true
+          }
+        ],
+        "bounds": {
+          "x": 662,
+          "y": 22.5,
+          "width": 116,
+          "height": 112,
+          "top": 22.5,
+          "right": 778,
+          "bottom": 134.5,
+          "left": 662
+        }
+      },
+      {
+        "id": "9003",
+        "text": "Test OfflineOverworldOffline \u00b7 last locationSeen 11/10/2026, 8:29:09 PM",
+        "pressed": "false",
+        "dimension": "minecraft:overworld",
+        "offline": "true",
+        "images": [
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          },
+          {
+            "src": "https://map.fpbcraft.com/player-history/skins/57bdc50c-8b4c-474f-92ef-4f3feaf654f0.png",
+            "loaded": true
+          }
+        ],
+        "bounds": {
+          "x": 784,
+          "y": 19,
+          "width": 116,
+          "height": 119,
+          "top": 19,
+          "right": 900,
+          "bottom": 138,
+          "left": 784
+        }
+      }
+    ]
+  },
+  "errors": [
+    "TypeError: Cannot read properties of null (reading 'length')\n    at Map$1.loadMapArea (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:72162)\n    at MapViewer.updateLoadedMapArea (https://map.fpbcraft.com/assets/index-26dbde36.js:4216:6054)\n    at MapViewer.loadMapArea (https://map.fpbcraft.com/assets/index-26dbde36.js:4216:12670)\n    at ControlsManager.updateCamera (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:79863)\n    at ControlsManager.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:78291)\n    at https://map.fpbcraft.com/assets/index-26dbde36.js:4216:5843",
+    "TypeError: Cannot read properties of null (reading 'centerTile')\n    at MapViewer.render (https://map.fpbcraft.com/assets/index-26dbde36.js:4216:10357)\n    at https://map.fpbcraft.com/assets/index-26dbde36.js:4216:5932",
+    "TypeError: Cannot read properties of null (reading 'tiles')\n    at Map$1.terrainHeightAt (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:76669)\n    at MapHeightControls.updateHeights (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:39447)\n    at MapHeightControls.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:39248)\n    at Ut.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:55769)\n    at ControlsManager.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:78254)\n    at https://map.fpbcraft.com/assets/index-26dbde36.js:4216:5843",
+    "TypeError: Cannot read properties of null (reading 'tiles')\n    at Map$1.terrainHeightAt (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:76669)\n    at MapHeightControls.updateHeights (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:39447)\n    at MapHeightControls.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:39248)\n    at Ut.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:55769)\n    at ControlsManager.update (https://map.fpbcraft.com/assets/index-26dbde36.js:3222:78254)\n    at https://map.fpbcraft.com/assets/index-26dbde36.js:4216:5843"
+  ]
+}

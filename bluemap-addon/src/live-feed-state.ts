@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 
 export interface LiveFeedUpdate {
+  lastLocations: HistoryPoint[];
   generatedAt: number;
   registry: HistoryRegistry;
   points: HistoryPoint[];
@@ -52,6 +53,7 @@ export class LiveFeedState {
 
     this.initialized = true;
     return {
+      lastLocations: data.lastLocations ?? [],
       generatedAt: data.generatedAt,
       registry: data.registry,
       points,

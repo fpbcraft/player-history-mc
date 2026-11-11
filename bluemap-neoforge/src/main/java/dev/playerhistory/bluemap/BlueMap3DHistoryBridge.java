@@ -34,6 +34,9 @@ final class BlueMap3DHistoryBridge {
   private Object meshListener;
 
   private Method providersMethod;
+  private Method latestProviderSnapshotMethod;
+  private Method snapshotTimeMethod;
+  private Method snapshotObjectsMethod;
   private Method providerIdMethod;
   private Method providerObjectsMethod;
   private Method providerLifecycleMethod;
@@ -90,6 +93,7 @@ final class BlueMap3DHistoryBridge {
     boolean explicitProviderList = !allow.isEmpty();
     try {
       Collection<?> providers = (Collection<?>) providersMethod.invoke(null);
+      Map<?, ?> sharedSnapshot = recentSharedSnapshot(intervalMs);
       for (Object provider : providers) {
         String providerId = (String) providerIdMethod.invoke(provider);
         if (explicitProviderList) {
@@ -100,19 +104,27 @@ final class BlueMap3DHistoryBridge {
 
         List<ObjectSnapshot> snapshots = new ArrayList<>();
         boolean complete = true;
-        for (ServerLevel level : event.getServer().getAllLevels()) {
-          try {
-            Iterable<?> objects = (Iterable<?>) providerObjectsMethod.invoke(provider, level);
-            for (Object object : objects) snapshots.add(snapshot(object));
-          } catch (ReflectiveOperationException | RuntimeException error) {
-            complete = false;
-            log.warn(
-                "BlueMap3D provider '"
-                    + providerId
-                    + "' could not be sampled; preserving its previous object state: "
-                    + rootCause(error));
-            break;
+        try {
+          if (sharedSnapshot != null && sharedSnapshot.containsKey(providerId)) {
+            // A shared snapshot already contains objects from every dimension.
+            // Do not re-enumerate providers or trigger persistence flush a second time.
+            for (Object object : (Iterable<?>) sharedSnapshot.get(providerId)) {
+              snapshots.add(snapshot(object));
+            }
+          } else {
+            // Older BlueMap3D builds and stale/unavailable snapshots use the original API.
+            for (ServerLevel level : event.getServer().getAllLevels()) {
+              Iterable<?> objects = (Iterable<?>) providerObjectsMethod.invoke(provider, level);
+              for (Object object : objects) snapshots.add(snapshot(object));
+            }
           }
+        } catch (ReflectiveOperationException | RuntimeException error) {
+          complete = false;
+          log.warn(
+              "BlueMap3D provider '"
+                  + providerId
+                  + "' could not be sampled; preserving its previous object state: "
+                  + rootCause(error));
         }
 
         // Absence is meaningful only after a complete provider enumeration. If one
@@ -139,6 +151,26 @@ final class BlueMap3DHistoryBridge {
   void reset() {
     nextSample = 0;
     webRoot = null;
+  }
+
+  /**
+   * Optional fast path supplied by patched BlueMap3D. The snapshot belongs to the
+   * server thread and must be consumed synchronously before the next server tick.
+   */
+  private Map<?, ?> recentSharedSnapshot(int sampleIntervalMs) {
+    if (latestProviderSnapshotMethod == null) return null;
+    try {
+      Object published = latestProviderSnapshotMethod.invoke(null);
+      if (published == null) return null;
+      long sampledAt = ((Number) snapshotTimeMethod.invoke(published)).longValue();
+      long age = System.currentTimeMillis() - sampledAt;
+      if (age < 0 || age > Math.max(2_000L, sampleIntervalMs * 4L)) return null;
+      Object value = snapshotObjectsMethod.invoke(published);
+      return value instanceof Map<?, ?> map ? map : null;
+    } catch (ReflectiveOperationException | RuntimeException ignored) {
+      // The integration intentionally remains compatible with older BlueMap3D bundles.
+      return null;
+    }
   }
 
   private ObjectSnapshot snapshot(Object object) throws ReflectiveOperationException {
@@ -226,6 +258,16 @@ final class BlueMap3DHistoryBridge {
       Class<?> object = Class.forName("dev.duzo.bluemap3d.api.SceneObject");
 
       providersMethod = api.getMethod("providers");
+      try {
+        Class<?> tracker = Class.forName("dev.duzo.bluemap3d.runtime.SceneObjectTracker");
+        Class<?> snapshot = Class.forName(
+            "dev.duzo.bluemap3d.runtime.SceneObjectTracker$ProviderSnapshot");
+        latestProviderSnapshotMethod = tracker.getMethod("latestProviderSnapshot");
+        snapshotTimeMethod = snapshot.getMethod("sampledAtMillis");
+        snapshotObjectsMethod = snapshot.getMethod("objectsByProvider");
+      } catch (ReflectiveOperationException ignored) {
+        latestProviderSnapshotMethod = null;
+      }
       providerIdMethod = provider.getMethod("id");
       providerObjectsMethod = provider.getMethod("objects", ServerLevel.class);
       try {

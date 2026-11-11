@@ -1,0 +1,9 @@
+HTTP/2 200 
+server: nginx
+date: Tue, 10 Nov 2026 15:12:17 GMT
+content-type: application/json
+last-modified: Tue, 10 Nov 2026 14:03:07 GMT
+etag: 55299c02f451a1c5c50b7c
+cache-control: public, max-age=86400
+x-robots-tag: noindex, nofollow
+
