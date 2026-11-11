@@ -29,6 +29,18 @@ export const rosterHealth = (state: PlayerState | undefined): string => {
     : "HP unknown";
 };
 
+export const rosterSeen = (time: number, now = Date.now()): string => {
+  const date = new Date(time);
+  const today = new Date(now);
+  const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false };
+  if (date.toDateString() !== today.toDateString()) {
+    options.month = "short";
+    options.day = "numeric";
+    if (date.getFullYear() !== today.getFullYear()) options.year = "2-digit";
+  }
+  return `Seen ${new Intl.DateTimeFormat(undefined, options).format(date)}`;
+};
+
 /** Crop the existing global skin, including its hat layer, without a map-local head dependency. */
 export const createRosterHead = (uuid?: string): HTMLElement => {
   const face = document.createElement("span");
@@ -73,12 +85,16 @@ export class PlayerRoster {
   private readonly listeners = new AbortController();
   private shown: RosterCard | undefined;
   private pinned = false;
+  private expanded = false;
+  private touchInput = false;
 
   constructor(
     private readonly root: HTMLElement,
     private readonly select: (row: RosterPlayer) => void,
   ) {
     root.setAttribute("aria-label", "Player roster");
+    root.dataset.expanded = "false";
+    root.setAttribute("aria-expanded", "false");
     this.details.className = "history-roster-details";
     this.details.id = `history-roster-details-${++nextRoster}`;
     this.details.setAttribute("role", "tooltip");
@@ -89,19 +105,48 @@ export class PlayerRoster {
       "pointerdown",
       (event) => {
         const target = event.target as Node | null;
-        if (target && !root.contains(target) && !this.details.contains(target)) this.hideDetails();
+        if (target && !root.contains(target) && !this.details.contains(target))
+          this.setExpanded(false);
       },
       options,
     );
     document.addEventListener(
       "keydown",
       (event) => {
-        if (event.key === "Escape") this.hideDetails();
+        if (event.key === "Escape") this.setExpanded(false);
+      },
+      options,
+    );
+    root.addEventListener(
+      "pointerdown",
+      (event) => {
+        this.touchInput = event.pointerType === "touch";
+      },
+      options,
+    );
+    root.addEventListener(
+      "click",
+      (event) => {
+        if (!this.expanded) {
+          event.preventDefault();
+          this.setExpanded(true);
+        }
       },
       options,
     );
     root.addEventListener("scroll", () => this.positionDetails(), options);
     window.addEventListener("resize", () => this.positionDetails(), options);
+  }
+
+  private canHover(): boolean {
+    return window.matchMedia?.("(hover: hover) and (pointer: fine)").matches ?? true;
+  }
+
+  private setExpanded(expanded: boolean): void {
+    this.expanded = expanded;
+    this.root.dataset.expanded = String(expanded);
+    this.root.setAttribute("aria-expanded", String(expanded));
+    if (!expanded) this.hideDetails();
   }
 
   private hideDetails(): void {
@@ -140,13 +185,7 @@ export class PlayerRoster {
     this.shown = card;
     this.pinned = pinned;
     const row = card.row;
-    const lines = [
-      row.name,
-      dimensionName(row.dimension),
-      row.offline ? "Offline · last location" : rosterHealth(row.state),
-    ];
-    if (row.offline) lines.push(`Seen ${new Date(row.point.time).toLocaleString()}`);
-    this.details.textContent = lines.join("\n");
+    this.details.textContent = row.offline ? rosterSeen(row.point.time) : rosterHealth(row.state);
     this.details.hidden = false;
     card.button.setAttribute("aria-describedby", this.details.id);
     this.positionDetails();
@@ -168,18 +207,25 @@ export class PlayerRoster {
         button.value = String(id);
         const created: RosterCard = { button, row, signature: "" };
         button.onmouseenter = () => {
-          if (!this.pinned) this.showDetails(created);
+          if (this.expanded && this.canHover()) this.showDetails(created);
         };
         button.onmouseleave = () => {
-          if (!this.pinned) this.hideDetails();
+          if (this.canHover()) this.hideDetails();
         };
-        button.onfocus = () => this.showDetails(created);
+        button.onfocus = () => {
+          if (this.expanded && this.canHover() && button.matches?.(":focus-visible"))
+            this.showDetails(created);
+        };
         button.onblur = () => {
-          if (!this.pinned) this.hideDetails();
+          if (this.canHover()) this.hideDetails();
         };
         button.onclick = () => {
+          if (!this.expanded) {
+            this.setExpanded(true);
+            return;
+          }
           this.select(created.row);
-          this.showDetails(created, true);
+          if (!this.canHover() && this.touchInput) this.showDetails(created, true);
         };
         this.root.append(button);
         card = created;

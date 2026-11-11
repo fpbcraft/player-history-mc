@@ -10,7 +10,7 @@ function snapshot(){const now=Date.now();return {protocolVersion:2,generatedAt:n
 points:fixturePlayers.slice(0,7).map((p,i)=>({player:p.id,time:now,world:0,x:(-937+i)*32,y:64*32,z:392*32,flags:0})),
 lastLocations:[{player:9008,time:offlineTime,world:0,x:-930*32,y:65*32,z:400*32,flags:2}],events:[],
 states:Object.fromEntries(fixturePlayers.map(p=>[p.id,{health:17,maxHealth:20,sneaking:true,sprinting:true}]))};}
-(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});const context=await browser.newContext({viewport:{width:1280,height:800},hasTouch:true});const page=await context.newPage();const errors=[],failures=[],results={syntheticPlayers:true,productionChanged:false};
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});const context=await browser.newContext({viewport:{width:1280,height:800}});const page=await context.newPage();const errors=[],failures=[],results={syntheticPlayers:true,productionChanged:false};
 page.on('pageerror',e=>errors.push(e.stack));page.on('requestfailed',r=>failures.push({url:r.url(),error:r.failure()?.errorText}));
 await page.route('**/*',async route=>{const u=new URL(route.request().url());let file;
 if(u.pathname==='\/assets/bluemap3d/bluemap3d.js')return route.fulfill({body:'/* Bulk objects omitted in this isolated roster layout fixture. */',contentType:'text/javascript'});
@@ -24,42 +24,47 @@ return route.continue();});
 const state=()=>page.evaluate(()=>{const p=document.querySelector('bluemap-player-replay');return{map:window.bluemap?.mapViewer.map?.data.id,following:p?.adapter?.following,followingTarget:!!window.bluemap?.mapViewer.controlsManager?.controls?.data?.followingPlayer,players:p?.adapter?.playerPositions?.map(x=>x.player),offline:p?.adapter?.offlineMarkers?.size,cards:[...document.querySelectorAll('.history-player-followbar>button')].map(b=>({id:b.value,text:b.textContent,pressed:b.ariaPressed,dimension:b.dataset.dimension,offline:b.dataset.offline,images:[...b.querySelectorAll('img')].map(i=>({src:i.src,loaded:i.complete&&i.naturalWidth>0})),bounds:b.getBoundingClientRect().toJSON()}))};});
 const geometry=()=>page.evaluate(()=>{const strip=document.querySelector('.history-player-followbar'),bar=strip.getBoundingClientRect(),overlay=document.querySelector('.world-overlays__button').getBoundingClientRect();return{bar:bar.toJSON(),overlay:overlay.toJSON(),viewport:{width:innerWidth,height:innerHeight},documentWidth:document.documentElement.scrollWidth,cards:[...strip.querySelectorAll('button')].map(b=>({id:b.value,bounds:b.getBoundingClientRect().toJSON()}))};});
 const details=page.locator('.history-roster-details');
+const faces=()=>page.locator('.history-player-followbar .history-roster-face').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().width));
+const namesFit=()=>page.locator('.history-roster-name').evaluateAll(nodes=>nodes.every(n=>n.scrollWidth<=n.clientWidth+1&&n.scrollHeight<=n.clientHeight+1&&getComputedStyle(n).textOverflow!=='ellipsis'));
+const cdp=await context.newCDPSession(page);
+const touch=async locator=>{await locator.scrollIntoViewIfNeeded();const box=await locator.boundingBox();const x=box.x+box.width/2,y=box.y+box.height/2;await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});};
 try{
 await page.goto('https://map.fpbcraft.com/#world:-937:64:392:377:0:0:0:0:perspective',{waitUntil:'domcontentloaded'});
 await page.waitForFunction(()=>document.querySelectorAll('.history-player-followbar>button').length===8,null,{timeout:60000});
-await page.waitForTimeout(1000);
-results.desktop=await geometry();
-assert(results.desktop.bar.height<=80);
-assert(results.desktop.bar.width<=500);
-assert(results.desktop.cards.every(card=>card.bounds.width<=56&&card.bounds.height<=60&&card.bounds.left>=results.desktop.bar.left&&card.bounds.right<=results.desktop.bar.right));
-assert.equal(await details.isVisible(),false);
-assert.equal(await page.locator('.history-roster-action').count(),0);
-await page.screenshot({path:out+'/desktop.png'});
-await page.locator('.history-player-followbar>button[value="9001"]').hover();
-await details.waitFor({state:'visible'});
-assert((await details.innerText()).includes('17 / 20 HP'));
-assert(!/Sneak|Sprint|Swim|Glid/.test(await details.innerText()));
-await page.screenshot({path:out+'/desktop-details.png'});
-await page.locator('.history-player-followbar>button[value="9001"]').focus();
+await page.waitForTimeout(500);
+assert.equal(await page.evaluate(()=>matchMedia('(hover: hover) and (pointer: fine)').matches),true);
+results.desktopCollapsed=await geometry();assert((await faces()).every(w=>w===16));assert(results.desktopCollapsed.bar.height<=32);
+const unboxed=await page.locator('.history-player-followbar').evaluate(root=>{const style=getComputedStyle(root);return style.backgroundColor==='rgba(0, 0, 0, 0)'&&style.borderWidth==='0px'&&[...root.querySelectorAll('button')].every(b=>getComputedStyle(b).backgroundColor==='rgba(0, 0, 0, 0)'&&getComputedStyle(b).borderWidth==='0px');});assert.equal(unboxed,true);
+await page.screenshot({path:out+'/desktop-collapsed.png'});
+const first=page.locator('.history-player-followbar>button[value="9001"]');
+let box=await first.boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);assert.equal(await details.isVisible(),false);
+await page.mouse.click(box.x+box.width/2,box.y+box.height/2);await page.waitForTimeout(90);results.animationMidpoint=(await faces())[0];assert(results.animationMidpoint>16&&results.animationMidpoint<32);
+await page.waitForTimeout(250);results.desktopExpanded=await geometry();assert((await faces()).every(w=>w===32));assert.equal(await namesFit(),true);
+await page.screenshot({path:out+'/desktop-expanded.png'});
+await first.hover();await details.waitFor({state:'visible'});assert.equal(await details.innerText(),'17 / 20 HP');
+await first.click();await page.mouse.move(5,300);assert.equal(await details.isVisible(),false); // Desktop clicks never pin details.
+await first.hover();await page.screenshot({path:out+'/desktop-details.png'});
 await page.keyboard.press('Escape');assert.equal(await details.isVisible(),false);
-await page.setViewportSize({width:390,height:844});await page.mouse.move(385,800);await page.waitForTimeout(200);
-results.mobile=await geometry();
-assert(results.mobile.bar.height<=80);
-assert(results.mobile.bar.left>=0&&results.mobile.bar.right<=results.mobile.overlay.left);
-assert(results.mobile.documentWidth<=390);
-await page.screenshot({path:out+'/mobile.png'});
-results.mobile.accessiblePlayers=[];
+await page.setViewportSize({width:390,height:844});await cdp.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+await cdp.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await page.waitForTimeout(300);
+assert.equal(await page.evaluate(()=>matchMedia('(hover: hover) and (pointer: fine)').matches),false);
+results.mobileCollapsed=await geometry();assert((await faces()).every(w=>w===16));assert(results.mobileCollapsed.cards.every(c=>c.bounds.right<=results.mobileCollapsed.bar.right));
+assert(results.mobileCollapsed.bar.right<=results.mobileCollapsed.overlay.left);assert(results.mobileCollapsed.documentWidth<=390);
+await page.screenshot({path:out+'/mobile-collapsed.png'});
+await touch(first);await page.waitForTimeout(300);assert.equal(await namesFit(),true);assert.equal(await details.isVisible(),false);
+results.mobileExpanded=await geometry();await page.screenshot({path:out+'/mobile-expanded.png'});
+results.mobileAccessiblePlayers=[];
 for(const player of fixturePlayers){
  const button=page.locator(`.history-player-followbar>button[value="${player.id}"]`);
- await button.tap();await details.waitFor({state:'visible'});
- assert((await details.innerText()).includes(player.name));
- const box=await details.boundingBox();assert(box.x>=0&&box.x+box.width<=390&&box.y>=0&&box.y+box.height<=844);assert(box.x+box.width<=results.mobile.overlay.left);
- results.mobile.accessiblePlayers.push(player.id);
+ await touch(button);await details.waitFor({state:'visible'});
+ const text=await details.innerText();assert(player.id===9008? /^Seen \d{2}:\d{2}$/.test(text):text==='17 / 20 HP');
+ const bounds=await details.boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=results.mobileExpanded.overlay.left&&bounds.y>=0&&bounds.y+bounds.height<=844);
+ results.mobileAccessiblePlayers.push(player.id);
 }
 await page.screenshot({path:out+'/mobile-details.png'});
-await page.touchscreen.tap(20,350);assert.equal(await details.isVisible(),false);
-assert.equal(errors.length,0);
-results.passed=true;
+await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:20,y:350}]});await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+await page.waitForTimeout(300);assert.equal(await details.isVisible(),false);assert((await faces()).every(w=>w===16));
+assert.equal(errors.length,0);results.passed=true;
 }catch(e){results.passed=false;results.failure=e.stack;results.lastState=await state().catch(()=>null);await page.screenshot({path:out+'/failure.png'}).catch(()=>{});console.error(e);process.exitCode=1;}
 finally{results.errors=errors;results.requestFailures=failures;fs.writeFileSync(out+'/report.json',JSON.stringify(results,null,2));console.log(JSON.stringify({passed:results.passed,failure:results.failure,errors:errors.length,output:out}));await browser.close();}
 })();

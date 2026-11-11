@@ -317,6 +317,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", async (
     assert.equal(adapter.bar.children.length, 1);
     const followButton = adapter.bar.children[0];
     assert.match(followButton.attributes["aria-label"], /Test player/);
+    if (adapter.bar.dataset.expanded === "false") followButton.onclick({ stopPropagation() {} });
     followButton.onclick({ stopPropagation() {} });
     assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
     assert.equal(followButton.attributes["aria-pressed"], "true");
