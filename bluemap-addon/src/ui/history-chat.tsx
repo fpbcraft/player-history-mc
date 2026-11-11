@@ -38,6 +38,15 @@ export const HistoryChat = () => (
           <button type="button" name="chat-connect">
             Connect Minecraft account
           </button>
+          <div class="history-chat-pairing" hidden>
+            <span>Run this command in Minecraft:</span>
+            <code data-control="chat-pair-command" />
+            <small>The code expires in 5 minutes.</small>
+            <button type="button" name="chat-copy">
+              Copy command
+            </button>
+            <output name="chat-copy-status" aria-live="polite" />
+          </div>
           <button type="button" name="chat-logout" hidden>
             Log out
           </button>

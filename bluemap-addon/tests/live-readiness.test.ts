@@ -65,6 +65,7 @@ beforeEach(() => {
         events: [],
         states: {},
       });
+    if (url.includes("/pair")) return Response.json({ code: "ABC123", token: "browser-secret" });
     if (url.includes("/session")) return Response.json({ linked: false });
     if (url.includes("/messages")) return Response.json({ messages: [] });
     return new Promise<Response>(() => {});
@@ -252,4 +253,61 @@ it("keeps foreign-dimension roster cards separate from map players and hides off
   panel.render();
   expect(offlineCalls.mock.calls.at(-1)?.[0]).toEqual([]);
   expect(rosterCalls.mock.calls.at(-1)?.[0]).toEqual([]);
+});
+
+it("keeps the pairing command through chat polls and copies the full command", async () => {
+  const copy = vi.fn().mockResolvedValue(undefined);
+  const withClipboard = Object.create(navigator);
+  Object.defineProperty(withClipboard, "clipboard", { value: { writeText: copy } });
+  vi.stubGlobal("navigator", withClipboard);
+  document.body.append(panel);
+  await flush();
+  await panel.openChat();
+  panel.querySelector<HTMLButtonElement>('[name="chat-connect"]')?.click();
+  await flush();
+  const pairing = panel.querySelector<HTMLElement>(".history-chat-pairing");
+  expect(pairing?.hidden).toBe(false);
+  expect(panel.querySelector('[data-control="chat-pair-command"]')?.textContent).toBe(
+    "/webchat link ABC123",
+  );
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(pairing?.hidden).toBe(false);
+  panel.querySelector<HTMLButtonElement>('[name="chat-copy"]')?.click();
+  await flush();
+  expect(copy).toHaveBeenCalledWith("/webchat link ABC123");
+  expect(panel.querySelector('[name="chat-copy-status"]')?.textContent).toBe("Copied!");
+  vi.spyOn(panel, "pollLive").mockResolvedValue(undefined);
+  vi.spyOn(panel, "pollChat").mockResolvedValue(undefined);
+  await vi.advanceTimersByTimeAsync(290_000);
+  expect(pairing?.hidden).toBe(true);
+  expect(panel.querySelector('[data-control="chat-pair-command"]')?.textContent).toBe("");
+});
+
+it("clears pairing after linking and retains a selectable command if clipboard is denied", async () => {
+  const withClipboard = Object.create(navigator);
+  Object.defineProperty(withClipboard, "clipboard", {
+    value: { writeText: vi.fn().mockRejectedValue(Error("denied")) },
+  });
+  vi.stubGlobal("navigator", withClipboard);
+  document.body.append(panel);
+  await flush();
+  await panel.openChat();
+  panel.querySelector<HTMLButtonElement>('[name="chat-connect"]')?.click();
+  await flush();
+  panel.querySelector<HTMLButtonElement>('[name="chat-copy"]')?.click();
+  await flush();
+  expect(panel.querySelector<HTMLElement>(".history-chat-pairing")?.hidden).toBe(false);
+  expect(window.getSelection()?.toString()).toBe("/webchat link ABC123");
+  expect(panel.querySelector('[name="chat-copy-status"]')?.textContent).toContain(
+    "Select and copy",
+  );
+  const previous = fetcher.getMockImplementation();
+  fetcher.mockImplementation(async (input, ...args) =>
+    String(input).includes("/session")
+      ? Response.json({ linked: true, name: "Player" })
+      : previous?.(input, ...args),
+  );
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(panel.querySelector<HTMLElement>(".history-chat-pairing")?.hidden).toBe(true);
+  expect(panel.querySelector('[data-control="chat-pair-command"]')?.textContent).toBe("");
 });

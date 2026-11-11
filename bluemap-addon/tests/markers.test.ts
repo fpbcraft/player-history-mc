@@ -73,6 +73,12 @@ class Element {
     }
     return null;
   }
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
+  }
+  hasAttribute(name) {
+    return Object.hasOwn(this.attributes, name);
+  }
   setAttribute(name, value) {
     this.attributes[name] = value;
   }
@@ -306,6 +312,8 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", async (
       flags: 0,
     };
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    assert.equal(nativePlayerMarker.element.getAttribute("aria-label"), "Test player");
+    assert.equal(nativePlayerMarker.element.tabIndex, 0);
     const head = adapter.players.children[0];
     assert.equal(head.element.textContent, "");
     const image = head.element.children.find((child) => child.alt === "Player skin head");
