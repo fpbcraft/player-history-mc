@@ -39,7 +39,6 @@ vi.mock("../src/history-scene3d.js", () => ({
   },
 }));
 
-
 class Element {
   constructor() {
     this.dataset = {};
@@ -48,6 +47,10 @@ class Element {
     this.attributes = {};
     this.hidden = false;
     this.textContent = "";
+  }
+  addEventListener() {}
+  removeAttribute(name) {
+    delete this.attributes[name];
   }
   append(...children) {
     this.children.push(...children);
@@ -156,7 +159,7 @@ test("Minecraft-style hearts use full, half, and empty icons", () => {
   ]);
   assert.deepEqual(meterLevels(undefined, 20), []);
 });
-test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
+test("skin heads, icon-only events, focus tooltips and exact trail dot", async () => {
   const keys = [
     "document",
     "window",
@@ -193,6 +196,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     };
     nativePlayerMarker.element.style.display = "";
     const terrainScene = {
+      material: { depthTest: true },
       position: { x: 0, z: 0 },
       updateMatrixWorld() {},
     };
@@ -215,7 +219,13 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
         },
       },
       mapViewer: {
-        markers: {},
+        markers: {
+          children: [
+            { material: { depthTest: true }, userData: {} },
+            { material: { depthTest: true }, userData: { playerHistory: true } },
+            { material: { depthTest: true }, visible: false, userData: {} },
+          ],
+        },
         map: {
           isLoaded: true,
           data: { id: "world", mapDataRoot: "maps/world" },
@@ -241,6 +251,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
           }
           setFromCamera() {}
           intersectObjects(objects) {
+            this.calls = (this.calls ?? 0) + 1;
             this.lastObjects = objects;
             return this.hits ?? [];
           }
@@ -305,7 +316,8 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
 
     assert.equal(adapter.bar.children.length, 1);
     const followButton = adapter.bar.children[0];
-    assert.equal(followButton.title, "Test player");
+    assert.match(followButton.attributes["aria-label"], /Test player/);
+    if (adapter.bar.dataset.expanded === "false") followButton.onclick({ stopPropagation() {} });
     followButton.onclick({ stopPropagation() {} });
     assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
     assert.equal(followButton.attributes["aria-pressed"], "true");
@@ -433,6 +445,13 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     );
     assert.equal(head.element.style.display, "none");
 
+    const occlusionCalls = adapter.raycaster.calls;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    assert.equal(
+      adapter.raycaster.calls,
+      occlusionCalls,
+      "position interpolation respects the occlusion budget",
+    );
     adapter.raycaster.hits = [
       {
         distance: 2,
@@ -458,7 +477,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(
       adapter.raycaster.lastObjects.length,
       2,
-      "occlusion checks include terrain and BlueMap's marker scene",
+      "occlusion tests eligible terrain/moving meshes, excluding hidden/history subtrees",
     );
 
     adapter.raycaster.hits = [];
@@ -493,12 +512,78 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     );
 
     app.mapViewer.controlsManager.distance = 300;
+    appEvents.emit("bluemapRenderFrame", { delta: 16 });
+    assert.equal(
+      head.element.style.display,
+      "",
+      "crossing the zoom threshold updates icons immediately",
+    );
     adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }], true);
+    appEvents.emit("bluemapRenderFrame", { delta: 100 });
     assert.equal(
       nativePlayerMarker.element.style.display,
       "",
       "native BlueMap marker returns when zooming back out",
     );
+
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    mapControls.data.followingPlayer = null;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    adapter.bar.children[0].onclick();
+    adapter.setPlayers([], names, [{ id: 1, uuid: "abc" }]);
+    assert.equal(adapter.following, 1, "a pending replay window retains follow intent");
+    assert.equal(
+      mapControls.data.followingPlayer,
+      null,
+      "no stale model is followed while unavailable",
+    );
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    assert.equal(
+      mapControls.data.followingPlayer.userData.historyPlayer,
+      1,
+      "follow automatically rebinds",
+    );
+    mapControls.data.followingPlayer = null;
+    adapter.setPlayers([point], names, [{ id: 1, uuid: "abc" }]);
+    assert.equal(adapter.bar.children[0].ariaPressed, "false", "manual pan still clears follow");
+    const foreignPoint = { ...point, player: 2, world: 1 };
+    let selectedWorld: number | undefined;
+    let finishNavigation: () => void = () => {};
+    adapter.navigatePlayer = async (target) => {
+      selectedWorld = target.world;
+      await new Promise<void>((resolve) => {
+        finishNavigation = resolve;
+      });
+    };
+    adapter.setRoster([
+      {
+        point: foreignPoint,
+        name: "Nether player",
+        uuid: "nether",
+        dimension: "minecraft:the_nether",
+        offline: false,
+      },
+    ]);
+    const foreignButton = adapter.bar.children.find((button) => button.value === "2");
+    foreignButton.onclick();
+    assert.equal(selectedWorld, 1, "foreign card requests its own dimension");
+    assert.equal(adapter.following, 2);
+    adapter.setPlayers([], names, [{ id: 2, uuid: "nether" }]);
+    assert.equal(adapter.following, 2, "follow intent survives dimension loading");
+    app.mapViewer.map.data.id = "nether";
+    adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
+    mapControls.data.followingPlayer = null; // BlueMap resets its camera after switching maps.
+    adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
+    assert.equal(adapter.following, 2, "map initialization must not count as a manual unfollow");
+    assert.equal(
+      mapControls.data.followingPlayer,
+      null,
+      "binding waits until camera initialization completes",
+    );
+    finishNavigation();
+    for (let i = 0; i < 3; i++) await Promise.resolve();
+    adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
+    assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 2);
 
     adapter.dispose();
     assert.equal(

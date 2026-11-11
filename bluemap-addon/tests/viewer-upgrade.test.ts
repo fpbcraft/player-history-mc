@@ -11,8 +11,22 @@ test("build emits a self-contained stable viewer bundle", async () => {
   execFileSync(process.execPath, ["build.mjs"], { cwd: addon });
   const source = await readFile(resolve(addon, "dist/player-history.js"), "utf8");
   const styles = await readFile(resolve(addon, "dist/player-history.css"), "utf8");
-  assert.match(source, /bluemap-player-replay/);
-  assert.doesNotMatch(source, /\bimport\s*\(/);
+  assert.match(source, /player-history\/modules\//);
+  assert.match(source, /type="module"/);
+  const assets = JSON.parse(
+    await readFile(resolve(addon, "dist/player-history-assets.json"), "utf8"),
+  );
+  assert.ok(assets.some((asset) => asset.endsWith("/history.js")));
+  const live = await readFile(
+    resolve(
+      addon,
+      "dist",
+      assets.find((asset) => asset.endsWith("/live.js")),
+    ),
+    "utf8",
+  );
+  assert.match(live, /import\(/);
+  assert.doesNotMatch(live, /from["']\.\/history\.js/);
   assert.doesNotMatch(source, /from\s+["']/);
   assert.ok(source.length < 288 * 1024);
   assert.match(styles, /bluemap-player-replay/);

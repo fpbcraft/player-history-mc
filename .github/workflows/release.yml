@@ -108,6 +108,7 @@ jobs:
           path: |
             recorder-neoforge/build/libs/*.jar
             bluemap-neoforge/build/libs/*.jar
+            motd-neoforge/build/libs/*.jar
           if-no-files-found: error
 
       - name: Publish GitHub release
@@ -126,6 +127,7 @@ jobs:
           assets=(
             recorder-neoforge/build/libs/*.jar
             bluemap-neoforge/build/libs/*.jar
+            motd-neoforge/build/libs/*.jar
           )
 
           if [[ "$CREATE_TAG" == "true" ]]; then

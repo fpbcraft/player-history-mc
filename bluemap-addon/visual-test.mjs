@@ -73,8 +73,12 @@ const chrome = spawn(
     `--user-data-dir=${profile}`,
     "about:blank",
   ],
-  { stdio: ["ignore", "ignore", "pipe"] },
+  { stdio: ["ignore", "pipe", "pipe"] },
 );
+chrome.stdout.setEncoding("utf8");
+chrome.stdout.on("data", (chunk) => {
+  chromeDiagnostics += chunk;
+});
 chrome.stderr.setEncoding("utf8");
 chrome.stderr.on("data", (chunk) => {
   chromeDiagnostics += chunk;
@@ -84,10 +88,10 @@ const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 
 async function waitForDebugger() {
   let lastError;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (chrome.exitCode !== null) {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (chrome.exitCode !== null || chrome.signalCode !== null) {
       throw new Error(
-        `Chrome exited before opening the debugger (code ${chrome.exitCode}).\n${chromeDiagnostics}`,
+        `Chrome exited before opening the debugger (code ${chrome.exitCode}, signal ${chrome.signalCode}).\n${chromeDiagnostics}`,
       );
     }
     try {

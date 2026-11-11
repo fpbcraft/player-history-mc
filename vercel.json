@@ -5,6 +5,10 @@
   "outputDirectory": "bluemap-addon/dist",
   "routes": [
     {
+      "src": "/player-history/(modules/[^/]+/(?:chunks/)?[^/]+\\.js)",
+      "dest": "/$1"
+    },
+    {
       "src": "/player-history/player-history(?:-[^/]+)?\\.js",
       "dest": "/player-history.js"
     },

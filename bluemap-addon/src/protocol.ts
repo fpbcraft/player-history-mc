@@ -185,6 +185,9 @@ export const parseLiveSnapshot = (value: unknown): LiveSnapshot => {
     points: Array.isArray(value.points) ? value.points.slice(-20_000).map(parsePoint) : [],
     events: Array.isArray(value.events) ? value.events.slice(-1_000).map(parseEvent) : [],
     states: parseLiveStates(value.states),
+    lastLocations: Array.isArray(value.lastLocations)
+      ? value.lastLocations.slice(-20_000).map(parsePoint)
+      : [],
   };
 };
 
@@ -263,9 +266,7 @@ const parseObjectRegistry = (value: unknown): ObjectHistoryRegistry => {
 export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
   if (
     !isObject(value) ||
-    (value.protocolVersion !== 1
-      && value.protocolVersion !== 2
-      && value.protocolVersion !== 3)
+    (value.protocolVersion !== 1 && value.protocolVersion !== 2 && value.protocolVersion !== 3)
   )
     throw new Error("Unsupported object-history version");
   const earliestTimestamp = numberField(value, "earliestTimestamp");

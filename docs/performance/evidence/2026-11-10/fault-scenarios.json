@@ -1,0 +1,701 @@
+{
+  "events": [
+    {
+      "t": 551,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 636,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322665107",
+      "method": "GET"
+    },
+    {
+      "t": 3178,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322667643",
+      "method": "GET"
+    },
+    {
+      "t": 3200,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 6699,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322671169",
+      "method": "GET"
+    },
+    {
+      "t": 7643,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322672114",
+      "method": "GET"
+    },
+    {
+      "t": 7677,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 8645,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322673116",
+      "method": "GET"
+    },
+    {
+      "t": 8777,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 9643,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322674114",
+      "method": "GET"
+    },
+    {
+      "t": 9863,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 10636,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322675107",
+      "method": "GET"
+    },
+    {
+      "t": 10948,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 11637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322676108",
+      "method": "GET"
+    },
+    {
+      "t": 12043,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 12644,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322677115",
+      "method": "GET"
+    },
+    {
+      "t": 13225,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 13637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322678108",
+      "method": "GET"
+    },
+    {
+      "t": 14326,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 14645,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322679116",
+      "method": "GET"
+    },
+    {
+      "t": 15171,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794316800000.json",
+      "method": "GET"
+    },
+    {
+      "t": 15172,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794317100000.json",
+      "method": "GET"
+    },
+    {
+      "t": 15172,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794317400000.json",
+      "method": "GET"
+    },
+    {
+      "t": 15172,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794317700000.json",
+      "method": "GET"
+    },
+    {
+      "t": 15589,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 15637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322680108",
+      "method": "GET"
+    },
+    {
+      "t": 16637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322681108",
+      "method": "GET"
+    },
+    {
+      "t": 17079,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 17637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322682108",
+      "method": "GET"
+    },
+    {
+      "t": 18195,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 18637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322683108",
+      "method": "GET"
+    },
+    {
+      "t": 19282,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 19637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322684108",
+      "method": "GET"
+    },
+    {
+      "t": 20369,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 20644,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322685114",
+      "method": "GET"
+    },
+    {
+      "t": 21627,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 21637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322686108",
+      "method": "GET"
+    },
+    {
+      "t": 22637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322687108",
+      "method": "GET"
+    },
+    {
+      "t": 22742,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 23644,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322688116",
+      "method": "GET"
+    },
+    {
+      "t": 23844,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 24645,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322689116",
+      "method": "GET"
+    },
+    {
+      "t": 24956,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 25192,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318000000.json",
+      "method": "GET"
+    },
+    {
+      "t": 25192,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318300000.json",
+      "method": "GET"
+    },
+    {
+      "t": 25194,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318600000.json",
+      "method": "GET"
+    },
+    {
+      "t": 25210,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318900000.json",
+      "method": "GET"
+    },
+    {
+      "t": 25643,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322690114",
+      "method": "GET"
+    },
+    {
+      "t": 26043,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 26636,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322691107",
+      "method": "GET"
+    },
+    {
+      "t": 27192,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 27637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322692108",
+      "method": "GET"
+    },
+    {
+      "t": 28342,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 28637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322693108",
+      "method": "GET"
+    },
+    {
+      "t": 29189,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794319200000.json",
+      "method": "GET"
+    },
+    {
+      "t": 29205,
+      "url": "https://map.fpbcraft.com/player-history-api/session",
+      "method": "POST"
+    },
+    {
+      "t": 29424,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 29994,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794316800000.json",
+      "method": "GET"
+    },
+    {
+      "t": 29994,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794317100000.json",
+      "method": "GET"
+    },
+    {
+      "t": 29994,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794317400000.json",
+      "method": "GET"
+    },
+    {
+      "t": 29994,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794317700000.json",
+      "method": "GET"
+    },
+    {
+      "t": 30021,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318000000.json",
+      "method": "GET"
+    },
+    {
+      "t": 30021,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318300000.json",
+      "method": "GET"
+    },
+    {
+      "t": 30021,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318600000.json",
+      "method": "GET"
+    },
+    {
+      "t": 30025,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794318900000.json",
+      "method": "GET"
+    },
+    {
+      "t": 30043,
+      "url": "https://map.fpbcraft.com/player-history/data/chunks/1794319200000.json",
+      "method": "GET"
+    },
+    {
+      "t": 30532,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 31206,
+      "url": "https://map.fpbcraft.com/player-history-api/session",
+      "method": "POST"
+    },
+    {
+      "t": 31626,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 32758,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 33206,
+      "url": "https://map.fpbcraft.com/player-history-api/session",
+      "method": "POST"
+    },
+    {
+      "t": 33897,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 34992,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 35215,
+      "url": "https://map.fpbcraft.com/player-history-api/session",
+      "method": "POST"
+    },
+    {
+      "t": 36097,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 36644,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322701115",
+      "method": "GET"
+    },
+    {
+      "t": 37262,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 37637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322702108",
+      "method": "GET"
+    },
+    {
+      "t": 38357,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 38642,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322703114",
+      "method": "GET"
+    },
+    {
+      "t": 39469,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 39645,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322704116",
+      "method": "GET"
+    },
+    {
+      "t": 40644,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322705115",
+      "method": "GET"
+    },
+    {
+      "t": 40670,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 41637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322706109",
+      "method": "GET"
+    },
+    {
+      "t": 41809,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 42642,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322707114",
+      "method": "GET"
+    },
+    {
+      "t": 42909,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 43636,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322708108",
+      "method": "GET"
+    },
+    {
+      "t": 44096,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 44643,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322709114",
+      "method": "GET"
+    },
+    {
+      "t": 45098,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 45638,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322710109",
+      "method": "GET"
+    },
+    {
+      "t": 46099,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 46642,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322711113",
+      "method": "GET"
+    },
+    {
+      "t": 47109,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 47636,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322712108",
+      "method": "GET"
+    },
+    {
+      "t": 48110,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 48637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322713108",
+      "method": "GET"
+    },
+    {
+      "t": 49113,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 49637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322714108",
+      "method": "GET"
+    },
+    {
+      "t": 50477,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 50643,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322715114",
+      "method": "GET"
+    },
+    {
+      "t": 51637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322716108",
+      "method": "GET"
+    },
+    {
+      "t": 51685,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 52637,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322717109",
+      "method": "GET"
+    },
+    {
+      "t": 52776,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    },
+    {
+      "t": 53648,
+      "url": "https://map.fpbcraft.com/player-history/data/presence.json?t=1794322718119",
+      "method": "GET"
+    },
+    {
+      "t": 53862,
+      "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+      "method": "GET"
+    }
+  ],
+  "steps": [
+    {
+      "kind": "chat-open",
+      "t": 15128
+    },
+    {
+      "kind": "chat-3s",
+      "t": 18173
+    },
+    {
+      "kind": "chat-14s",
+      "t": 29174
+    },
+    {
+      "kind": "history-open",
+      "t": 29245
+    },
+    {
+      "kind": "history-close-chat-still-open",
+      "t": 36285,
+      "chatVisible": true
+    },
+    {
+      "kind": "after-close-7s",
+      "t": 43288
+    },
+    {
+      "kind": "offline",
+      "t": 43294
+    },
+    {
+      "kind": "online",
+      "t": 48296
+    },
+    {
+      "kind": "after-online",
+      "t": 54296,
+      "stats": {
+        "build": "core-history-43-rope-removal",
+        "polls": 39,
+        "frames": 1029,
+        "objects": 6749,
+        "meshesInScene": 6749,
+        "intervalMs": 1000,
+        "tilesVersion": 0,
+        "tileReloadMinMs": 5000,
+        "msSinceTileReload": null,
+        "renderLoopRunning": true,
+        "feedBytes": 2433574,
+        "serverPerf": {
+          "previousFeedBytes": 2433578,
+          "bakeCount": 0,
+          "bakeMs": 0,
+          "bakesInFlight": 0,
+          "providers": {
+            "create_chain_conveyors": {
+              "enumerateMs": 0.002,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "create_station_flags": {
+              "enumerateMs": 0.389,
+              "objects": 14,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 14
+            },
+            "simulated_coaster_tracks": {
+              "enumerateMs": 0.453,
+              "objects": 14,
+              "groups": 42,
+              "instances": 2220,
+              "allocationProxy": 2276
+            },
+            "computercraft_turtles": {
+              "enumerateMs": 0.669,
+              "objects": 6,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 6
+            },
+            "create_belts": {
+              "enumerateMs": 0.001,
+              "objects": 0,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 0
+            },
+            "sable_ships": {
+              "enumerateMs": 0.421,
+              "objects": 38,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 38
+            },
+            "create_contraptions": {
+              "enumerateMs": 0.534,
+              "objects": 19,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 19
+            },
+            "surface_mobs": {
+              "enumerateMs": 6.296,
+              "objects": 5944,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 5944
+            },
+            "simulated_springs": {
+              "enumerateMs": 0.346,
+              "objects": 4,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 4
+            },
+            "create_bearings": {
+              "enumerateMs": 2.815,
+              "objects": 1184,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 1184
+            },
+            "simulated_ropes": {
+              "enumerateMs": 1.074,
+              "objects": 9,
+              "groups": 17,
+              "instances": 381,
+              "allocationProxy": 407
+            },
+            "create_curved_track": {
+              "enumerateMs": 1.98,
+              "objects": 20,
+              "groups": 0,
+              "instances": 0,
+              "allocationProxy": 20
+            }
+          }
+        },
+        "scenePerf": {
+          "logicalObjects": 6749,
+          "normalMeshes": 6726,
+          "instanceGroups": 59,
+          "instances": 2601,
+          "estimatedDrawCalls": 6977
+        }
+      }
+    }
+  ],
+  "errors": []
+}
