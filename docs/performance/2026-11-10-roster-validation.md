@@ -24,4 +24,4 @@ The final probe passed with **zero page exceptions**:
 
 The failed and final JSON snapshots are retained beside the original investigation evidence as `player-roster-before.json` and `player-roster-after.json`. Screenshots and the complete local report are in `build/validation/player-roster/`. Reproduction instructions are in `tools/README.md`.
 
-This is functional validation, not a comparative page-load or FPS benchmark. Physical-mobile testing, real actors/equipment, authenticated chat, long-session/reconnect tests, and comparative performance measurements remain pending. The production server was not deployed or restarted, and no PR was merged.
+This is functional validation, not a comparative page-load or FPS benchmark. Physical-mobile testing, real actors/equipment, authenticated chat, long-session/reconnect tests, and comparative performance measurements remain pending. This validation did not deploy or restart the production server or merge PRs. The earlier roster PR was independently merged during the work; these corrections are a follow-up based on the resulting v2.6.0 main.
