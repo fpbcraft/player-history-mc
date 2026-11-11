@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { lanDevelopmentUrls, parseDevOptions, playerHistoryAsset } from "../dev-options.mjs";
 import { startDevelopmentProxy } from "../dev-server.mjs";
-import { scriptOutput, styleOutput } from "../frontend-build.mjs";
+import { outputDirectory, scriptOutput, styleOutput } from "../frontend-build.mjs";
 
 function listen(server: Server, port = 0): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -33,6 +33,24 @@ async function availablePort(): Promise<number> {
 }
 
 describe("development options", () => {
+  it("routes every built preview module to its local deployment asset", async () => {
+    const config = JSON.parse(await readFile(new URL("../../vercel.json", import.meta.url), "utf8"));
+    const assets: string[] = JSON.parse(
+      await readFile(`${outputDirectory}/player-history-assets.json`, "utf8"),
+    );
+    expect(assets.length).toBeGreaterThan(0);
+    for (const asset of assets) {
+      const path = `/player-history/${asset}`;
+      const route = config.routes.find(
+        (candidate: { src?: string }) => candidate.src && new RegExp(`^${candidate.src}$`).test(path),
+      );
+      expect(route, path).toBeDefined();
+      const destination = path.replace(new RegExp(`^${route.src}$`), route.dest);
+      expect(destination).toBe(`/${asset}`);
+      expect(await readFile(`${outputDirectory}${destination}`, "utf8")).not.toBe("");
+    }
+  });
+
   it("requires a valid HTTP target and applies defaults", () => {
     expect(parseDevOptions(["--target", "http://127.0.0.1:8100"])).toEqual({
       target: "http://127.0.0.1:8100/",
@@ -157,6 +175,13 @@ describe("development proxy", () => {
       "data: online\n\n",
     );
 
+    const assets = JSON.parse(await readFile(`${outputDirectory}/player-history-assets.json`, "utf8"));
+    for (const asset of assets) {
+      const response = await fetch(`${base}/player-history/${asset}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("javascript");
+      expect(await response.text()).toBe(await readFile(`${outputDirectory}/${asset}`, "utf8"));
+    }
     const expectedScript = await readFile(scriptOutput, "utf8");
     const expectedStyle = await readFile(styleOutput, "utf8");
     for (const filename of [

@@ -1,9 +1,7 @@
-import { mapConcurrent } from "./history-loading.js";
+import { consumeConcurrent } from "./history-loading.js";
 import type { HistoryEvent } from "./types.js";
 
-export type RangeEventsLoad =
-  | { kind: "too-large" }
-  | { kind: "ready"; events: HistoryEvent[] };
+export type RangeEventsLoad = { kind: "too-large" } | { kind: "ready"; events: HistoryEvent[] };
 
 interface RangeEventsOptions {
   from: number;
@@ -28,11 +26,11 @@ export const loadRangeEvents = async ({
   if (starts.length > maxChunks) return { kind: "too-large" };
 
   const events: HistoryEvent[] = [];
-  const chunks = await mapConcurrent(starts, concurrency, readChunk);
-  for (const chunk of chunks) {
-    events.push(...chunk.events);
-    if (events.length > maxEvents) throw Error("Too many events in this range");
-  }
+  await consumeConcurrent(starts, concurrency, readChunk, (chunk) => {
+    if (events.length + chunk.events.length > maxEvents)
+      throw Error("Too many events in this range");
+    for (const event of chunk.events) events.push(event);
+  });
   events.sort((a, b) => a.point.time - b.point.time);
   return { kind: "ready", events };
 };

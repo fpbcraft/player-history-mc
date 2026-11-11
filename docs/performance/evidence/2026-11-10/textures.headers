@@ -1,0 +1,8 @@
+HTTP/2 200 
+server: nginx
+date: Tue, 10 Nov 2026 14:38:50 GMT
+content-type: application/json
+content-encoding: gzip
+cache-control: public, max-age=86400
+x-robots-tag: noindex, nofollow
+

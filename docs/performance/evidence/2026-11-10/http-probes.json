@@ -1,0 +1,68 @@
+[
+  {
+    "url": "https://map.fpbcraft.com/",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/html\nlast-modified: Wed, 21 Oct 2026 02:52:03 GMT\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\ncontent-encoding: gzip\n\n\nMEASURE 2 1200 0.025989 0.026103",
+    "stderr": ""
+  },
+  {
+    "url": "https://map.fpbcraft.com/assets/index-851dedaf.js",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/javascript\nlast-modified: Wed, 21 Oct 2026 02:52:03 GMT\netag: f7b627be278e41a15c5f7ad4\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 1014626 0.019552 0.062612",
+    "stderr": "",
+    "conditional": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/javascript\nlast-modified: Wed, 21 Oct 2026 02:52:03 GMT\netag: f7b627be278e41a15c5f7ad4\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n"
+  },
+  {
+    "url": "https://map.fpbcraft.com/settings.json",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 06:55:12 GMT\netag: 1f74dd96a4b1a1c43d4557\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 503 0.029524 0.029608",
+    "stderr": "",
+    "conditional": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 06:55:12 GMT\netag: 1f74dd96a4b1a1c43d4557\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n"
+  },
+  {
+    "url": "https://map.fpbcraft.com/player-history/player-history-2.5.0.js",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/javascript\nlast-modified: Tue, 10 Nov 2026 06:55:11 GMT\netag: 47fce5948fec21a1c43d4162\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 294862 0.020949 0.044083",
+    "stderr": "",
+    "conditional": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/javascript\nlast-modified: Tue, 10 Nov 2026 06:55:11 GMT\netag: 47fce5948fec21a1c43d4162\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n"
+  },
+  {
+    "url": "https://map.fpbcraft.com/assets/bluemap3d/bluemap3d.core.js",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/javascript\nlast-modified: Tue, 10 Nov 2026 06:55:11 GMT\netag: 13dbe4c03219d1a1c43d416c\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 81342 0.020523 0.032385",
+    "stderr": "",
+    "conditional": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: text/javascript\nlast-modified: Tue, 10 Nov 2026 06:55:11 GMT\netag: 13dbe4c03219d1a1c43d416c\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n"
+  },
+  {
+    "url": "https://map.fpbcraft.com/assets/bluemap3d/entities3d.json",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 14:39:46 GMT\netag: 2522386d4395041a1c5e697a0\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 2433592 0.020410 0.077879",
+    "stderr": ""
+  },
+  {
+    "url": "https://map.fpbcraft.com/player-history/data/presence.json",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 14:39:46 GMT\netag: b9b05960b6951a1c5e69980\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 47536 0.030297 0.061173",
+    "stderr": ""
+  },
+  {
+    "url": "https://map.fpbcraft.com/player-history/world-status.json",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 14:39:46 GMT\netag: e2f676958a1a1c5e69998\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 226 0.023779 0.023861",
+    "stderr": ""
+  },
+  {
+    "url": "https://map.fpbcraft.com/player-history/data/manifest.json",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 14:39:43 GMT\netag: cbf9118dc5e11a1c5e68f12\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 52217 0.020442 0.030549",
+    "stderr": "",
+    "conditional": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\nlast-modified: Tue, 10 Nov 2026 14:39:43 GMT\netag: cbf9118dc5e11a1c5e68f12\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n"
+  },
+  {
+    "url": "https://map.fpbcraft.com/maps/world/textures.json?format=external-v1",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:46 GMT\ncontent-type: application/json\ncontent-encoding: gzip\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 18619202 0.020997 0.376882",
+    "stderr": ""
+  },
+  {
+    "url": "https://map.fpbcraft.com/assets/bluemap3d/meshes/surface_mobs/surface-mob_minecraft_sheep_14x21_1bzvm3k__bake-2-v7-6.bm3d",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:47 GMT\ncontent-type: text/plain\nlast-modified: Wed, 21 Oct 2026 02:52:10 GMT\netag: 211cd5c786931a15c5f9567\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 8476 0.020295 0.024962",
+    "stderr": "",
+    "conditional": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:47 GMT\ncontent-type: text/plain\nlast-modified: Wed, 21 Oct 2026 02:52:10 GMT\netag: 211cd5c786931a15c5f9567\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n"
+  },
+  {
+    "url": "https://map.fpbcraft.com/maps/world/tiles/1/x0/z0.png?781091",
+    "response": "HTTP/2 200 \nserver: nginx\ndate: Tue, 10 Nov 2026 14:39:47 GMT\ncontent-type: image/png\ncache-control: public, max-age=86400\nx-robots-tag: noindex, nofollow\n\n\nMEASURE 2 169009 0.020249 0.039369",
+    "stderr": ""
+  }
+]
