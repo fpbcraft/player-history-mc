@@ -1,6 +1,6 @@
 # Expanding roster: eight-player desktop/mobile check
 
-The selector starts as an row of 22-pixel heads on a translucent light-grey group background, with hidden scrollbars. The first click/tap expands to 32-pixel heads and full names; selecting an expanded player follows/navigates. Outside interaction or Escape collapses it. Desktop details are hover-only for pointer users (keyboard focus remains supported), while non-hover mobile devices use touch taps. A desktop click does not pin a popup. Details contain only HP or a compact seen timestamp, without names, dimensions, activity or online/offline labels.
+The selector starts as an row of 22-pixel heads on a translucent theme-matched translucent group background, with hidden scrollbars. The first click/tap expands to 32-pixel heads and full names; selecting an expanded player follows/navigates. Outside interaction or Escape collapses it. Desktop details are hover-only for pointer users (keyboard focus remains supported), while non-hover mobile devices use touch taps. A desktop click does not pin a popup. Details contain only HP or a compact seen timestamp, without names, dimensions, activity or online/offline labels.
 
 Names no longer use ellipsis or fixed card widths: each expanded item fits its name, wrapping only if necessary. Dimension outlines stay directly on the heads and offline skins are gray. Expansion animates; reduced-motion users get immediate transitions. Today's seen time uses e.g. `Seen 20:47`, with a short date added only for older days and a year only when different.
 

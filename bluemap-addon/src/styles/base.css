@@ -1317,8 +1317,8 @@ bluemap-player-replay .history-chat-death > span {
 
 /* Floating heads expand only when the selector is used. */
 .history-player-followbar {
-  top: 52px; box-sizing: border-box; padding: 6px; border: 1px solid #ffffff55; border-radius: 6px;
-  background: #d5d8deaa; box-shadow: 0 1px 5px #0003; backdrop-filter: blur(4px); align-items: flex-start;
+  top: 52px; box-sizing: border-box; padding: 6px; border: 1px solid color-mix(in srgb, var(--theme-fg-light, #aaa) 28%, transparent); border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-bg, #181818) 92%, transparent); box-shadow: 0 1px 5px #0003; backdrop-filter: blur(4px); align-items: flex-start;
   overflow-y: hidden; scrollbar-width: none;
   interpolate-size: allow-keywords;
 }
