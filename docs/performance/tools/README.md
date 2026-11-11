@@ -44,3 +44,18 @@ gzip -dc docs/performance/evidence/2026-11-10/underground-follow.cpuprofile.gz >
 Import a trace into Chrome DevTools Performance; load the CPU profile in its JavaScript profiler. `summary.json` contains derived, reviewable baseline results and source/asset identities. Raw CDP counters use seconds for durations; browser ResourceTiming and wrapper values use milliseconds. Never add nested trace spans or CPU samples to wrapper wall times. `artifact-manifest.json` hashes the uncompressed bytes of retained files.
 
 Future release instrumentation should add `requestfailed`, true first presented terrain and actual BlueMap-render frame intervals, online actor/asset readiness, bounded exclusive CPU spans, GPU queries where supported, endpoint publication age and real physical device coverage. See the report for the full acceptance matrix.
+
+## Roster integration regression
+
+`verify-player-roster.cjs` injects the locally built Player History modules and optionally a locally built BlueMap webapp into an isolated production-page browser context. Its player responses are synthetic; production player data and server configuration are not changed. It verifies three all-dimension cards, actual global skin loading, DOM reuse, foreign-dimension following through the real map switch, live offline navigation, narrow-screen control separation, and entering/leaving history. It records screenshots, page errors and a JSON report. It is a functional regression check, not a load-time benchmark or a real-online-player freshness test.
+
+Build the Player History frontend first. Set `PERF_MANIFEST` to a retained protocol-v2 manifest fixture with the deployed dimension registry (the recorded scenario uses overworld ID 0 and Nether ID 1). Set `BLUEMAP_WEBAPP` to the companion BlueMap build's `common/webapp/dist` directory to exercise both proposed frontends. The browser still downloads the deployed terrain and object scene, so run sparingly and serially.
+
+```sh
+PLAYWRIGHT_MODULE=/tmp/fpb-map-benchmark/node_modules/playwright \
+PERF_MANIFEST=/path/to/retained-manifest.json \
+BLUEMAP_WEBAPP=/path/to/BlueMap/common/webapp/dist \
+node docs/performance/tools/verify-player-roster.cjs
+```
+
+The historical seek uses the investigation's retained segment; replace it if it expires. Reports and screenshots default to `build/validation/player-roster/`.

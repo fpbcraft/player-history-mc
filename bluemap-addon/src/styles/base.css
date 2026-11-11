@@ -1348,3 +1348,12 @@ bluemap-player-replay .history-chat-death > span {
 .history-roster-dimension, .history-roster-health, .history-roster-action { font-size: 10px; }
 .history-roster-action { max-width: 100%; white-space: normal; }
 .history-offline-location { display: flex; align-items: center; gap: 5px; padding: 3px; background: #181818db; color: white; border: 1px dashed #aaa; border-radius: 4px; opacity: .8; white-space: nowrap; font-size: 11px; }
+
+.history-player-followbar { top: 52px; box-sizing: border-box; }
+@media (max-width: 600px) {
+  .history-player-followbar {
+    left: 8px;
+    transform: none;
+    max-width: calc(100vw - 144px);
+  }
+}
