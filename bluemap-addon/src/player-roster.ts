@@ -87,6 +87,7 @@ export class PlayerRoster {
   private pinned = false;
   private expanded = false;
   private touchInput = false;
+  private toolbarObserver: ResizeObserver | undefined;
 
   constructor(
     private readonly root: HTMLElement,
@@ -135,7 +136,36 @@ export class PlayerRoster {
       options,
     );
     root.addEventListener("scroll", () => this.positionDetails(), options);
-    window.addEventListener("resize", () => this.positionDetails(), options);
+    window.addEventListener(
+      "resize",
+      () => {
+        this.alignStrip();
+        this.positionDetails();
+      },
+      options,
+    );
+    const toolbar = document.querySelector?.(".control-bar");
+    const gap = toolbar?.querySelector(".space.greedy");
+    if (toolbar && gap && typeof ResizeObserver !== "undefined") {
+      this.toolbarObserver = new ResizeObserver(() => this.alignStrip());
+      this.toolbarObserver.observe(toolbar);
+      this.toolbarObserver.observe(gap);
+    }
+    this.alignStrip();
+  }
+
+  private alignStrip(): void {
+    const toolbar = document.querySelector?.(".control-bar");
+    const gap = toolbar?.querySelector(".space.greedy")?.getBoundingClientRect();
+    if (innerWidth > 600 && toolbar && gap && gap.width > 32) {
+      this.root.style.top = `${toolbar.getBoundingClientRect().top}px`;
+      this.root.style.left = `${gap.left + gap.width / 2}px`;
+      this.root.style.maxWidth = `${Math.max(32, gap.width - 12)}px`;
+    } else {
+      this.root.style.top = "";
+      this.root.style.left = "";
+      this.root.style.maxWidth = "";
+    }
   }
 
   private canHover(): boolean {
@@ -252,6 +282,7 @@ export class PlayerRoster {
 
   dispose(): void {
     this.listeners.abort();
+    this.toolbarObserver?.disconnect();
     this.hideDetails();
     this.details.remove();
     this.cards.clear();

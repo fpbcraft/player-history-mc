@@ -1367,6 +1367,7 @@ bluemap-player-replay .history-chat-death > span {
 .history-roster-details { position: fixed; z-index: 1100; max-width: min(240px, calc(100vw - 16px)); box-sizing: border-box; padding: 6px 8px; border: 1px solid #ffffff50; border-radius: 6px; background: #181818f5; color: #eee; font: 12px/1.5 sans-serif; white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 2px 8px #0008; }
 .history-roster-details[hidden] { display: none; }
 .history-offline-location { display: flex; align-items: center; gap: 5px; padding: 3px; background: #181818db; color: white; border: 1px dashed #aaa; border-radius: 4px; opacity: .8; white-space: nowrap; font-size: 11px; }
+@media (min-width: 601px) { .history-player-followbar { top: 8px; } }
 @media (max-width: 600px) {
   .history-player-followbar { left: 8px; transform: none; max-width: calc(100vw - 144px); gap: 3px; }
 }

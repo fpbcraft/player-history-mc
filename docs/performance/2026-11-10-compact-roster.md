@@ -15,3 +15,5 @@ Results:
 - Offline details contain only compact seen time. No browser exceptions occurred. Full viewer check passes all 152 tests.
 
 Reproduce with `tools/verify-compact-roster.cjs` and the environment variables in `tools/README.md`. The current JSON report is `evidence/2026-11-10/compact-roster-expand-eight-players.json`; the preceding fixed-card measurement remains retained separately. Screenshots of desktop/mobile collapsed, expanded and detail states are under `build/validation/compact-roster/`.
+
+Desktop alignment now follows the native toolbar's actual top edge and uses its flexible gap between the left/right button groups. A resize observer keeps it clear of changing native controls; the expanded selector scrolls when its names exceed that gap. The eight-player probe asserts top-edge equality and no overlap in both collapsed and expanded states. Mobile retains its below-toolbar position.
