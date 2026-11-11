@@ -48,6 +48,10 @@ class Element {
     this.hidden = false;
     this.textContent = "";
   }
+  addEventListener() {}
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
   append(...children) {
     this.children.push(...children);
   }
@@ -155,7 +159,7 @@ test("Minecraft-style hearts use full, half, and empty icons", () => {
   ]);
   assert.deepEqual(meterLevels(undefined, 20), []);
 });
-test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
+test("skin heads, icon-only events, focus tooltips and exact trail dot", async () => {
   const keys = [
     "document",
     "window",
@@ -312,7 +316,8 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
 
     assert.equal(adapter.bar.children.length, 1);
     const followButton = adapter.bar.children[0];
-    assert.match(followButton.title, /Test player/);
+    assert.match(followButton.attributes["aria-label"], /Test player/);
+    if (adapter.bar.dataset.expanded === "false") followButton.onclick({ stopPropagation() {} });
     followButton.onclick({ stopPropagation() {} });
     assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
     assert.equal(followButton.attributes["aria-pressed"], "true");
@@ -543,8 +548,12 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     assert.equal(adapter.bar.children[0].ariaPressed, "false", "manual pan still clears follow");
     const foreignPoint = { ...point, player: 2, world: 1 };
     let selectedWorld: number | undefined;
+    let finishNavigation: () => void = () => {};
     adapter.navigatePlayer = async (target) => {
       selectedWorld = target.world;
+      await new Promise<void>((resolve) => {
+        finishNavigation = resolve;
+      });
     };
     adapter.setRoster([
       {
@@ -562,6 +571,17 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", () => {
     adapter.setPlayers([], names, [{ id: 2, uuid: "nether" }]);
     assert.equal(adapter.following, 2, "follow intent survives dimension loading");
     app.mapViewer.map.data.id = "nether";
+    adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
+    mapControls.data.followingPlayer = null; // BlueMap resets its camera after switching maps.
+    adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
+    assert.equal(adapter.following, 2, "map initialization must not count as a manual unfollow");
+    assert.equal(
+      mapControls.data.followingPlayer,
+      null,
+      "binding waits until camera initialization completes",
+    );
+    finishNavigation();
+    for (let i = 0; i < 3; i++) await Promise.resolve();
     adapter.setPlayers([foreignPoint], names, [{ id: 2, uuid: "nether" }]);
     assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 2);
 

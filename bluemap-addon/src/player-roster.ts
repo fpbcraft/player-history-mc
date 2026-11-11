@@ -17,20 +17,6 @@ export const dimensionName = (key: string): string =>
     "minecraft:the_end": "End",
   })[key] ?? key;
 
-export const rosterAction = (state: PlayerState | undefined): string => {
-  if (!state) return "";
-  for (const [key, label] of [
-    ["sleeping", "Sleeping"],
-    ["elytra", "Gliding"],
-    ["swimming", "Swimming"],
-    ["sneaking", "Sneaking"],
-    ["sprinting", "Sprinting"],
-  ] as const) {
-    if (state[key] === true) return label;
-  }
-  return "";
-};
-
 export const rosterHealth = (state: PlayerState | undefined): string => {
   const hp = state?.health;
   const max = state?.maxHealth;
@@ -41,6 +27,18 @@ export const rosterHealth = (state: PlayerState | undefined): string => {
     max > 0
     ? `${Math.round(hp * 10) / 10} / ${Math.round(max * 10) / 10} HP`
     : "HP unknown";
+};
+
+export const rosterSeen = (time: number, now = Date.now()): string => {
+  const date = new Date(time);
+  const today = new Date(now);
+  const options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false };
+  if (date.toDateString() !== today.toDateString()) {
+    options.month = "short";
+    options.day = "numeric";
+    if (date.getFullYear() !== today.getFullYear()) options.year = "2-digit";
+  }
+  return `Seen ${new Intl.DateTimeFormat(undefined, options).format(date)}`;
 };
 
 /** Crop the existing global skin, including its hat layer, without a map-local head dependency. */
@@ -74,19 +72,160 @@ export const createRosterHead = (uuid?: string): HTMLElement => {
   return face;
 };
 
+interface RosterCard {
+  button: HTMLButtonElement;
+  signature: string;
+  row: RosterPlayer;
+}
+let nextRoster = 0;
+
 export class PlayerRoster {
-  private readonly cards = new Map<number, { button: HTMLButtonElement; signature: string }>();
+  private readonly cards = new Map<number, RosterCard>();
+  private readonly details = document.createElement("div");
+  private readonly listeners = new AbortController();
+  private shown: RosterCard | undefined;
+  private pinned = false;
+  private expanded = false;
+  private touchInput = false;
+  private toolbarObserver: ResizeObserver | undefined;
+
   constructor(
     private readonly root: HTMLElement,
     private readonly select: (row: RosterPlayer) => void,
   ) {
     root.setAttribute("aria-label", "Player roster");
+    root.dataset.expanded = "false";
+    root.setAttribute("aria-expanded", "false");
+    this.details.className = "history-roster-details";
+    this.details.id = `history-roster-details-${++nextRoster}`;
+    this.details.setAttribute("role", "tooltip");
+    this.details.hidden = true;
+    document.body.append(this.details);
+    const options = { signal: this.listeners.signal };
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        const target = event.target as Node | null;
+        if (target && !root.contains(target) && !this.details.contains(target))
+          this.setExpanded(false);
+      },
+      options,
+    );
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape") this.setExpanded(false);
+      },
+      options,
+    );
+    root.addEventListener(
+      "pointerdown",
+      (event) => {
+        this.touchInput = event.pointerType === "touch";
+      },
+      options,
+    );
+    root.addEventListener(
+      "click",
+      (event) => {
+        if (!this.expanded) {
+          event.preventDefault();
+          this.setExpanded(true);
+        }
+      },
+      options,
+    );
+    root.addEventListener("scroll", () => this.positionDetails(), options);
+    window.addEventListener(
+      "resize",
+      () => {
+        this.alignStrip();
+        this.positionDetails();
+      },
+      options,
+    );
+    const toolbar = document.querySelector?.(".control-bar");
+    const gap = toolbar?.querySelector(".space.greedy");
+    if (toolbar && gap && typeof ResizeObserver !== "undefined") {
+      this.toolbarObserver = new ResizeObserver(() => this.alignStrip());
+      this.toolbarObserver.observe(toolbar);
+      this.toolbarObserver.observe(gap);
+    }
+    this.alignStrip();
+  }
+
+  private alignStrip(): void {
+    const toolbar = document.querySelector?.(".control-bar");
+    const gap = toolbar?.querySelector(".space.greedy")?.getBoundingClientRect();
+    if (innerWidth > 600 && toolbar && gap && gap.width > 32) {
+      this.root.style.top = `${toolbar.getBoundingClientRect().top}px`;
+      this.root.style.left = `${gap.left + gap.width / 2}px`;
+      this.root.style.maxWidth = `${Math.max(32, gap.width - 12)}px`;
+    } else {
+      this.root.style.top = "";
+      this.root.style.left = "";
+      this.root.style.maxWidth = "";
+    }
+  }
+
+  private canHover(): boolean {
+    return window.matchMedia?.("(hover: hover) and (pointer: fine)").matches ?? true;
+  }
+
+  private setExpanded(expanded: boolean): void {
+    this.expanded = expanded;
+    this.root.dataset.expanded = String(expanded);
+    this.root.setAttribute("aria-expanded", String(expanded));
+    if (!expanded) this.hideDetails();
+  }
+
+  private hideDetails(): void {
+    this.shown?.button.removeAttribute("aria-describedby");
+    this.shown = undefined;
+    this.pinned = false;
+    this.details.hidden = true;
+  }
+
+  private positionDetails(): void {
+    if (!this.shown) return;
+    const bounds = this.shown.button.getBoundingClientRect();
+    const strip = this.root.getBoundingClientRect();
+    if (bounds.right <= strip.left || bounds.left >= strip.right) {
+      this.hideDetails();
+      return;
+    }
+    this.details.style.maxWidth = innerWidth <= 600 ? `${Math.max(120, strip.width - 8)}px` : "";
+    const width = this.details.offsetWidth;
+    const height = this.details.offsetHeight;
+    let left = Math.max(
+      8,
+      Math.min(innerWidth - width - 8, bounds.left + bounds.width / 2 - width / 2),
+    );
+    if (innerWidth <= 600) left = Math.max(8, Math.min(left, strip.right - width - 4));
+    const top =
+      bounds.bottom + height + 12 <= innerHeight
+        ? bounds.bottom + 8
+        : Math.max(8, bounds.top - height - 8);
+    this.details.style.left = `${left}px`;
+    this.details.style.top = `${top}px`;
+  }
+
+  private showDetails(card: RosterCard, pinned = false): void {
+    if (this.shown !== card) this.shown?.button.removeAttribute("aria-describedby");
+    this.shown = card;
+    this.pinned = pinned;
+    const row = card.row;
+    this.details.textContent = row.offline ? rosterSeen(row.point.time) : rosterHealth(row.state);
+    this.details.hidden = false;
+    card.button.setAttribute("aria-describedby", this.details.id);
+    this.positionDetails();
   }
 
   update(rows: readonly RosterPlayer[]): void {
     const keep = new Set(rows.map((row) => row.point.player));
     for (const [id, card] of this.cards)
       if (!keep.has(id)) {
+        if (this.shown === card) this.hideDetails();
         card.button.remove();
         this.cards.delete(id);
       }
@@ -96,40 +235,57 @@ export class PlayerRoster {
       if (!card) {
         const button = document.createElement("button");
         button.value = String(id);
+        const created: RosterCard = { button, row, signature: "" };
+        button.onmouseenter = () => {
+          if (this.expanded && this.canHover()) this.showDetails(created);
+        };
+        button.onmouseleave = () => {
+          if (this.canHover()) this.hideDetails();
+        };
+        button.onfocus = () => {
+          if (this.expanded && this.canHover() && button.matches?.(":focus-visible"))
+            this.showDetails(created);
+        };
+        button.onblur = () => {
+          if (this.canHover()) this.hideDetails();
+        };
+        button.onclick = () => {
+          if (!this.expanded) {
+            this.setExpanded(true);
+            return;
+          }
+          this.select(created.row);
+          if (!this.canHover() && this.touchInput) this.showDetails(created, true);
+        };
         this.root.append(button);
-        card = { button, signature: "" };
+        card = created;
         this.cards.set(id, card);
       }
-      card.button.onclick = () => this.select(row);
-      const dimension = dimensionName(row.dimension);
-      const health = row.offline ? "Offline · last location" : rosterHealth(row.state);
-      const action = row.offline
-        ? `Seen ${new Date(row.point.time).toLocaleString()}`
-        : rosterAction(row.state);
-      const signature = JSON.stringify([row.name, row.uuid, row.dimension, health, action]);
-      if (signature === card.signature) continue;
-      card.signature = signature;
+      card.row = row;
       card.button.dataset.dimension = row.dimension;
       card.button.dataset.offline = String(row.offline);
-      card.button.title = `${row.name} · ${dimension}\n${health}${action ? `\n${action}` : ""}`;
       card.button.setAttribute(
         "aria-label",
-        `${row.offline ? "View last location of" : "Follow"} ${row.name}, ${dimension}, ${health}${action ? `, ${action}` : ""}`,
+        `${row.offline ? "View last location of" : "Follow"} ${row.name}, ${dimensionName(row.dimension)}, ${row.offline ? "Offline" : rosterHealth(row.state)}`,
       );
-      const labels = [row.name, dimension, health, action].map((text, index) => {
-        const label = document.createElement("span");
-        label.className =
-          [
-            "history-roster-name",
-            "history-roster-dimension",
-            "history-roster-health",
-            "history-roster-action",
-          ][index] ?? "";
-        label.textContent = text;
-        return label;
-      });
-      card.button.replaceChildren(createRosterHead(row.uuid), ...labels);
+      const signature = JSON.stringify([row.name, row.uuid]);
+      if (signature !== card.signature) {
+        card.signature = signature;
+        const name = document.createElement("span");
+        name.className = "history-roster-name";
+        name.textContent = row.name;
+        card.button.replaceChildren(createRosterHead(row.uuid), name);
+      }
+      if (this.shown === card) this.showDetails(card, this.pinned);
     }
+  }
+
+  dispose(): void {
+    this.listeners.abort();
+    this.toolbarObserver?.disconnect();
+    this.hideDetails();
+    this.details.remove();
+    this.cards.clear();
   }
 }
 

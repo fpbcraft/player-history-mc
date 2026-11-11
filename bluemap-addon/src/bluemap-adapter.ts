@@ -77,6 +77,7 @@ export class BlueMapAdapter {
   navigatePlayer?: (point: HistoryPoint) => Promise<void>;
   private playerIconMode = false;
   private following: number | null = null;
+  private navigationToken: object | undefined;
   private followSuspended = false;
   private followMap: string | undefined;
   private liveMode = false;
@@ -572,24 +573,38 @@ export class BlueMapAdapter {
       if (row.offline) {
         this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
         this.following = null;
-        if (this.navigatePlayer)
-          void this.navigatePlayer(row.point).then(() => this.focusPoint(row.point));
-        else this.focusPoint(row.point);
+        void this.navigateRosterPlayer(row, false);
       } else if (this.playerPositions.some((point) => point.player === row.point.player)) {
         this.followPlayer(row.point.player);
       } else if (this.following === row.point.player) {
         this.following = null;
+        this.navigationToken = undefined;
         this.followSuspended = false;
         this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
       } else {
         this.following = row.point.player;
         this.followSuspended = true;
-        void this.navigatePlayer?.(row.point);
+        void this.navigateRosterPlayer(row, true);
       }
       this.syncFollowButtons();
     });
     this.roster.update(rows);
     this.syncFollowButtons();
+  }
+
+  private async navigateRosterPlayer(row: RosterPlayer, follow: boolean): Promise<void> {
+    const token = {};
+    this.navigationToken = token;
+    try {
+      await this.navigatePlayer?.(row.point);
+      if (this.navigationToken !== token) return;
+      if (follow) this.followSuspended = true;
+      else this.focusPoint(row.point);
+    } catch (error) {
+      console.warn("Player navigation failed", error);
+    } finally {
+      if (this.navigationToken === token) this.navigationToken = undefined;
+    }
   }
 
   setOfflineLocations(rows: readonly RosterPlayer[]): void {
@@ -642,6 +657,7 @@ export class BlueMapAdapter {
     if (
       this.following !== null &&
       !this.followSuspended &&
+      !this.navigationToken &&
       this.followMap === this.mapId &&
       !c?.data?.followingPlayer
     )
@@ -649,11 +665,12 @@ export class BlueMapAdapter {
     this.scene3d.setPlayers(positions, names, players);
     if (this.following !== null) {
       const uuid = this.playerUuids.get(this.following);
-      const target = positions.some((p) => p.player === this.following)
-        ? ((this.liveMode && uuid
-            ? this.app.playerMarkerManager?.getPlayerMarker?.(uuid)
-            : undefined) ?? this.scene3d.playerTarget(this.following))
-        : undefined;
+      const target =
+        !this.navigationToken && positions.some((p) => p.player === this.following)
+          ? ((this.liveMode && uuid
+              ? this.app.playerMarkerManager?.getPlayerMarker?.(uuid)
+              : undefined) ?? this.scene3d.playerTarget(this.following))
+          : undefined;
       this.followSuspended = !target;
       if (target && c?.data?.followingPlayer !== target) c?.followPlayerMarker?.(target);
       else if (!target) c?.stopFollowingPlayerMarker?.();
@@ -951,7 +968,9 @@ export class BlueMapAdapter {
     this.hoverListeners.abort();
     if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
     this.tooltip.remove();
+    this.roster?.dispose();
     this.bar.remove();
+    this.navigationToken = undefined;
     this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();
     this.following = null;
     this.restoreNativePlayerMarkers();

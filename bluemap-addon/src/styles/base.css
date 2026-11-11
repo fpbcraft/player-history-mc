@@ -1315,26 +1315,39 @@ bluemap-player-replay .history-chat-death > span {
   }
 }
 
-/* Cards retain their DOM across interpolation frames and dimension switches. */
-.history-player-followbar > button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 0 0 116px;
-  width: 116px;
-  height: auto;
-  min-height: 112px;
-  padding: 6px;
-  color: #eee;
-  border-color: #9ca3af;
-  gap: 3px;
+/* Floating heads expand only when the selector is used. */
+.history-player-followbar {
+  top: 52px; box-sizing: border-box; padding: 6px; border: 1px solid color-mix(in srgb, var(--theme-fg-light, #aaa) 28%, transparent); border-radius: 6px;
+  background: color-mix(in srgb, var(--theme-bg, #181818) 92%, transparent); box-shadow: 0 1px 5px #0003; backdrop-filter: blur(4px); align-items: flex-start;
+  overflow-y: hidden; scrollbar-width: none;
+  interpolate-size: allow-keywords;
 }
-.history-player-followbar > button[data-dimension="minecraft:overworld"] { border-color: #70c98a; }
-.history-player-followbar > button[data-dimension="minecraft:the_nether"] { border-color: #ef826f; }
-.history-player-followbar > button[data-dimension="minecraft:the_end"] { border-color: #c4a2ef; }
-.history-player-followbar > button[data-offline="true"] { border-style: dashed; opacity: .7; }
-.history-player-followbar > button[aria-pressed="true"] { box-shadow: 0 0 0 2px white; }
+.history-player-followbar > button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 26px; min-width: 26px; max-width: 160px; height: 26px; min-height: 26px;
+  box-sizing: border-box; padding: 0; border: 0; border-radius: 0; background: transparent;
+  box-shadow: none; color: #fff; gap: 0; --roster-dimension: #9ca3af;
+  transition: width .22s ease, height .22s ease, min-width .22s ease, gap .22s ease;
+}
+.history-player-followbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.history-player-followbar[data-expanded="false"] > button { pointer-events: none; }
+.history-player-followbar[data-expanded="true"] > button {
+  width: max-content; min-width: 52px; height: auto; min-height: 46px; gap: 2px;
+  justify-content: flex-start;
+}
+.history-player-followbar > button[data-dimension="minecraft:overworld"] { --roster-dimension: #70c98a; }
+.history-player-followbar > button[data-dimension="minecraft:the_nether"] { --roster-dimension: #ef826f; }
+.history-player-followbar > button[data-dimension="minecraft:the_end"] { --roster-dimension: #c4a2ef; }
+.history-player-followbar > button[aria-pressed="true"] { box-shadow: none; }
+.history-player-followbar > button[aria-pressed="true"] .history-roster-name { text-decoration: underline; }
 .history-roster-face { display: block; position: relative; width: 32px; height: 32px; overflow: hidden; flex-shrink: 0; }
+.history-player-followbar .history-roster-face {
+  outline: 1px solid var(--roster-dimension); transform: scale(.6875);
+  transition: transform .22s ease; transform-origin: center;
+}
+.history-player-followbar[data-expanded="true"] .history-roster-face { transform: scale(1); }
+.history-player-followbar > button:focus-visible .history-roster-face { outline: 2px solid white; outline-offset: 2px; }
+.history-player-followbar > button[data-offline="true"] .history-roster-face img { filter: grayscale(1); opacity: .5; }
 .history-player-followbar > button .history-roster-face img,
 .history-offline-location .history-roster-face img {
   position: absolute; width: 256px; height: auto; max-width: none;
@@ -1344,7 +1357,21 @@ bluemap-player-replay .history-chat-death > span {
 .history-offline-location .history-roster-face .history-roster-hat { left: -160px; }
 .history-player-followbar > button .history-roster-fallback img,
 .history-offline-location .history-roster-fallback img { width: 32px; height: 32px; left: 0; top: 0; }
-.history-roster-name { font-weight: bold; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.history-roster-dimension, .history-roster-health, .history-roster-action { font-size: 10px; }
-.history-roster-action { max-width: 100%; white-space: normal; }
+.history-roster-name {
+  font-size: 10px; line-height: 12px; max-width: 0; max-height: 0; visibility: hidden; opacity: 0;
+  white-space: normal; overflow-wrap: anywhere; overflow: visible; text-overflow: clip;
+  text-shadow: 0 1px 3px #000, 0 0 3px #000;
+  transition: max-width .22s ease, max-height .22s ease, opacity .22s ease;
+}
+.history-player-followbar[data-expanded="true"] .history-roster-name { max-width: 152px; max-height: 100px; visibility: visible; opacity: 1; }
+.history-roster-details { position: fixed; z-index: 1100; max-width: min(240px, calc(100vw - 16px)); box-sizing: border-box; padding: 6px 8px; border: 1px solid #ffffff50; border-radius: 6px; background: #181818f5; color: #eee; font: 12px/1.5 sans-serif; white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; box-shadow: 0 2px 8px #0008; }
+.history-roster-details[hidden] { display: none; }
 .history-offline-location { display: flex; align-items: center; gap: 5px; padding: 3px; background: #181818db; color: white; border: 1px dashed #aaa; border-radius: 4px; opacity: .8; white-space: nowrap; font-size: 11px; }
+@media (min-width: 601px) { .history-player-followbar { top: 8px; } }
+@media (max-width: 600px) {
+  .history-player-followbar { left: 8px; transform: none; max-width: calc(100vw - 144px); gap: 3px; }
+}
+@media (pointer: coarse) { .history-player-followbar { padding-top: 9px; padding-bottom: 9px; } }
+@media (prefers-reduced-motion: reduce) {
+  .history-player-followbar > button, .history-player-followbar .history-roster-face, .history-roster-name { transition: none; }
+}
