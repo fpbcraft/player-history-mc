@@ -48,6 +48,10 @@ class Element {
     this.hidden = false;
     this.textContent = "";
   }
+  addEventListener() {}
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
   append(...children) {
     this.children.push(...children);
   }
@@ -312,7 +316,7 @@ test("skin heads, icon-only events, focus tooltips and exact trail dot", async (
 
     assert.equal(adapter.bar.children.length, 1);
     const followButton = adapter.bar.children[0];
-    assert.match(followButton.title, /Test player/);
+    assert.match(followButton.attributes["aria-label"], /Test player/);
     followButton.onclick({ stopPropagation() {} });
     assert.equal(mapControls.data.followingPlayer.userData.historyPlayer, 1);
     assert.equal(followButton.attributes["aria-pressed"], "true");

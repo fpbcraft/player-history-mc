@@ -968,6 +968,7 @@ export class BlueMapAdapter {
     this.hoverListeners.abort();
     if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
     this.tooltip.remove();
+    this.roster?.dispose();
     this.bar.remove();
     this.navigationToken = undefined;
     this.app.mapViewer.controlsManager?.controls?.stopFollowingPlayerMarker?.();

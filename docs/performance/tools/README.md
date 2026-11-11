@@ -59,3 +59,5 @@ node docs/performance/tools/verify-player-roster.cjs
 ```
 
 The historical seek uses the investigation's retained segment; replace it if it expires. Reports and screenshots default to `build/validation/player-roster/`.
+
+`verify-compact-roster.cjs` uses the same environment variables for an eight-player compact-layout check. It checks desktop hover/focus and mobile tap/scroll access to all eight players, card dimensions, popup bounds, separation from map controls, outside dismissal, activity-text removal and browser exceptions. It omits bulk BlueMap3D object downloads inside this isolated layout fixture. Output defaults to `build/validation/compact-roster/`.
