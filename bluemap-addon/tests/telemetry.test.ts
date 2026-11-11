@@ -187,3 +187,34 @@ test("default fetch does not bind the browser fetch receiver to the cache", asyn
     globalThis.fetch = original;
   }
 });
+
+test("slow pending state read does not expire or duplicate at the five second TTL", async () => {
+  const { vi } = await import("vitest");
+  const now = vi.spyOn(Date, "now");
+  now.mockReturnValue(0);
+  let resolve!: (value: unknown[]) => void;
+  const body = new Promise<unknown[]>((done) => {
+    resolve = done;
+  });
+  let reads = 0;
+  const cache = new TelemetryCache(new URL("https://fixture.invalid/"), 100, async () => {
+    reads++;
+    return { ok: true, status: 200, json: async () => body };
+  });
+  try {
+    const first = cache.load(0);
+    now.mockReturnValue(6_000);
+    const second = cache.load(0);
+    resolve([]);
+    await Promise.all([first, second]);
+    assert.equal(reads, 1);
+    now.mockReturnValue(10_000);
+    await cache.load(0);
+    assert.equal(reads, 1, "TTL starts after completion");
+    now.mockReturnValue(12_000);
+    await cache.load(0);
+    assert.equal(reads, 2);
+  } finally {
+    now.mockRestore();
+  }
+});

@@ -185,13 +185,14 @@ class WorldOverlayController {
       if (!this.integration) {
         const response = await fetch(new URL("player-history/integration.json", document.baseURI), {
           cache: "no-cache",
+          signal: AbortSignal.timeout(15_000),
         });
         if (!response.ok) throw new Error(`integration.json HTTP ${response.status}`);
         this.integration = (await response.json()) as Integration;
       }
       const response = await fetch(
         new URL("player-history/server-overlays.json", document.baseURI),
-        { cache: "no-store" },
+        { cache: "no-store", signal: AbortSignal.timeout(15_000) },
       );
       if (!response.ok) throw new Error(`server-overlays.json HTTP ${response.status}`);
       const snapshot = (await response.json()) as ServerOverlaySnapshot;

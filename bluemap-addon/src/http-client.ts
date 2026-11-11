@@ -54,7 +54,9 @@ export class HistoryClient {
   async objectManifest(signal?: AbortSignal): Promise<ObjectHistoryManifest | null> {
     const response = await this.fetcher(new URL("data/objects/manifest.json", this.base), {
       cache: "no-store",
-      ...(signal ? { signal } : {}),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`Object history HTTP ${response.status}`);
@@ -65,7 +67,9 @@ export class HistoryClient {
   async activity(day: number, signal?: AbortSignal): Promise<[number, number][]> {
     const response = await this.fetcher(new URL(`data/activity/${day}.json`, this.base), {
       cache: "no-store",
-      ...(signal ? { signal } : {}),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
     });
     if (response.status === 404) return [];
     if (!response.ok) throw new Error("Recording density unavailable");
@@ -82,7 +86,9 @@ export class HistoryClient {
   async heatmap(level: string, time: number, signal?: AbortSignal): Promise<number[][]> {
     const response = await this.fetcher(new URL(`data/heatmap/${level}/${time}.json`, this.base), {
       cache: "no-store",
-      ...(signal ? { signal } : {}),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
     });
     if (response.status === 404) return [];
     if (!response.ok) throw new Error(`Heatmap HTTP ${response.status}`);

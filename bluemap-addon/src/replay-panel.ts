@@ -924,7 +924,7 @@ export class ReplayPanel extends HTMLElement {
       } else {
         this.statusCoordinator.clear("configuration");
       }
-      this.telemetryCache?.chunks.clear();
+      this.telemetryCache?.clear();
       for (const [control, cap] of [
         ["trails", "movement"],
         ["heat", "heatmap"],
@@ -1637,6 +1637,7 @@ export class ReplayPanel extends HTMLElement {
     this.objectAdapter = undefined;
     this.adapter?.dispose();
     this.adapter = undefined;
+    this.telemetryCache?.clear();
     this.telemetryCache = undefined;
     this.cache = undefined;
     unmountReplayPanelView(this);

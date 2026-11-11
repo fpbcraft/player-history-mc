@@ -1,3 +1,4 @@
+import { SharedRequests } from "./shared-requests.js";
 import { parseStateRecords } from "./protocol.js";
 import type {
   Fetcher,
@@ -80,6 +81,7 @@ export class TelemetryCache {
   readonly expires = new Map<number, number>();
   private readonly players = new WeakMap<StateRecord[], Map<number, StateRecord[]>>();
   private readonly fetcher: Fetcher;
+  private readonly requests = new SharedRequests<number, StateRecord[]>();
 
   constructor(
     readonly base: URL,
@@ -91,21 +93,30 @@ export class TelemetryCache {
 
   async load(time: number): Promise<StateRecord[]> {
     const start = Math.floor(time / this.duration) * this.duration;
-    if ((this.expires.get(start) ?? 0) < Date.now()) this.chunks.delete(start);
+    if ((this.expires.get(start) ?? Infinity) < Date.now()) this.chunks.delete(start);
     if (!this.chunks.has(start)) {
-      this.expires.set(start, Date.now() + 5_000);
-      const promise = this.fetcher(new URL(`data/states/${start}.json`, this.base), {
-        cache: "no-store",
-      })
-        .then(async (response) => {
+      this.expires.delete(start);
+      const promise = this.requests
+        .read(start, async (signal) => {
+          const deadline = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
+          const response = await this.fetcher(new URL(`data/states/${start}.json`, this.base), {
+            cache: "no-store",
+            signal: deadline,
+          });
           if (response.status === 404) return [];
           if (!response.ok) throw new Error("State history unavailable");
           if (!response.json) throw new Error("State history response is not JSON");
-          return parseStateRecords(await response.json())
+          const records = parseStateRecords(await response.json())
             .filter((record) => record.time >= start && record.time < start + this.duration)
             .sort((left, right) => left.time - right.time);
+          deadline.throwIfAborted();
+          return records;
         })
-        .catch(() => []);
+        .catch(() => [] as StateRecord[])
+        .then((records) => {
+          if (this.chunks.get(start) === promise) this.expires.set(start, Date.now() + 5_000);
+          return records;
+        });
       this.chunks.set(start, promise);
       while (this.chunks.size > 4) {
         const oldest = this.chunks.keys().next().value;
@@ -115,6 +126,12 @@ export class TelemetryCache {
       }
     }
     return this.chunks.get(start) ?? [];
+  }
+
+  clear(): void {
+    this.requests.clear();
+    this.chunks.clear();
+    this.expires.clear();
   }
 
   async at(player: number, time: number): Promise<PlayerState | null> {
