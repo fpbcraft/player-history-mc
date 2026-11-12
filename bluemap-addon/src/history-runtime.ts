@@ -1,4 +1,3 @@
-export { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
 export { ObjectReplaySession } from "./object-replay-session.js";
 export { ChunkCache } from "./replay-core.js";
 export { TelemetryCache, describeState } from "./telemetry.js";

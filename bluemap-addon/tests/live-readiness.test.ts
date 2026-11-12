@@ -1,3 +1,5 @@
+import { configureViewerHost } from "../src/viewer-host.js";
+import { createBlueMapHost } from "../src/bluemap-host.js";
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ReplayPanel } from "../src/replay-panel.js";
@@ -37,6 +39,7 @@ const flush = async () => {
   for (let i = 0; i < 15; i++) await Promise.resolve();
 };
 beforeEach(() => {
+  configureViewerHost(createBlueMapHost);
   vi.useFakeTimers();
   localStorage.clear();
   playerCalls.mockClear();
@@ -310,4 +313,16 @@ it("clears pairing after linking and retains a selectable command if clipboard i
   await vi.advanceTimersByTimeAsync(2_000);
   expect(panel.querySelector<HTMLElement>(".history-chat-pairing")?.hidden).toBe(true);
   expect(panel.querySelector('[data-control="chat-pair-command"]')?.textContent).toBe("");
+});
+
+it("clears live markers and offline locations when public presence expires", async () => {
+  document.body.append(panel);
+  await flush();
+  expect(playerCalls.mock.calls.at(-1)?.[0]).toHaveLength(1);
+  fetcher.mockImplementation(() => new Promise<Response>(() => {}));
+  await vi.advanceTimersByTimeAsync(11000);
+  (panel as unknown as { tickFrame(time: number): void }).tickFrame(11000);
+  expect(playerCalls.mock.calls.at(-1)?.[0]).toHaveLength(0);
+  expect(rosterCalls.mock.calls.at(-1)?.[0]).toHaveLength(0);
+  expect(offlineCalls.mock.calls.at(-1)?.[0]).toHaveLength(0);
 });

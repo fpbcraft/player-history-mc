@@ -1,3 +1,4 @@
+import type { MapAdapter } from "./map-adapter.js";
 import type {
   BlueMapApp,
   BlueMapPopupMarker,
@@ -49,7 +50,7 @@ export interface TooltipPointer {
   pointerType?: string;
 }
 
-export class BlueMapAdapter {
+export class BlueMapAdapter implements MapAdapter {
   readonly app: BlueMapApp;
   readonly api: BlueMapRuntime;
   readonly root: MarkerSet;

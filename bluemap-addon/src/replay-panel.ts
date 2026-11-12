@@ -1,8 +1,7 @@
 import { rosterPlayers } from "./player-roster.js";
 import { activityRangeTooLarge, loadActivityDensity } from "./activity-density.js";
-import { BlueMapAdapter } from "./bluemap-adapter.js";
-import type { BlueMap3DReplayAdapter } from "./bluemap3d-replay-adapter.js";
-import type { BlueMapApp, BlueMapRuntime } from "./bluemap-types.js";
+import type { MapAdapter, ObjectMapAdapter } from "./map-adapter.js";
+import { createViewerHost, type ViewerHost } from "./viewer-host.js";
 import { chatEventsBetween } from "./event-notifications.js";
 import type { ObjectReplaySession } from "./object-replay-session.js";
 import { ChatClient, HistoryClient } from "./http-client.js";
@@ -47,20 +46,15 @@ import { renderPlayerFilter } from "./ui/player-filter-view.js";
 import { mountReplayPanelView, unmountReplayPanelView } from "./ui/replay-panel-view.js";
 import { renderWebChatFeed } from "./ui/webchat-feed-view.js";
 
-declare global {
-  interface Window {
-    bluemap: BlueMapApp & { switchMap?(id: string, animate: boolean): Promise<void> };
-    BlueMap: BlueMapRuntime;
-  }
-}
-
-const BASE_URL = new URL("player-history/", globalThis.location?.href ?? "http://localhost/");
 const LIVE_POLL_INTERVAL_MS = 1_000;
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 export class ReplayPanel extends HTMLElement {
-  private readonly historyClient = new HistoryClient(BASE_URL);
+  private host!: ViewerHost;
+  private baseUrl!: URL;
+  private historyClient!: HistoryClient;
+  private objectAdapterLoading = false;
   private clock = new ReplayClock();
   private engine = new ReplayEngine();
   private names = new Map<number, string>();
@@ -80,11 +74,12 @@ export class ReplayPanel extends HTMLElement {
   private manifest?: HistoryManifest;
   private integration?: IntegrationMapping;
   private integrationLoading: Promise<IntegrationMapping> | undefined;
+  private liveExpiresAt = 0;
   private liveRegistry: HistoryRegistry | undefined;
   private cache: ChunkCache | undefined;
   private telemetryCache: TelemetryCache | undefined;
-  private adapter: BlueMapAdapter | undefined;
-  private objectAdapter: BlueMap3DReplayAdapter | undefined;
+  private adapter: MapAdapter | undefined;
+  private objectAdapter: ObjectMapAdapter | undefined;
   private history: Awaited<ReturnType<typeof loadHistoryRuntime>> | undefined;
   private historyLoading: Promise<void> | undefined;
   private objectReplay: ObjectReplaySession | undefined;
@@ -222,6 +217,9 @@ export class ReplayPanel extends HTMLElement {
   }
 
   connectedCallback(): void {
+    this.host = createViewerHost();
+    this.baseUrl = this.host.baseUrl;
+    this.historyClient = new HistoryClient(this.baseUrl);
     this.lifecycle.dispose();
     this.requests.abortAll();
     this.lifecycle = new PanelLifecycle();
@@ -275,6 +273,7 @@ export class ReplayPanel extends HTMLElement {
     this.chatSessionStatus = "";
     this.chatFeedError = "";
     this.liveRegistry = undefined;
+    this.liveExpiresAt = 0;
     this.integrationLoading = undefined;
     this.historyLoading = undefined;
     this.liveFeed.reset();
@@ -817,7 +816,7 @@ export class ReplayPanel extends HTMLElement {
   private notifyLiveChat(event: HistoryEvent, registry = this.manifest?.registry): void {
     if (!this.require<HTMLElement>(".history-chat-panel").hidden) return;
     const player = registry?.players.find((candidate) => candidate.id === event.point.player);
-    const mapRoot = window.bluemap?.mapViewer?.map?.data?.mapDataRoot;
+    const mapRoot = this.host.mapRoot;
     const id = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
     this.chatNotifications = [
       ...this.chatNotifications,
@@ -916,8 +915,9 @@ export class ReplayPanel extends HTMLElement {
     if (this.integration) return this.integration;
     if (!this.integrationLoading) {
       const signal = this.lifecycle.signal;
-      this.integrationLoading = this.historyClient
-        .integration(signal)
+      this.integrationLoading = (
+        this.host.integration?.(signal) ?? this.historyClient.integration(signal)
+      )
         .then((mapping) => {
           if (signal.aborted) throw new DOMException("Disconnected", "AbortError");
           this.integration = mapping;
@@ -939,7 +939,7 @@ export class ReplayPanel extends HTMLElement {
           if (signal.aborted) throw new DOMException("Disconnected", "AbortError");
           this.history = history;
           this.objectReplay = new history.ObjectReplaySession(
-            new URL("data/objects", BASE_URL).href,
+            new URL("data/objects", this.baseUrl).href,
           );
         })
         .finally(() => {
@@ -1004,7 +1004,7 @@ export class ReplayPanel extends HTMLElement {
       if (!this.cache || this.cache.duration !== m.chunkDurationMs) {
         this.cache?.clear();
         this.cache = new this.history.ChunkCache(
-          new URL("data", BASE_URL).href,
+          new URL("data", this.baseUrl).href,
           m.chunkDurationMs,
           undefined,
           m.chunkRanges,
@@ -1201,8 +1201,7 @@ export class ReplayPanel extends HTMLElement {
     const mapId = Object.entries(this.integration?.mapWorlds || {}).find(
       ([, key]) => key === worldKey,
     )?.[0];
-    if (mapId && mapId !== this.adapter?.mapId && window.bluemap?.switchMap)
-      await window.bluemap.switchMap(mapId, false);
+    if (mapId && mapId !== this.adapter?.mapId) await this.host.switchMap(mapId);
     this.adapter?.focusPoint(event.point);
   }
   seek(time: number, render = true): void {
@@ -1258,6 +1257,17 @@ export class ReplayPanel extends HTMLElement {
       ? Math.max(0, Math.min(time - this.lastFrame, 1000))
       : 0;
     this.lastFrame = time;
+    if (this.liveExpiresAt && Date.now() > this.liveExpiresAt) {
+      this.liveExpiresAt = 0;
+      this.liveReplay.reset();
+      this.livePoints = [];
+      this.liveEvents = [];
+      this.liveStates = {};
+      this.lastLocations = [];
+      this.liveOnline.clear();
+      this.lastRosterUpdate = -Infinity;
+      this.eventRevision++;
+    }
     this.lifecycle.frame((t) => this.tickFrame(t));
     if (this.manifest && this.cache) {
       if (!this.scrubbing && this.clock.rate) {
@@ -1305,9 +1315,9 @@ export class ReplayPanel extends HTMLElement {
       const mapId = Object.entries(this.integration?.mapWorlds ?? {}).find(
         ([, value]) => value === key,
       )?.[0];
-      if (!mapId || !window.bluemap.switchMap) return;
+      if (!mapId) return;
       try {
-        await window.bluemap.switchMap(mapId);
+        await this.host.switchMap(mapId);
         if (this.isConnected) this.render();
       } catch (error) {
         this.report(error);
@@ -1342,15 +1352,34 @@ export class ReplayPanel extends HTMLElement {
     }
     try {
       if (!this.adapter) {
-        this.adapter = new BlueMapAdapter(window.bluemap, window.BlueMap);
+        this.adapter = this.host.createAdapter();
         this.overlayKeys = { event: null, heat: null, timeline: null, trail: null };
       }
-      if (this.history && !this.objectAdapter)
-        this.objectAdapter = new this.history.BlueMap3DReplayAdapter(window.BlueMap);
+      if (
+        this.history &&
+        !this.objectAdapter &&
+        !this.objectAdapterLoading &&
+        this.host.createObjectAdapter
+      ) {
+        this.objectAdapterLoading = true;
+        const signal = this.lifecycle.signal;
+        void this.host
+          .createObjectAdapter()
+          .then((adapter) => {
+            if (signal.aborted) adapter.dispose();
+            else this.objectAdapter = adapter;
+          })
+          .catch((error) => {
+            if (!signal.aborted) this.report(error);
+          })
+          .finally(() => {
+            if (!signal.aborted) this.objectAdapterLoading = false;
+          });
+      }
       if (this.history && this.manifest && !this.telemetryCache) {
         const manifest = this.manifest;
         const history = this.history;
-        const telemetryCache = new history.TelemetryCache(BASE_URL, manifest.chunkDurationMs);
+        const telemetryCache = new history.TelemetryCache(this.baseUrl, manifest.chunkDurationMs);
         this.telemetryCache = telemetryCache;
         this.adapter.stateDetails = async (player, time) =>
           history.describeState(
@@ -1385,7 +1414,7 @@ export class ReplayPanel extends HTMLElement {
             objectFrame.poses,
             objectFrame.objects,
             objectFrame.geometries,
-            new URL("data/objects/", BASE_URL).href,
+            new URL("data/objects/", this.baseUrl).href,
           );
         } else {
           this.objectAdapter.clear();
@@ -1465,9 +1494,7 @@ export class ReplayPanel extends HTMLElement {
       livePoints: this.livePoints,
       manifest: this.manifest,
       names: this.names,
-      ...(window.bluemap?.mapViewer?.map?.data?.mapDataRoot
-        ? { mapRoot: window.bluemap.mapViewer.map.data.mapDataRoot }
-        : {}),
+      ...(this.host.mapRoot ? { mapRoot: this.host.mapRoot } : {}),
       registryRevision: this.registryRevision,
       rangeEvents: this.rangeEvents,
       selection: this.selection,
@@ -1500,6 +1527,7 @@ export class ReplayPanel extends HTMLElement {
       const update = this.liveFeed.apply(data);
       if (!this.isConnected || !this.requests.current("live", controller) || !update) return;
 
+      this.liveExpiresAt = update.generatedAt + 10000;
       this.liveRegistry = update.registry;
       this.livePoints = update.points;
       this.liveEvents = update.events;
@@ -1676,6 +1704,7 @@ export class ReplayPanel extends HTMLElement {
     }
   }
   disconnectedCallback(): void {
+    this.objectAdapterLoading = false;
     this.lifecycle.dispose();
     this.requests.abortAll();
     this.cache?.clear();

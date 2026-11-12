@@ -1,4 +1,4 @@
-import type { BlueMapAdapter } from "./bluemap-adapter.js";
+import type { MapAdapter } from "./map-adapter.js";
 import { type ChunkCache, mergePoints, ReplayEngine } from "./replay-core.js";
 import { combineProductionEvents, visibleEvents } from "./replay-state.js";
 import { formatDate } from "./time-format.js";
@@ -15,7 +15,7 @@ export interface OverlayKeys {
 }
 
 export interface OverlayCoordinatorInput {
-  adapter: BlueMapAdapter | undefined;
+  adapter: MapAdapter | undefined;
   cache: ChunkCache | undefined;
   clock: { from: number; to: number; time: number };
   disabledEvents: ReadonlySet<string>;
@@ -122,6 +122,7 @@ export const updateReplayOverlays = (input: OverlayCoordinatorInput): OverlayKey
     disabled: new Set(input.disabledEvents),
   }).slice(-500);
   const eventKey = [
+    events.map((event) => `${event.point.player}:${event.point.time}:${event.type}`).join(","),
     input.eventRevision,
     input.filterRevision,
     input.selectionRevision,

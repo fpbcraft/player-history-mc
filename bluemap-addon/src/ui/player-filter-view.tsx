@@ -1,5 +1,5 @@
 import { render } from "preact";
-import { playerColor } from "../bluemap-adapter.js";
+import { playerColor } from "../event-presentation.js";
 
 interface PlayerFilterProps {
   names: ReadonlyMap<number, string>;

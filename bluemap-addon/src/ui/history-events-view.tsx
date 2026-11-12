@@ -1,5 +1,5 @@
 import { render } from "preact";
-import { eventColor } from "../bluemap-adapter.js";
+import { eventColor } from "../event-presentation.js";
 import { clusterTimelineEvents } from "../replay-state.js";
 import { chatMessage } from "../telemetry.js";
 import type { HistoryEvent, JsonObject, RegistryPlayer } from "../types.js";
