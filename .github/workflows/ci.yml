@@ -59,6 +59,7 @@ jobs:
             recorder-neoforge/build/libs/*.jar
             bluemap-neoforge/build/libs/*.jar
             motd-neoforge/build/libs/*.jar
+            public-assets-neoforge/build/libs/*.jar
           if-no-files-found: error
 
   visual:

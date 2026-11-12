@@ -1,4 +1,4 @@
-package dev.playerhistory.bluemap;
+package dev.playerhistory.assets;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -19,16 +19,18 @@ import net.minecraft.server.MinecraftServer;
  * <p>BlueMap already has the configured SkinProvider, including custom/offline providers.
  * Reusing it means Player History never needs Mojang credentials or a second skin cache.
  */
-final class PlayerSkinPublisher implements AutoCloseable {
+public final class PlayerSkinPublisher implements AutoCloseable {
   private final LogSink log;
   private final ExecutorService worker;
   private final Set<UUID> queued = ConcurrentHashMap.newKeySet();
   private final Set<UUID> published = ConcurrentHashMap.newKeySet();
+  private final Map<UUID, Long> retryAt = new ConcurrentHashMap<>();
   private volatile Object api;
+  private final Map<UUID, String> textureProperties = new ConcurrentHashMap<>();
   private volatile Path skinsRoot;
   private long nextRegistryScan;
 
-  PlayerSkinPublisher(LogSink log) {
+  public PlayerSkinPublisher(LogSink log) {
     this.log = log;
     this.worker =
         Executors.newSingleThreadExecutor(
@@ -40,10 +42,11 @@ final class PlayerSkinPublisher implements AutoCloseable {
             });
   }
 
-  void configure(Object blueMapApi, Path webRoot) {
+  public void configure(Object blueMapApi, Path webRoot) {
     api = blueMapApi;
     skinsRoot = webRoot.resolve("player-history/skins").normalize();
     published.clear();
+    retryAt.clear();
     queued.clear();
     try {
       Files.createDirectories(skinsRoot);
@@ -54,19 +57,30 @@ final class PlayerSkinPublisher implements AutoCloseable {
     }
   }
 
-  void disable() {
+  public void configureStandalone(Path webRoot) {
+    api = null;
+    skinsRoot = webRoot.resolve("player-history/skins").normalize();
+    published.clear();
+    retryAt.clear(); queued.clear(); textureProperties.clear();
+  }
+
+  public void disable() {
     api = null;
     skinsRoot = null;
   }
 
-  void tick(MinecraftServer server, Path worldRoot) {
-    if (api == null || skinsRoot == null) return;
-    for (var player : server.getPlayerList().getPlayers()) queue(player.getUUID());
+  public void tick(MinecraftServer server, Path worldRoot) {
+    if (skinsRoot == null) return;
+    for (var player : server.getPlayerList().getPlayers()) {
+      for (var property : player.getGameProfile().getProperties().get("textures"))
+        textureProperties.put(player.getUUID(), property.value());
+      queue(player.getUUID());
+    }
 
     long now = System.currentTimeMillis();
     if (worldRoot != null && now >= nextRegistryScan) {
       nextRegistryScan = now + 30_000;
-      queueRegistry(worldRoot.resolve("player-history/registry.json"));
+      worker.execute(() -> queueRegistry(worldRoot.resolve("player-history/registry.json")));
     }
   }
 
@@ -91,12 +105,13 @@ final class PlayerSkinPublisher implements AutoCloseable {
   }
 
   private void queue(UUID uuid) {
-    if (published.contains(uuid) || !queued.add(uuid)) return;
+    if (published.contains(uuid) || System.currentTimeMillis() < retryAt.getOrDefault(uuid, 0L) || !queued.add(uuid)) return;
     worker.execute(
         () -> {
           try {
             publish(uuid);
           } finally {
+            if (!published.contains(uuid)) retryAt.put(uuid, System.currentTimeMillis() + 30000);
             queued.remove(uuid);
           }
         });
@@ -105,15 +120,23 @@ final class PlayerSkinPublisher implements AutoCloseable {
   private void publish(UUID uuid) {
     Object currentApi = api;
     Path currentRoot = skinsRoot;
-    if (currentApi == null || currentRoot == null || published.contains(uuid)) return;
+    if (currentRoot == null || published.contains(uuid)) return;
 
     try {
-      Object plugin = currentApi.getClass().getMethod("getPlugin").invoke(currentApi);
-      Object provider = plugin.getClass().getMethod("getSkinProvider").invoke(plugin);
-      Object loaded = provider.getClass().getMethod("load", UUID.class).invoke(provider, uuid);
-      if (!(loaded instanceof Optional<?> optional) || optional.isEmpty()) return;
-      Object image = optional.get();
-      if (!(image instanceof BufferedImage skin)) return;
+      BufferedImage skin;
+      if (currentApi != null) {
+        Object plugin = currentApi.getClass().getMethod("getPlugin").invoke(currentApi);
+        Object provider = plugin.getClass().getMethod("getSkinProvider").invoke(plugin);
+        Object loaded = provider.getClass().getMethod("load", UUID.class).invoke(provider, uuid);
+        if (!(loaded instanceof Optional<?> optional) || optional.isEmpty()) return;
+        if (!(optional.get() instanceof BufferedImage image)) return;
+        skin = image;
+      } else {
+        String encoded = textureProperties.get(uuid);
+        if (encoded == null) return; // Unavailable/offline profiles use the viewer's bundled head.
+        skin = loadProfileSkin(encoded);
+        if (skin == null) return;
+      }
 
       int sourceWidth = skin.getWidth();
       int sourceHeight = skin.getHeight();
@@ -140,8 +163,34 @@ final class PlayerSkinPublisher implements AutoCloseable {
     } catch (InvocationTargetException error) {
       Throwable cause = error.getCause();
       log.warn("Could not load skin for " + uuid + ": " + (cause == null ? error : cause));
-    } catch (ReflectiveOperationException | IOException | RuntimeException error) {
+    } catch (ReflectiveOperationException | IOException | java.net.URISyntaxException | RuntimeException error) {
       log.warn("Could not publish skin for " + uuid + ": " + error);
+    }
+  }
+
+  /** Only the standard texture host is allowed; no profile-controlled arbitrary URL fetches. */
+  private static BufferedImage loadProfileSkin(String encoded) throws IOException, java.net.URISyntaxException {
+    JsonObject profile = JsonFiles.GSON.fromJson(new String(Base64.getDecoder().decode(encoded),
+        java.nio.charset.StandardCharsets.UTF_8), JsonObject.class);
+    if (profile == null || !profile.has("textures")) return null;
+    JsonObject textures = profile.getAsJsonObject("textures");
+    if (!textures.has("SKIN")) return null;
+    java.net.URI source = java.net.URI.create(textures.getAsJsonObject("SKIN").get("url").getAsString());
+    if (!"textures.minecraft.net".equals(source.getHost()) || !source.getPath().matches("/texture/[a-fA-F0-9]+")) return null;
+    var connection = new java.net.URI("https", "textures.minecraft.net", source.getPath(), null).toURL().openConnection();
+    connection.setConnectTimeout(5000); connection.setReadTimeout(5000);
+    byte[] bytes;
+    try (var input = connection.getInputStream()) { bytes = input.readNBytes(1024 * 1024 + 1); }
+    if (bytes.length > 1024 * 1024) return null;
+    try (var input = ImageIO.createImageInputStream(new java.io.ByteArrayInputStream(bytes))) {
+      var readers = ImageIO.getImageReaders(input);
+      if (!readers.hasNext()) return null;
+      var reader = readers.next();
+      try {
+        reader.setInput(input);
+        if (reader.getWidth(0) > 1024 || reader.getHeight(0) > 1024) return null;
+        return reader.read(0);
+      } finally { reader.dispose(); }
     }
   }
 

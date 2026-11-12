@@ -33,3 +33,9 @@ modId="bluemap3d"
 type="optional"
 versionRange="[1.0.0,)"
 side="SERVER"
+
+[[dependencies.playerhistory_bluemap]]
+modId="playerhistory_assets"
+type="required"
+versionRange="[2.9.0,)"
+side="SERVER"

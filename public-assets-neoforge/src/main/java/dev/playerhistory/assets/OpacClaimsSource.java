@@ -1,4 +1,4 @@
-package dev.playerhistory.bluemap;
+package dev.playerhistory.assets;
 
 import dev.playerhistory.core.LogSink;
 

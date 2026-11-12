@@ -1,4 +1,4 @@
-package dev.playerhistory.bluemap;
+package dev.playerhistory.assets;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;

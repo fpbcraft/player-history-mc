@@ -1,0 +1,25 @@
+plugins { id 'java-library'; id 'net.neoforged.moddev' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+neoForge { version = '21.1.248'; mods { playerhistory_assets { sourceSet sourceSets.main } } }
+repositories {
+  exclusiveContent {
+    forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+    filter { includeGroup 'maven.modrinth' }
+  }
+}
+dependencies {
+  implementation project(':recorder-neoforge')
+  compileOnly 'org.ow2.asm:asm:9.7.1'
+  compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
+  testImplementation 'com.google.code.gson:gson:2.10.1'
+  testImplementation 'org.ow2.asm:asm:9.7.1'
+  testImplementation platform('org.junit:junit-bom:5.11.4')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+test { useJUnitPlatform() }
+tasks.named('processResources') {
+ inputs.property 'version', project.version
+ filesMatching('META-INF/neoforge.mods.toml') { expand version: project.version }
+}
+base { archivesName = 'player-history-public-assets' }
