@@ -51,8 +51,9 @@ final class DioramaWebBridge {
       extensions.getMethod("registerAssets", String.class, String.class, Class.class, String.class,
           List.class, List.class, List.class)
           .invoke(null, ID, PREFIX, DioramaWebBridge.class, "/", files, List.of(SCRIPT), List.of(STYLE));
-      extensions.getMethod("registerPublicFiles", String.class, String.class, Supplier.class)
-          .invoke(null, ID, PREFIX, publishedAssets);
+      extensions.getMethod("registerPublicFiles", String.class, String.class, Supplier.class, List.class)
+          .invoke(null, ID, PREFIX, publishedAssets,
+              List.of("integration.json", "server-overlays.json", "world-status.json", "skins/", "equipment/"));
 
       if (HistoryConfig.PUBLISH.get()) {
         Path requested = Path.of(HistoryConfig.PUBLIC_DIRECTORY.get());
