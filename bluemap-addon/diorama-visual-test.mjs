@@ -1,3 +1,5 @@
+import { deflateSync } from "node:zlib";
+import { vehicleFixture, whitePng } from "./vehicle-fixture.mjs";
 import { createServer } from "node:http";
 import { readFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -41,6 +43,8 @@ const events = [
   { point: point(start + 300000), type: "DEATH", payload: {} },
 ];
 const requests = [];
+let terrainRevision = start;
+let terrainHeight = 64;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   requests.push(url.pathname);
@@ -58,7 +62,8 @@ const server = createServer(async (req, res) => {
         cos: Math.cos((40 * Math.PI) / 180),
         facing: 0,
         background: "#15171c",
-        updated: start,
+        updated: terrainRevision,
+        depth: true,
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
           folder: world.id ? "nether" : "overworld",
@@ -66,6 +71,125 @@ const server = createServer(async (req, res) => {
           tiles: [[-1, -1, 0, -1, -1, 0, 0, 0]],
         })),
       });
+    if (path === "/diorama/updates.json") return json({ updated: terrainRevision });
+    if (path === "/fixture/terrain-height") {
+      terrainHeight = Number(url.searchParams.get("y"));
+      terrainRevision++;
+      return json({ ok: true });
+    }
+    if (path === "/assets/bluemap3d/entities3d.json")
+      return json({
+        generatedAt: Date.now(),
+        intervalMs: 500,
+        objects: [
+          {
+            id: "train/fixture",
+            label: "Synthetic Create train",
+            dimension: "minecraft:overworld",
+            mesh: "assets/bluemap3d/train.bm3d",
+            pos: [-20 + Math.sin((Date.now() - started) / 3000) * 5, 68, 0],
+            rot: [
+              0,
+              Math.sin((Date.now() - started) / 10000),
+              0,
+              Math.cos((Date.now() - started) / 10000),
+            ],
+          },
+          {
+            id: "sable/fixture",
+            label: "Synthetic Sable ship",
+            dimension: "minecraft:overworld",
+            mesh: "assets/bluemap3d/train.bm3d",
+            pos: [24, 90, 8],
+            rot: [0, 0, 0, 1],
+          },
+        ],
+      });
+    if (path.endsWith(".bm3d")) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      return res.end(Buffer.from(vehicleFixture()));
+    }
+    if (path.endsWith("white.png")) {
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(whitePng);
+    }
+    if (path.endsWith(".depth")) {
+      const match = /(-?\d+)_(-?\d+)\.depth$/.exec(path),
+        tileV = Number(match?.[2] ?? 0);
+      const buffer = new ArrayBuffer(16 + 512 * 512 * 4),
+        view = new DataView(buffer);
+      view.setUint32(0, 0x44444550, false);
+      view.setUint32(4, 2, true);
+      view.setUint32(8, 512, true);
+      view.setUint32(12, 512, true);
+      const values = new Float32Array(buffer, 16),
+        sin = Math.sin((40 * Math.PI) / 180),
+        cos = Math.cos((40 * Math.PI) / 180);
+      for (let y = 0; y < 512; y++) {
+        const v = tileV * 128 + (y + 0.5) / 4;
+        const depth = -(sin * terrainHeight + (cos * (v + terrainHeight * cos)) / sin);
+        values.fill(depth, y * 512, (y + 1) * 512);
+      }
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      return res.end(
+        Buffer.concat([Buffer.from(buffer, 0, 16), deflateSync(Buffer.from(buffer, 16))]),
+      );
+    }
+    if (path === "/player-history/data/objects/manifest.json")
+      return json({
+        protocolVersion: 3,
+        earliestTimestamp: start,
+        latestTimestamp: started,
+        chunkDurationMs: 60000,
+        positionScale: 32,
+        quaternionScale: 32767,
+        scaleScale: 1024,
+        geometryArchive: true,
+        registry: {
+          objects: [
+            {
+              id: 1,
+              provider: "create_contraptions",
+              sourceId: "fixture-train",
+              label: "Recorded train",
+            },
+          ],
+          worlds: ["minecraft:overworld"],
+        },
+        geometries: [
+          {
+            provider: "create_contraptions",
+            sourceId: "fixture-train",
+            version: 1,
+            mesh: "meshes/train.bm3d",
+            atlas: "meshes/white.png",
+            lastReferencedAt: started,
+          },
+        ],
+      });
+    if (path.includes("/data/objects/chunks/")) {
+      const bucket = +path.split("/").at(-1).replace(".json", "");
+      return json(
+        Array.from({ length: 7 }, (_, i) => ({
+          object: 1,
+          time: bucket + i * 10000,
+          world: 0,
+          x: -20 * 32,
+          y: 68 * 32,
+          z: 0,
+          qx: 0,
+          qy: 0,
+          qz: 0,
+          qw: 32767,
+          sx: 1024,
+          sy: 1024,
+          sz: 1024,
+          geometry: 1,
+          flags: 0,
+          groups: [],
+        })),
+      );
+    }
     if (path === "/diorama/extensions.json")
       return json({
         scripts: ["/player-history/diorama-history.js"],
@@ -183,7 +307,9 @@ const chrome = spawn(
   [
     "--headless=new",
     "--no-sandbox",
-    "--disable-gpu",
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-unsafe-swiftshader",
     "--remote-debugging-port=0",
     `--user-data-dir=${profile}`,
     "about:blank",
@@ -262,7 +388,7 @@ try {
         JSON.stringify({
           errors: cdp.runtimeErrors,
           state: await cdp.evaluate(
-            `({text:document.body.innerText,api:!!window.diorama,state:window.diorama?.getState(),markers:[...document.querySelectorAll(".diorama-history-marker")].map(e=>({hidden:e.hidden,style:e.style.cssText,rect:e.getBoundingClientRect().toJSON()})),active:document.activeElement?.outerHTML})`,
+            `({text:document.body.innerText,api:!!window.diorama,state:window.diorama?.getState(),markers:[...document.querySelectorAll(".diorama-history-marker")].map(e=>({hidden:e.hidden,style:e.style.cssText,rect:e.getBoundingClientRect().toJSON()})),active:document.activeElement?.className})`,
           ),
           requests: requests.slice(-30),
         }),
@@ -271,6 +397,12 @@ try {
   const capture = async (name) => {
     const result = await cdp.send("Page.captureScreenshot", { format: "png" });
     await writeFile(join(output, `${name}.png`), Buffer.from(result.data, "base64"));
+  };
+  const orangePixels = async () => {
+    const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+    return cdp.evaluate(`(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());
+      const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext("2d");context.drawImage(image,0,0);
+      const data=context.getImageData(1000,660,460,220).data;let count=0;for(let i=0;i<data.length;i+=4)if(data[i]>220&&data[i+1]>160&&data[i+1]<220&&data[i+2]<180)count++;image.close();return count;})()`);
   };
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 1280,
@@ -284,13 +416,14 @@ try {
   await wait('document.querySelectorAll(".diorama-history-marker").length >= 2');
   assert.equal(await cdp.evaluate("window.diorama.getState().pixelRatio"), 2);
   const initial = await cdp.evaluate(
-    'document.querySelector(".diorama-history-marker:not(.diorama-history-offline)").style.transform',
+    'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
   );
+  await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
   const tileRequests = requests.filter((path) => path.endsWith(".jpg")).length;
   await delay(2200);
   assert.notEqual(
     await cdp.evaluate(
-      'document.querySelector(".diorama-history-marker:not(.diorama-history-offline)").style.transform',
+      'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
     ),
     initial,
     "Live markers must move",
@@ -300,18 +433,57 @@ try {
     tileRequests,
     "Live overlays must not reload terrain",
   );
-  await cdp.evaluate('document.querySelector(".diorama-history-marker").click()');
+  await cdp.evaluate(
+    'document.querySelector(".diorama-history-marker:not(.diorama-object-marker)").click()',
+  );
   await wait('!document.querySelector(".diorama-history-tooltip").hidden');
   assert.equal(
     await cdp.evaluate(`document.querySelector('.heart.empty')?.getBoundingClientRect().width`),
     5,
     "Terrain empty-state CSS must not resize empty health hearts",
   );
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2',
+  );
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.depthTiles) > 0',
+  );
   await capture("desktop-live-tooltip");
+  assert.ok((await orangePixels()) > 10, "Actual orange vehicle mesh pixels must be visible");
+  await capture("desktop-live-vehicles");
+  // Simulate a terrain revision without reloading the viewer or changing the vehicle model URL.
+  const meshRequests = requests.filter((path) => path.endsWith(".bm3d")).length;
+  await cdp.evaluate(`fetch('/fixture/terrain-height?y=200')`);
+  await wait(
+    `window.diorama.depthTiles().some(tile=>tile.url.includes("v="+String(${start + 1})))`,
+  );
+  let occluded = false;
+  for (let i = 0; i < 30; i++) {
+    if ((await orangePixels()) === 0) {
+      occluded = true;
+      break;
+    }
+    await delay(100);
+  }
+  assert.ok(occluded, "Nearer terrain depth must hide vehicle pixels");
+  await capture("desktop-vehicles-occluded");
+  assert.equal(
+    requests.filter((path) => path.endsWith(".bm3d")).length,
+    meshRequests,
+    "Terrain revisions must not reload vehicle models",
+  );
+  await cdp.evaluate(`fetch('/fixture/terrain-height?y=64')`);
+  await wait(
+    `window.diorama.depthTiles().some(tile=>tile.url.includes("v="+String(${start + 2})))`,
+  );
+
   await cdp.evaluate('document.querySelector("bluemap-player-replay").open()');
   await wait('Number(document.querySelector("[name=timeline]").max)>1');
   await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start + 270000})`);
   await wait('document.querySelectorAll(".diorama-history-event").length>0');
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 1',
+  );
   await capture("desktop-replay");
   const before = await cdp.evaluate("window.diorama.getState().scale");
   await cdp.send("Input.dispatchMouseEvent", {
@@ -394,6 +566,10 @@ try {
     JSON.stringify(
       {
         liveMovement: true,
+        liveVehicleMeshes: true,
+        terrainDepth: true,
+        historicalVehicleMeshes: true,
+        revisionRefresh: true,
         overlayTileIsolation: true,
         historicalReplay: true,
         tooltips: true,

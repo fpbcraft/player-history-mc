@@ -1,3 +1,4 @@
+import type { DioramaSceneHost } from "./diorama-scene-host.js";
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
 import type { ObjectMapAdapter } from "./map-adapter.js";
 import type { ObjectGeometryEntry, ObjectPose, ObjectRegistryEntry } from "./types.js";
@@ -10,7 +11,10 @@ export class DioramaObjectAdapter implements ObjectMapAdapter {
   private dimension: string | undefined;
   private readonly listeners = new AbortController();
 
-  constructor(private readonly api: DioramaApi) {
+  constructor(
+    private readonly api: DioramaApi,
+    private readonly scene?: DioramaSceneHost,
+  ) {
     this.layer.className = "diorama-history-markers";
     this.overlay = api.registerOverlay("object-history", { element: this.layer });
     api.events.addEventListener("change", () => this.layout(), { signal: this.listeners.signal });
@@ -23,6 +27,7 @@ export class DioramaObjectAdapter implements ObjectMapAdapter {
     _base: string,
   ): void {
     this.dimension = this.api.getState()?.dimension;
+    this.scene?.setHistorical(poses, objects, _geometries, _base);
     const keep = new Set<number>();
     for (const pose of poses.slice(0, 1000)) {
       const identity = objects.find((object) => object.id === pose.object);
@@ -57,12 +62,14 @@ export class DioramaObjectAdapter implements ObjectMapAdapter {
   private layout(): void {
     for (const { element, pose } of this.markers.values()) {
       element.hidden = this.dimension !== this.api.getState()?.dimension;
+      element.dataset.model = String(this.scene?.hasHistorical(pose.object) ?? false);
       const pixel = this.api.screen(pose);
       if (!pixel) continue;
       element.style.transform = `translate(${pixel.x}px,${pixel.y}px) translate(-50%,-50%)`;
     }
   }
   clear(): void {
+    this.scene?.clearHistorical();
     this.layer.replaceChildren();
     this.markers.clear();
   }
