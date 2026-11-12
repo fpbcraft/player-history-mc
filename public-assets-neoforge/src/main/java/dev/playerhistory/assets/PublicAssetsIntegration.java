@@ -53,11 +53,11 @@ public final class PublicAssetsIntegration {
   private void start(ServerStartedEvent event) {
     MinecraftServer server = event.getServer();
     worldRoot = server.getWorldPath(LevelResource.ROOT);
-    Path configured = Path.of(WEB_ROOT.get());
-    Path root = (configured.isAbsolute() ? configured : worldRoot.resolve(configured)).toAbsolutePath().normalize();
-    Path privateRoot = worldRoot.resolve("player-history").toAbsolutePath().normalize();
-    if (root.startsWith(privateRoot) || privateRoot.startsWith(root)) {
-      log.warn("Refusing public asset root that overlaps private recorder storage: " + root);
+    Path root;
+    try { root = PublicAssetPaths.resolve(worldRoot, Path.of(WEB_ROOT.get())); }
+    catch (java.io.IOException | RuntimeException error) {
+      log.warn("Refusing invalid public asset root: " + error);
+      worldRoot = null;
       return;
     }
     overlays.start(server, root);
