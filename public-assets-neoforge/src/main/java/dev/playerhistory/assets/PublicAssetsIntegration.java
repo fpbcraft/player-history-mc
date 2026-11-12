@@ -32,6 +32,22 @@ public final class PublicAssetsIntegration {
   private final PlayerSkinPublisher skins;
   private final EquipmentAssetPublisher equipment;
   private Path worldRoot;
+  private Path standaloneAssetRoot;
+  private static volatile Path blueMapWebRoot;
+
+  /** BlueMap's publisher remains the sole writer when its bridge is installed. */
+  public static void blueMapWebRoot(Path root) {
+    blueMapWebRoot = root;
+  }
+
+  private Path currentPublicAssetFolder() {
+    if (ModList.get().isLoaded("playerhistory_bluemap")) {
+      Path root = blueMapWebRoot;
+      return root == null ? null : root.resolve("player-history");
+    }
+    Path root = standaloneAssetRoot;
+    return root == null ? null : root.resolve("player-history");
+  }
 
   public PublicAssetsIntegration(ModContainer container) {
     container.registerConfig(ModConfig.Type.COMMON, SPEC);
@@ -39,12 +55,14 @@ public final class PublicAssetsIntegration {
     // Do not sample entities, scan claims or write assets twice.
     if (ModList.get().isLoaded("playerhistory_bluemap")) {
       overlays = null; status = null; skins = null; equipment = null;
-      return;
+    } else {
+      overlays = new ServerOverlayPublisher(log);
+      status = new WorldStatusPublisher(log);
+      skins = new PlayerSkinPublisher(log);
+      equipment = new EquipmentAssetPublisher(log);
     }
-    overlays = new ServerOverlayPublisher(log);
-    status = new WorldStatusPublisher(log);
-    skins = new PlayerSkinPublisher(log);
-    equipment = new EquipmentAssetPublisher(log);
+    // Even when BlueMap owns the data publishers, Diorama must register its
+    // own viewer and read-only paths independently.
     NeoForge.EVENT_BUS.addListener(this::start);
     NeoForge.EVENT_BUS.addListener(this::tick);
     NeoForge.EVENT_BUS.addListener(this::stop);
@@ -60,19 +78,30 @@ public final class PublicAssetsIntegration {
       worldRoot = null;
       return;
     }
-    overlays.start(server, root);
-    status.start(server, root);
-    skins.configureStandalone(root);
-    equipment.configure(root, worldRoot);
+    standaloneAssetRoot = root;
+    if (overlays != null) {
+      overlays.start(server, root);
+      status.start(server, root);
+      skins.configureStandalone(root);
+      equipment.configure(root, worldRoot);
+    }
+    DioramaWebBridge.start(server, log, this::currentPublicAssetFolder);
   }
 
   private void tick(ServerTickEvent.Post event) {
     if (worldRoot == null) return;
-    overlays.tick(event.getServer()); status.tick(event.getServer());
-    skins.tick(event.getServer(), worldRoot); equipment.tick(worldRoot);
+    if (overlays != null) {
+      overlays.tick(event.getServer()); status.tick(event.getServer());
+      skins.tick(event.getServer(), worldRoot); equipment.tick(worldRoot);
+    }
   }
 
   private void stop(ServerStoppingEvent event) {
-    overlays.stop(); status.stop(); skins.disable(); equipment.disable(); worldRoot = null;
+    DioramaWebBridge.stop();
+    if (overlays != null) {
+      overlays.stop(); status.stop(); skins.disable(); equipment.disable();
+    }
+    standaloneAssetRoot = null;
+    worldRoot = null;
   }
 }
