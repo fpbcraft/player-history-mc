@@ -73,6 +73,7 @@ public final class BlueMapIntegration {
               (Consumer<Object>)
                   a -> {
                     api = null;
+                    PublicAssetsIntegration.blueMapWebRoot(null);
                     objectHistory.webRoot(null);
                     skins.disable();
                     equipment.disable();
@@ -95,6 +96,7 @@ public final class BlueMapIntegration {
   }
 
   private void stop(ServerStoppingEvent event) {
+    PublicAssetsIntegration.blueMapWebRoot(null);
     objectHistory.reset();
     equipment.disable();
     serverOverlays.stop();
@@ -186,6 +188,7 @@ public final class BlueMapIntegration {
               .toAbsolutePath()
               .normalize();
       objectHistory.webRoot(webRoot);
+      PublicAssetsIntegration.blueMapWebRoot(webRoot);
       skins.configure(api, webRoot);
       equipment.configure(webRoot, worldRoot);
       Path root = webRoot.resolve("player-history");

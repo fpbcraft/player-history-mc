@@ -100,6 +100,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew clean test build --no-daemon
+          python3 scripts/verify_diorama_jar.py
 
       - name: Upload verified release build
         uses: actions/upload-artifact@v4

@@ -18,7 +18,16 @@ dependencies {
   testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 test { useJUnitPlatform() }
+// The same verified frontend is embedded in both BlueMap and the optional
+// Diorama host. The server never needs Node.js or an external assets ZIP.
+sourceSets.main.resources {
+  srcDir('../bluemap-addon/dist')
+  include 'META-INF/**', 'playerhistory-equipment-compat.json',
+      'diorama-history.js', 'player-history.css', 'player-history-assets.json',
+      'modules/**/*.js'
+}
 tasks.named('processResources') {
+ dependsOn ':bluemap-neoforge:buildViewer'
  inputs.property 'version', project.version
  filesMatching('META-INF/neoforge.mods.toml') { expand version: project.version }
 }
