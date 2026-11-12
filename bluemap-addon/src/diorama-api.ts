@@ -24,7 +24,15 @@ export interface OverlayRegistration {
   invalidate(): void;
   remove(): void;
 }
+export interface DepthTile {
+  u: number;
+  v: number;
+  units: number;
+  pixels: number;
+  url: string;
+}
 export interface DioramaApi {
+  depthTiles?(): DepthTile[];
   version: 1;
   events: EventTarget;
   getState(): DioramaViewport | null;

@@ -26,3 +26,8 @@
 .diorama-trail-hit { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; padding: 0;
   background: white; border: 1px solid #15171c; border-radius: 50%; pointer-events: none; }
 .diorama-trail-hit[hidden] { display: none; }
+
+.diorama-history-markers { z-index: 3; }
+
+.diorama-object-marker[data-model="true"] { opacity: 0; }
+.diorama-object-marker[data-model="true"]:focus-visible { opacity: 1; }

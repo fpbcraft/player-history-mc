@@ -93,7 +93,7 @@ private root must never be used as a static web root.
 Both hosts share the replay panel, engine, cancellation, caches, live smoothing,
 range presets and date selection, timeline, speeds, selection, event filters,
 activity histogram, telemetry and web chat pairing/session flow. Diorama uses
-local skin heads and a composited canvas instead of a second WebGL scene.
+local skin heads and a composited canvas. An optional WebGL layer is loaded only when vehicle geometry is available.
 Roster clicks follow players across available mapped dimensions; map interaction
 or Escape stops following. Offline markers show their last-recorded timestamp.
 Unknown players do not get invented names or positions. Missing skins use the
@@ -105,12 +105,13 @@ clock. Heatmaps and X/Z chunk aggregates explicitly use an approximate Y=64
 reference plane, labelled in the menu; they are not terrain-conforming. Player
 and event coordinates always use their recorded Y, facing and active pitch.
 
-Recorded object poses render as labelled train/ship/gear icons without requesting
-object meshes. This reuses the existing object history when present; it does not
-create another recorder or add missing providers. Current object capture still
-requires its existing BlueMap3D source. Client-only equipment visuals fall back
-to telemetry/head markers. Terrain height sampling, underground cutaways,
-Nether interior layers and archived vehicle paths remain follow-up work.
+Live vehicles consume the existing same-origin `/assets/bluemap3d/entities3d.json` publication. Create trains and Sable ships use its BM3D meshes and textures, with interpolated transforms and supported mechanical animation nodes. Recorded poses use the existing object replay engine and archived geometry, with the same renderer. Missing/unsupported geometry or WebGL falls back to labelled accessible icons. Opening the map does not fetch the complete geometry archive.
+
+Set Diorama's `web-map-depth=true`, restart, and force-render existing terrain for occlusion. Keep `web-map-update-seconds=30` (or 60). Depth uses compressed camera-distance sidecars; at distant zooms or where sidecars are missing, vehicles render without terrain occlusion. The terrain keeps Diorama's facing/pitch; free camera rotation, vehicle shadows, animated recorded instance groups, terrain-conforming heatmaps, underground cutaways and Nether interior layers are not implemented here.
+
+The renderer limits concurrent model loads to two, caches at most 16 models with a 128 MiB decoded-resource budget, and displays at most 128 nearby vehicles. Depth loads are also bounded and obsolete requests are cancelled. Vehicle feeds older than 15 seconds are hidden; feeds must include `generatedAt` or an accurate HTTP `Last-Modified`. Missing feeds back off to 30-second polling. Live polling pauses in historical mode and hidden tabs.
+
+During coexistence, serve BlueMap3D's public `assets/bluemap3d/` directory at the same path on the shared HTTPS origin, with fresh JSON and revalidated model files. Never alias its parent or private recorder storage. The vehicle publishers and object geometry archive still depend on the existing BlueMap3D integration; the independent public-assets JAR does not replace those providers. No second server sampler is added by this frontend.
 
 ## Independent public publishers
 
@@ -146,10 +147,8 @@ DIORAMA_ROOT=/path/to/diorama CHROME_BIN=/path/to/chrome \
 
 Browser fixtures exercise live movement, tile isolation, history, tooltips,
 dimension following, pan/zoom, touch, high DPI, viewport overflow and cleanup.
-Screenshots/results are written under `bluemap-addon/visual-output/diorama/`.
+The fixture also checks real vehicle pixels, terrain-depth occlusion, model-cache isolation during terrain revisions and archived-model playback. Screenshots/results are written under `bluemap-addon/visual-output/diorama/`.
 They use clearly labelled synthetic terrain and do not prove real terrain alignment.
 
-The provided test listener at `192.168.0.31:8100` responded with empty dimension
-tile lists and 404 for public presence after the restart on 2026-11-12. No live
-server files were modified. Real OPAC/MineColonies/Create/Sable acceptance and
+The user is testing the merged changes at `192.168.0.31:8100`. No hybrid artifacts have been deployed by this change. Real OPAC/MineColonies/Create/Sable acceptance and
 production proxy validation remain required before merging or deploying.
