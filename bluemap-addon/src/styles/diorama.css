@@ -1,0 +1,28 @@
+/* Scoped to Diorama's composited layer; the replay panel keeps its existing CSS. */
+.diorama-history-markers { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.diorama-history-marker { position: absolute; left: 0; top: 0; width: 32px; height: 32px; padding: 0;
+  border: 2px solid; border-radius: 4px; background: #15171c; pointer-events: auto; cursor: pointer; }
+.diorama-history-marker[hidden] { display: none; }
+.diorama-history-marker .history-roster-face { width: 32px; height: 32px; transform: scale(.875); transform-origin: top left; }
+.diorama-history-marker:focus-visible { outline: 3px solid white; outline-offset: 3px; }
+.diorama-history-offline { opacity: .6; filter: grayscale(.8); }
+.diorama-history-event { border-radius: 50%; width: 26px; height: 26px; }
+.diorama-history-event svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.diorama-history-tooltip { position: fixed; z-index: 2000; max-width: min(360px, calc(100vw - 16px));
+  max-height: 45vh; overflow: auto; white-space: pre-line; padding: 10px; border-radius: 6px;
+  border: 1px solid #ffffff40; background: #15171cf5; color: #eee; pointer-events: none; }
+.diorama-player-bar { top: 64px !important; }
+.diorama-overlay-controls { position: fixed; right: 12px; top: 12px; z-index: 50; max-width: calc(100vw - 24px);
+  padding: 8px 12px; border: 1px solid #ffffff30; border-radius: 8px; background: #15171ce8; }
+.diorama-overlay-controls label { display: block; margin: 8px 0; }
+.diorama-overlay-controls small { display: block; max-width: 260px; color: #a3a9b4; }
+@media (max-width: 600px) { .diorama-player-bar { top: 100px !important; } }
+
+.diorama-history-marker .history-roster-face img { position: absolute; width: 256px; height: auto;
+  max-width: none; left: -32px; top: -32px; image-rendering: pixelated; }
+.diorama-history-marker .history-roster-face .history-roster-hat { left: -160px; }
+.diorama-history-marker .history-roster-fallback img { width: 32px; height: 32px; left: 0; top: 0; }
+
+.diorama-trail-hit { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; padding: 0;
+  background: white; border: 1px solid #15171c; border-radius: 50%; pointer-events: none; }
+.diorama-trail-hit[hidden] { display: none; }

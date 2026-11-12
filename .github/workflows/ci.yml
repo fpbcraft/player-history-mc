@@ -89,6 +89,18 @@ jobs:
         env:
           CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
         run: npm run visual:test
+      - name: Check out Diorama web API fixture source
+        uses: actions/checkout@v5
+        with:
+          repository: fpbcraft/diorama
+          ref: 20309ffe9f3c8a98da9926d5032b747a923fcfda
+          path: diorama-fixture
+      - name: Check Diorama viewer in the browser
+        working-directory: bluemap-addon
+        env:
+          CHROME_BIN: ${{ steps.chrome.outputs.chrome-path }}
+          DIORAMA_ROOT: ${{ github.workspace }}/diorama-fixture
+        run: npm run build && npm run visual:diorama
       - name: Upload viewer visual evidence
         if: always()
         uses: actions/upload-artifact@v4

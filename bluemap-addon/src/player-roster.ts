@@ -42,7 +42,7 @@ export const rosterSeen = (time: number, now = Date.now()): string => {
 };
 
 /** Crop the existing global skin, including its hat layer, without a map-local head dependency. */
-export const createRosterHead = (uuid?: string): HTMLElement => {
+export const createRosterHead = (uuid?: string, base?: URL): HTMLElement => {
   const face = document.createElement("span");
   face.className = "history-roster-face";
   const image = document.createElement("img");
@@ -64,8 +64,8 @@ export const createRosterHead = (uuid?: string): HTMLElement => {
     image.onerror = fallback;
     hat.onerror = fallback;
     image.src = new URL(
-      `player-history/skins/${encodeURIComponent(uuid)}.png`,
-      document.baseURI,
+      `skins/${encodeURIComponent(uuid)}.png`,
+      base ?? new URL("player-history/", document.baseURI),
     ).href;
     hat.src = image.src;
   } else fallback();
@@ -92,6 +92,7 @@ export class PlayerRoster {
   constructor(
     private readonly root: HTMLElement,
     private readonly select: (row: RosterPlayer) => void,
+    private readonly assetBase?: URL,
   ) {
     root.setAttribute("aria-label", "Player roster");
     root.dataset.expanded = "false";
@@ -274,7 +275,7 @@ export class PlayerRoster {
         const name = document.createElement("span");
         name.className = "history-roster-name";
         name.textContent = row.name;
-        card.button.replaceChildren(createRosterHead(row.uuid), name);
+        card.button.replaceChildren(createRosterHead(row.uuid, this.assetBase), name);
       }
       if (this.shown === card) this.showDetails(card, this.pinned);
     }
