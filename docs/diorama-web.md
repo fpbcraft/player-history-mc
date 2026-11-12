@@ -4,73 +4,89 @@ This integration consumes the same protocol-v2 public dataset as BlueMap. The
 recorder, binary history, state tracking and retention settings are unchanged.
 No recordings should be moved or deleted. Keep BlueMap at `/` during migration.
 
-## Build and prepare
+## Automatic JAR deployment (replaces manual asset copying)
 
-Requires Node 22+ and Java 21 for Player History; Diorama's current build uses
-Java 25. Build Diorama on top of its upstream feature integration PR #7, not
-master while #6/#7 remain unmerged.
+**Requires the matching Diorama Java extension host** (fpbcraft/diorama#12) and
+Player History's public-assets JAR from the corresponding release (fpbcraft/player-history-mc#78).
+The original v3.0.0 JAR does **not** contain this auto-installer.
 
-```sh
-npm ci --prefix bluemap-addon
-npm run check --prefix bluemap-addon
-./gradlew test build
-node scripts/prepare-diorama-web.mjs --output /tmp/diorama-web-review
-```
+1. Install/update Diorama, `player-history-recorder`, and `player-history-public-assets`
+   to versions containing these changes. If you use BlueMap, install the matching
+   `player-history-bluemap` JAR as well. Avoid mixed old/new Player History JARs.
+2. Leave the recorder's `publishing.enabled=true` and
+   `publishing.public-directory=player-history/public` (or your existing
+   intentionally public export). No recordings need moving or copying.
+3. Restart Minecraft, then refresh the Diorama map. **Do not create or copy
+   `extensions.json` or any JS/CSS/modules.** They are registered at startup
+   and served directly from the JAR.
+4. Test these URLs on the map's existing origin (port 8100 by default):
+   - `/extensions.auto.json` contains `/player-history/diorama-history.js`
+   - `/player-history/diorama-history.js` is JavaScript (HTTP 200)
+   - `/player-history/player-history.css` is CSS (HTTP 200)
+   - `/player-history/data/manifest.json` is the recorder's public protocol v2 manifest
+   - `/player-history/data/presence.json` is a live public snapshot when one is available
 
-The preparation command requires a new directory and never replaces a live site.
-It stages the compiled viewer and an `extensions.json` configuration. The updated
-Diorama viewer reads this optional file from its map directory; missing config
-leaves the lightweight terrain-only viewer operational. Diorama preserves that
-file when it rewrites its bundled page on startup.
+### How this works
 
-For an authorized deployment, copy the staged `extensions.json` into the Diorama
-map directory. Serve the staged `player-history/` files at `/player-history/`.
-Use the public-assets JAR described below for skins and server snapshots. Keep
-versioned `modules/` directories together with their bootstrap; remove older
-versions only after old browser sessions have expired.
+The JAR bundles its own `diorama-history.js`, stylesheet and versioned modules.
+Diorama's read-only web extension registry serves exactly the packaged filenames
+without extracting them to the map folder. A second, **virtual**
+`extensions.auto.json` manifest adds the scripts/styles to the viewer. Any
+user-maintained `extensions.json` is respected and deduplicated, not overwritten.
 
-## One HTTPS origin
+The registry separately exposes the recorder's **public export only** under
+`/player-history/data/` and the current public skin/overlay publisher under
+`/player-history/`. Requests are confined to those roots, reject symlinks and
+traversal paths, and are read-only. No private recorder data, sessions or
+`webchat-sessions.json` is mounted. Published history is not duplicated.
 
-Example nginx routes, inside the existing map HTTPS server:
+When BlueMap is present, its bridge still owns skin and server-overlay publishing.
+Diorama reads the **existing** BlueMap output; a second publisher is never
+started. Diorama-only servers use the public-assets module's existing standalone
+publisher and settings (`config/playerhistory_assets-common.toml`).
 
-```nginx
-# Keep the existing BlueMap root location.
-location /diorama/ {
-    alias /srv/minecraft/world/diorama-web/;
-    add_header Cache-Control "no-cache";
-}
-# This is ONLY the recorder's public export, never its parent directory.
-location /player-history/data/ {
-    alias /srv/minecraft/world/player-history/public/;
-    add_header Cache-Control "no-store";
-}
-location /player-history-api/ {
-    proxy_pass http://127.0.0.1:8101;
-    proxy_http_version 1.1;
-    proxy_read_timeout 10s;
-    client_max_body_size 4k;
-}
-# Assets may live in the existing BlueMap root during coexistence.
-location /player-history/ {
-    alias /srv/minecraft/world/player-history-web/player-history/;
-    add_header Cache-Control "no-cache";
-}
-```
+### Chat and HTTPS
 
-Place staged frontend files alongside the public assets in the final asset root.
-For production caching, use a more-specific `/player-history/modules/` route
-with `public, max-age=31536000, immutable`; leave bootstraps/styles revalidated
-and live JSON at `no-store`. Diorama's embedded handler supports JS, CSS and PNG,
-revalidates unversioned tiles, caches versioned tiles/modules immutably and never
-follows a link outside its map root. It does not mount the recorder directory.
-Reverse-proxy routes provide data access without weakening those protections.
-Set Diorama's `web-map-port=0` for static serving, or use a free internal port
-(e.g. 8102) with `web-map-address=127.0.0.1`. Leave BlueMap's port unchanged.
+If `webchat.enabled=true` and `webchat.bind=127.0.0.1`, Diorama registers a
+strictly bounded same-origin `/player-history-api/` route to the recorder's
+existing loopback chat server (`webchat.port`, default 8101).
+Only supported chat operations are proxied; it cannot access arbitrary hosts
+or filesystem paths. If chat is disabled or bound elsewhere, this route is not
+registered.
 
-The public history docs also describe `presence.json` and `lastLocations`:
-these existing protocol extensions are consumed without inventing online status
-from historical locations. The public feed remains responsible for visibility
-and exclusion. No second player position broadcaster is installed.
+**Deploy an HTTPS reverse proxy before using authenticated browser chat on an
+untrusted network.** HTTP directly on port 8100 does not encrypt pairing tokens.
+The read-only public replay/history features do not depend on chat being enabled.
+
+### Existing deployments and troubleshooting
+
+The old v3.0.0 deployment requires manually staged frontend files and a proxy.
+After upgrading both JARs/mods to this implementation, stale manually copied
+`world/diorama-web/player-history/` files may be left in place temporarily.
+The JAR's registered resources take precedence, so they cannot override the new
+bootstrap. Remove old copies only after confirming the new routes work.
+
+If `extensions.auto.json` is empty, verify that Diorama and public-assets are
+both running updated builds. If the JS loads but history is unavailable, check
+`publishing.enabled`, the public export directory and
+`/player-history/data/manifest.json`. If the roster/skin overlays are missing,
+check for `/player-history/server-overlays.json` and
+`/player-history/skins/<uuid>.png` (when known).
+
+## Manual staging (optional, for external static hosting)
+
+Manual `node scripts/prepare-diorama-web.mjs --output NEW_DIRECTORY` deployment
+remains available for external hosts that deliberately do not run Diorama's
+embedded web server. Build the frontend using Node 22+ first with
+`npm ci --prefix bluemap-addon` and `npm run build --prefix bluemap-addon`.
+The staging script refuses existing output folders and contains only static
+assets, not history data.
+
+For HTTPS frontends outside Diorama's embedded server, route
+`/player-history/data/` to **only** the public recorder export, serve
+`/player-history/` from the publisher's public asset root and proxy
+`/player-history-api/` to localhost:8101 if chat is desired. The recorder's
+private root must never be used as a static web root.
 
 ## Features
 
