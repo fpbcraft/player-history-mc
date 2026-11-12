@@ -1,6 +1,7 @@
 package dev.playerhistory.bluemap;
 
 import com.google.gson.Gson;
+import dev.playerhistory.assets.*;
 import dev.playerhistory.core.LogSink;
 import java.nio.file.*;
 import java.util.*;

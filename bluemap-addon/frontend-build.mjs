@@ -72,6 +72,7 @@ export async function createFrontendBuild({ onResult, outfile = scriptOutput } =
     entryPoints: {
       live: join(source, "player-history.ts"),
       history: join(source, "history-runtime.ts"),
+      diorama: join(source, "diorama-entry.ts"),
     },
     outdir: modules,
     splitting: true,
@@ -124,6 +125,10 @@ export async function createFrontendBuild({ onResult, outfile = scriptOutput } =
               await writeFile(
                 join(outputDirectory, "player-history-assets.json"),
                 JSON.stringify(files.map((file) => `modules/${version}/${file}`)),
+              );
+              await writeFile(
+                join(outputDirectory, "diorama-history.js"),
+                `import "./modules/${version}/diorama.js";\n`,
               );
               const url = `player-history/modules/${version}/live.js`;
               await writeFile(

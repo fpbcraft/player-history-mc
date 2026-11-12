@@ -1,4 +1,4 @@
-package dev.playerhistory.bluemap;
+package dev.playerhistory.assets;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -25,7 +25,7 @@ import net.minecraft.world.item.Equipable;
  * <p>Descriptors contain expanded triangles in centered one-block model space and direct
  * normalized UVs, so the browser only needs BufferGeometry plus the named texture.
  */
-final class EquipmentAssetPublisher {
+public final class EquipmentAssetPublisher {
   private static final int FORMAT = 1;
   private static final int ARMOR_FORMAT = 2;
   private static final long SCAN_INTERVAL_MS = 5_000;
@@ -45,7 +45,7 @@ final class EquipmentAssetPublisher {
       EquipmentCompatibilityConfig.defaults();
   private volatile long nextScan;
 
-  EquipmentAssetPublisher(LogSink log) {
+  public EquipmentAssetPublisher(LogSink log) {
     this.log = log;
     worker =
         Executors.newSingleThreadExecutor(
@@ -57,7 +57,7 @@ final class EquipmentAssetPublisher {
             });
   }
 
-  synchronized void configure(Path webRoot, Path worldRoot) {
+  public synchronized void configure(Path webRoot, Path worldRoot) {
     disable();
     root = webRoot.resolve("player-history/equipment").toAbsolutePath().normalize();
     registry = worldRoot.resolve("player-history/registry.json").toAbsolutePath().normalize();
@@ -80,7 +80,7 @@ final class EquipmentAssetPublisher {
     nextScan = 0;
   }
 
-  synchronized void disable() {
+  public synchronized void disable() {
     root = null;
     registry = null;
     processedModels.clear();
@@ -92,7 +92,7 @@ final class EquipmentAssetPublisher {
     if (current != null) current.close();
   }
 
-  void tick(Path ignoredWorldRoot) {
+  public void tick(Path ignoredWorldRoot) {
     if (root == null || registry == null) return;
     long now = System.currentTimeMillis();
     if (now < nextScan || !scanning.compareAndSet(false, true)) return;

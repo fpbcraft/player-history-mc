@@ -1,0 +1,23 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="MIT"
+[[mods]]
+modId="playerhistory_assets"
+version="${version}"
+displayName="Player History public assets"
+description="Map-independent server overlays, world status, skins and equipment assets."
+[[dependencies.playerhistory_assets]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.248,)"
+side="SERVER"
+[[dependencies.playerhistory_assets]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+side="SERVER"
+[[dependencies.playerhistory_assets]]
+modId="playerhistory"
+type="required"
+versionRange="[0.8.16,)"
+side="SERVER"

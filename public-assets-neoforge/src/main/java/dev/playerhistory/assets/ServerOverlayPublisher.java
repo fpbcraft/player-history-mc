@@ -1,8 +1,7 @@
-package dev.playerhistory.bluemap;
+package dev.playerhistory.assets;
 
 import dev.playerhistory.core.LogSink;
 
-import com.google.gson.Gson;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
@@ -25,9 +24,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 
-final class ServerOverlayPublisher {
+public final class ServerOverlayPublisher {
   private static final int PUBLISH_INTERVAL_TICKS = 40;
-  private static final Gson GSON = new Gson();
 
 
   record ChunkCell(int x, int z) {}
@@ -44,13 +42,16 @@ final class ServerOverlayPublisher {
   private volatile MinecraftServer server;
   private volatile Path output;
   private int ticks;
+  private PublicSnapshotWriter writer;
 
-  ServerOverlayPublisher(LogSink log) {
+  public ServerOverlayPublisher(LogSink log) {
     this.log = log;
     this.claims = ClaimsOverlaySource.create(log);
   }
 
-  void start(MinecraftServer server, Path webRoot) {
+  public void start(MinecraftServer server, Path webRoot) {
+    if (writer != null) writer.close();
+    writer = new PublicSnapshotWriter(log);
     MinecraftServer previous = this.server;
     this.server = server;
     this.output = webRoot.resolve("player-history/server-overlays.json");
@@ -62,18 +63,20 @@ final class ServerOverlayPublisher {
     publish();
   }
 
-  void webRoot(Path webRoot) {
+  public void webRoot(Path webRoot) {
     if (webRoot != null) output = webRoot.resolve("player-history/server-overlays.json");
   }
 
-  void stop() {
+  public void stop() {
+    if (writer != null) writer.close();
+    writer = null;
     claims.stop();
     server = null;
     output = null;
     ticks = 0;
   }
 
-  void tick(MinecraftServer current) {
+  public void tick(MinecraftServer current) {
     if (current == null || output == null) return;
     if (++ticks < PUBLISH_INTERVAL_TICKS) return;
     ticks = 0;
@@ -83,7 +86,7 @@ final class ServerOverlayPublisher {
   private void publish() {
     MinecraftServer current = server;
     Path destination = output;
-    if (current == null || destination == null) return;
+    if (current == null || destination == null || writer == null) return;
     try {
       var claimByDimension = new HashMap<String, List<ClaimsOverlaySource.ClaimCell>>();
       for (var claim : claims.snapshot())
@@ -103,9 +106,7 @@ final class ServerOverlayPublisher {
                 entityDensity(level),
                 dimensionClaims));
       }
-      atomicWrite(
-          destination,
-          GSON.toJson(new Snapshot(2, System.currentTimeMillis(), dimensions)));
+      writer.offer(destination, new Snapshot(2, System.currentTimeMillis(), dimensions));
     } catch (Exception error) {
       log.warn("Could not publish BlueMap server overlays: " + error);
     }
@@ -198,24 +199,4 @@ final class ServerOverlayPublisher {
     return null;
   }
 
-  private static void atomicWrite(Path path, String contents) throws Exception {
-    Files.createDirectories(path.getParent());
-    Path temp = path.resolveSibling(path.getFileName() + ".tmp");
-    Files.writeString(
-        temp,
-        contents,
-        StandardCharsets.UTF_8,
-        StandardOpenOption.CREATE,
-        StandardOpenOption.TRUNCATE_EXISTING,
-        StandardOpenOption.WRITE);
-    try {
-      Files.move(
-          temp,
-          path,
-          StandardCopyOption.ATOMIC_MOVE,
-          StandardCopyOption.REPLACE_EXISTING);
-    } catch (AtomicMoveNotSupportedException error) {
-      Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
-    }
-  }
 }

@@ -66,7 +66,7 @@ export const HistoryTransport = () => (
         <button
           type="button"
           name="latest"
-          title="Follow live events and BlueMap player positions"
+          title="Follow live events and player positions"
           aria-label="Follow live"
         >
           NOW

@@ -1,6 +1,6 @@
 # BlueMap viewer installation and development
 
-Install BlueMap 5.x and `player-history-bluemap-<version>.jar` in the server mods directory. For recording, also install the independent recorder JAR. The viewer mod's config is `config/playerhistory_bluemap-common.toml`:
+Install BlueMap 5.x, `player-history-public-assets-<version>.jar` and `player-history-bluemap-<version>.jar` in the server mods directory. For recording, also install the independent recorder JAR. The viewer mod's config is `config/playerhistory_bluemap-common.toml`:
 
 ```toml
 public-directory = "player-history/public"

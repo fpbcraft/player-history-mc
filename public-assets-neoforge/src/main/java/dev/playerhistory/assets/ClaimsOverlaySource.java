@@ -1,4 +1,4 @@
-package dev.playerhistory.bluemap;
+package dev.playerhistory.assets;
 
 import dev.playerhistory.core.LogSink;
 
@@ -23,7 +23,7 @@ interface ClaimsOverlaySource {
     if (!ModList.get().isLoaded("openpartiesandclaims")) return empty();
     try {
       return (ClaimsOverlaySource)
-          Class.forName("dev.playerhistory.bluemap.OpacClaimsSource")
+          Class.forName("dev.playerhistory.assets.OpacClaimsSource")
               .getConstructor(LogSink.class)
               .newInstance(log);
     } catch (ReflectiveOperationException error) {

@@ -15,7 +15,8 @@
     "check": "npm run typecheck && npm run lint && npm run build && npm test",
     "visual:build": "node visual-build.mjs",
     "visual:test": "npm run visual:build && node visual-test.mjs",
-    "dev": "node dev.mjs"
+    "dev": "node dev.mjs",
+    "visual:diorama": "node diorama-visual-test.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",

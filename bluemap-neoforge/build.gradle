@@ -34,6 +34,7 @@ neoForge.runs { server { server(); gameDirectory = rootProject.file('run'); prog
 
 dependencies {
   implementation project(':recorder-neoforge')
+  implementation project(':public-assets-neoforge')
   compileOnly 'org.ow2.asm:asm:9.7.1'
   compileOnly 'maven.modrinth:open-parties-and-claims:neoforge-1.21.1-0.25.4'
   testImplementation 'com.google.code.gson:gson:2.10.1'

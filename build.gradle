@@ -39,5 +39,5 @@ allprojects {
     repositories { mavenCentral() }
 }
 
-tasks.register('test') { dependsOn ':recorder-neoforge:test', ':bluemap-neoforge:test', ':motd-neoforge:test' }
-tasks.named('build') { dependsOn ':recorder-neoforge:build', ':bluemap-neoforge:build', ':motd-neoforge:build' }
+tasks.register('test') { dependsOn ':public-assets-neoforge:test', ':recorder-neoforge:test', ':bluemap-neoforge:test', ':motd-neoforge:test' }
+tasks.named('build') { dependsOn ':public-assets-neoforge:build', ':recorder-neoforge:build', ':bluemap-neoforge:build', ':motd-neoforge:build' }
