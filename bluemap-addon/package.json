@@ -21,6 +21,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
     "@types/node": "^26.5.0",
+    "@types/three": "^0.187.0",
     "browser-sync": "^3.0.4",
     "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",
@@ -29,6 +30,7 @@
   },
   "version": "0.0.0-private",
   "dependencies": {
-    "preact": "^10.29.8"
+    "preact": "^10.29.8",
+    "three": "^0.187.0"
   }
 }

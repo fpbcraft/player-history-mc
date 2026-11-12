@@ -1163,7 +1163,7 @@ export class ReplayPanel extends HTMLElement {
     this.q("range-button").setAttribute("aria-label", `Choose history range · ${rangeLabel}`);
     document.dispatchEvent(
       new CustomEvent("player-history:range-state", {
-        detail: { label: rangeLabel, from: c.from, to: c.to },
+        detail: { label: rangeLabel, from: c.from, to: c.to, live: this.isLive },
       }),
     );
     this.require<HTMLElement>(".history-range-options")

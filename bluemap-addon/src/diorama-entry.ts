@@ -1,3 +1,4 @@
+import { DioramaSceneHost } from "./diorama-scene-host.js";
 import { DioramaServerOverlays } from "./diorama-server-overlays.js";
 import { DioramaAdapter } from "./diorama-adapter.js";
 import type { DioramaApi } from "./diorama-api.js";
@@ -7,12 +8,13 @@ import { configureViewerHost } from "./viewer-host.js";
 const mount = (api: DioramaApi): void => {
   if (api.version !== 1 || document.querySelector("bluemap-player-replay")) return;
   const baseUrl = new URL("/player-history/", location.origin);
+  const scene = new DioramaSceneHost(api);
   configureViewerHost(() => ({
     baseUrl,
     createAdapter: () => new DioramaAdapter(api, baseUrl),
     createObjectAdapter: async () => {
       const { DioramaObjectAdapter } = await import("./diorama-object-adapter.js");
-      return new DioramaObjectAdapter(api);
+      return new DioramaObjectAdapter(api, scene);
     },
     integration: async () => ({
       get mapWorlds() {
@@ -33,6 +35,7 @@ const mount = (api: DioramaApi): void => {
     () => {
       panel.remove();
       overlays.dispose();
+      scene.dispose();
     },
     { once: true },
   );
