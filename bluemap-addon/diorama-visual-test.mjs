@@ -751,6 +751,12 @@ try {
   await cdp.evaluate('window.diorama.setVisible("sablePins",true);window.diorama.setVisible("trainPins",true)');
   await wait('document.querySelectorAll(".diorama-waypoint-pin[data-named=true][data-zoomed-out=true]").length===2');
   await capture("desktop-named-vehicle-pins");
+  await cdp.evaluate('document.getElementById("out").click();document.getElementById("out").click()');
+  await wait('document.querySelector("canvas[data-vehicle-models]")?.style.display === "none"');
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".diorama-object-marker").length'),2,"Overview must retain vehicle pins without full models");
+  await capture("desktop-overview-clouds");
+  await cdp.evaluate('document.getElementById("in").click();document.getElementById("in").click()');
+
   await cdp.evaluate('document.getElementById("in").click()');
   await wait("window.diorama.getState().scale===2");
   // Simulate a terrain revision without reloading the viewer or changing the vehicle model URL.
@@ -857,7 +863,7 @@ try {
   const revealedBrightness = await revealBrightness();
   assert.ok(
     revealedGreen > hiddenGreen + 1000,
-    "Clouds must cover unknown terrain and reveal actual terrain pixels",
+    `Clouds must cover unknown terrain and reveal actual terrain pixels: ${hiddenGreen} -> ${revealedGreen}; brightness ${hiddenBrightness} -> ${revealedBrightness}`,
   );
   assert.ok(
     partialBrightness < hiddenBrightness - 10 && partialBrightness > revealedBrightness + 10,

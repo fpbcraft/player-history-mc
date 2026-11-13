@@ -1,3 +1,4 @@
+import { vehicleModelVisible } from "./vehicle-markers.js";
 import { VehicleShadowLayer } from "./vehicle-shadow-layer.js";
 import { DioramaCraftSprites } from "./diorama-craft-sprites.js";
 import * as T from "three";
@@ -76,6 +77,13 @@ export class DioramaVehicleLayer {
     this.visible.clear();
     const state = this.api.getState();
     if (!state || !this.available) return;
+    const detailed = rows.filter(row => row.dimension === state.dimension && vehicleModelVisible(row, state.scale));
+    this.renderer.domElement.style.display = detailed.length ? "" : "none";
+    if (!detailed.length) {
+      this.renderer.domElement.dataset.vehicleModels = "0";
+      this.renderer.domElement.dataset.vehicleShadows = "0";
+      return;
+    }
     const origin = updateVehicleCamera(this.camera, state);
     const size = `${state.width}:${state.height}:${state.pixelRatio}`;
     if (this.size !== size) {
@@ -84,7 +92,7 @@ export class DioramaVehicleLayer {
       this.renderer.setSize(state.width, state.height, false);
     }
     this.depth.update(state);
-    const wanted = rows
+    const wanted = detailed
       .filter((row) => row.dimension === state.dimension)
       .filter((row) => {
         const screen = this.api.screen({ x: row.pos[0], y: row.pos[1], z: row.pos[2] });
