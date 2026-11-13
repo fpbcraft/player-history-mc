@@ -1,12 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm --prefix bluemap-addon ci",
-  "buildCommand": "npm --prefix bluemap-addon run build",
+  "buildCommand": "npm --prefix bluemap-addon run build:preview",
   "outputDirectory": "bluemap-addon/dist",
   "routes": [
     {
       "src": "/player-history/(modules/[^/]+/(?:chunks/)?[^/]+\\.js)",
       "dest": "/$1"
+    },
+    {
+      "src": "/player-history/diorama-history(?:-[^/]+)?\\.js",
+      "dest": "/diorama-history.js"
     },
     {
       "src": "/player-history/player-history(?:-[^/]+)?\\.js",
