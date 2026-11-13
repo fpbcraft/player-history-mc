@@ -1,5 +1,9 @@
 import type { VehiclePose } from "./vehicle-scene.js";
 
+/** Subpixel craft use their existing waypoint pins instead of a full WebGL model pass. */
+export const vehicleModelVisible = (row: VehiclePose, scale: number): boolean =>
+  (row.size ?? 32) * scale >= 12;
+
 /** One named train pin at distant zoom, while every carriage continues rendering independently. */
 export const vehicleMarkers = (rows: readonly VehiclePose[], scale: number): VehiclePose[] => {
   const groups = new Map<string, VehiclePose[]>(),
