@@ -186,7 +186,7 @@ export class DioramaSceneHost {
     const scale = state?.scale ?? 1;
     for (const row of vehicleMarkers(this.live ? rows : [], scale)) {
       if (row.shadow) continue;
-      const pinKind = /train|contraption/i.test(row.id) || row.group ? "trainPins" : "sablePins";
+      const pinKind = /train|contraption/i.test(row.id) ? "trainPins" : "sablePins";
       if (this.api.visible?.(pinKind) === false) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
       const pixel = this.api.screen({ x: row.pos[0], y: row.pos[1], z: row.pos[2] });
