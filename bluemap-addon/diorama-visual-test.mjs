@@ -58,6 +58,7 @@ const requests = [];
 let terrainRevision = start;
 let terrainHeight = 64;
 let fogCoverage = 255;
+let fineCoverageDelay = 0;
 let shipX = 24;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -112,8 +113,8 @@ const server = createServer(async (req, res) => {
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
           folder: world.id ? "nether" : "overworld",
-          zoomLevels: 1,
-          tiles: [[-1, -1, 0, -1, -1, 0, 0, 0]],
+          zoomLevels: 3,
+          tiles: Array.from({ length: 3 }, () => [-1, -1, 0, -1, -1, 0, 0, 0]),
         })),
       });
     if (path === "/fixture/fog-coverage") {
@@ -121,12 +122,22 @@ const server = createServer(async (req, res) => {
       terrainRevision++;
       return json({ ok: true });
     }
+    if (path === "/fixture/fine-coverage-delay") {
+      fineCoverageDelay = Number(url.searchParams.get("ms"));
+      return json({ ok: true });
+    }
     if (path.endsWith(".fog.png")) {
+      const [, zoom, tileU, tileV] = path.match(/\/(\d+)\/(-?\d+)_(-?\d+)\.fog\.png$/);
+      if (Number(zoom) === 0 && fineCoverageDelay) await new Promise(resolve => setTimeout(resolve, fineCoverageDelay));
+      const units = 128 * 2 ** Number(zoom);
       const raw = Buffer.alloc((64 * 4 + 1) * 64);
       for (let y = 0; y < 64; y++)
         for (let x = 0; x < 64; x++) {
           const offset = y * 257 + 1 + x * 4;
-          raw[offset] = raw[offset + 1] = raw[offset + 2] = fogCoverage;
+          const u = Number(tileU) * units + (x + .5) * units / 64;
+          const v = Number(tileV) * units + (y + .5) * units / 64;
+          raw[offset] = raw[offset + 1] = raw[offset + 2] =
+            u >= -128 && u < 128 && v >= -128 && v < 128 ? fogCoverage : 0;
           raw[offset + 3] = 255;
         }
       const crc = (bytes) => {
@@ -420,7 +431,7 @@ const server = createServer(async (req, res) => {
     else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js")
       file = join(mapRoot, path.split("/").at(-1));
     else if (
-      /^\/diorama\/(web-fog\.js|fog-(mask|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
+      /^\/diorama\/(web-fog\.js|fog-(mask|mask-task|mask-worker|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
         path,
       )
     )
@@ -737,6 +748,7 @@ try {
   await wait(
     'window.__fixtureFog?.transition && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
   );
+  await wait('document.querySelector("#fog").dataset.fogMaskWorker === "worker" && document.querySelector("#fog").dataset.fogMaskPending === "false"');
   const knownCoverage = await cdp.evaluate(
     "window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0)",
   );
@@ -784,6 +796,30 @@ try {
     delete window.__fixtureFogDraw;
     delete window.__fixtureFogAge;
     delete window.__fixtureUnknownFog;
+  })()`);
+  // A newly requested fine LOD must not cover an already explored world point.
+  await cdp.evaluate(`(async () => {
+    const { FogGpu } = await import(new URL('fog-gpu.js', location.href));
+    window.__zoomFogDraw = FogGpu.prototype.draw;
+    window.__zoomKnown = [];
+    FogGpu.prototype.draw = function (state, layout, time) {
+      const x = Math.floor((24-layout.u)/layout.texel), y = Math.floor((-44-layout.v)/layout.texel);
+      if (this.transition && x >= 0 && x < 256 && y >= 0 && y < 256)
+        window.__zoomKnown.push(this.transition.to.known[y*256+x]);
+      return window.__zoomFogDraw.call(this, state, layout, time);
+    };
+    await fetch('/fixture/fine-coverage-delay?ms=1000');
+    document.getElementById('in').click(); document.getElementById('in').click();
+  })()`);
+  await wait('window.diorama.getState().scale === 8 && document.querySelector("#fog").dataset.fogMaskPending === "false"');
+  await delay(1400);
+  assert.ok(await cdp.evaluate('window.__zoomKnown.length > 0 && window.__zoomKnown.every(value => value > .9)'), "Cached coverage must keep explored terrain revealed while finer masks load");
+  await cdp.evaluate(`(async () => {
+    const { FogGpu } = await import(new URL('fog-gpu.js', location.href));
+    FogGpu.prototype.draw = window.__zoomFogDraw;
+    delete window.__zoomFogDraw; delete window.__zoomKnown;
+    document.getElementById('out').click(); document.getElementById('out').click();
+    await fetch('/fixture/fine-coverage-delay?ms=0');
   })()`);
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
@@ -841,6 +877,17 @@ try {
     `document.querySelector('.history-player-followbar button[data-dimension="minecraft:the_nether"]').click()`,
   );
   await wait('window.diorama.getState().dimension === "minecraft:the_nether"');
+  await wait('document.querySelector("#fog").style.display === "none"');
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 1366, height: 1024, deviceScaleFactor: 2, mobile: true,
+  });
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+  await cdp.evaluate('document.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape"})); window.diorama.setDimension("minecraft:overworld")');
+  await wait('document.querySelector("#fog").dataset.fogQuality === "touch" && document.querySelector("#fog").dataset.fogMaskPending === "false"');
+  assert.ok(await cdp.evaluate('Number(document.querySelector("#fog").dataset.fogPixels) <= 92000'), "Tablet clouds must respect their pixel budget at DPR 2");
+  assert.equal(await cdp.evaluate('document.querySelector("#fog").dataset.fogMaskWorker'), "worker");
+  await capture("tablet-clouds");
+  await cdp.evaluate('window.diorama.setDimension("minecraft:the_nether")');
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 390,
     height: 844,
@@ -888,6 +935,10 @@ try {
     join(output, "results.json"),
     JSON.stringify(
       {
+        cloudWorker: true,
+        tabletCloudPixelBudget: true,
+        persistentZoomCoverage: true,
+        netherCloudsDisabled: true,
         namedVehiclePins: true,
         publicWaypointPins: true,
         liveMovement: true,
