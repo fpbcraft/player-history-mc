@@ -6,6 +6,7 @@ export interface VehiclePose {
   mesh: string;
   atlas?: string;
   shadow?: boolean;
+  caster?: string;
   pos: [number, number, number];
   rot: [number, number, number, number];
   scale: [number, number, number];
@@ -44,7 +45,7 @@ export const parseVehicleFeed = (
     throw Error("Invalid vehicle feed");
   const interval =
     "intervalMs" in data && typeof data.intervalMs === "number" && Number.isFinite(data.intervalMs)
-      ? Math.max(250, Math.min(2000, data.intervalMs))
+      ? Math.max(100, Math.min(2000, data.intervalMs))
       : 1000;
   const seen = new Set<string>();
   const objects = data.objects.flatMap((row: unknown): VehiclePose[] => {
@@ -82,6 +83,13 @@ export const parseVehicleFeed = (
               }
             : {}),
           ...(r.shadow === true ? { shadow: true } : {}),
+          ...(typeof r.caster === "string" && r.caster
+            ? {
+                caster: publicAssetUrl(r.caster, base, [
+                  new URL("assets/diorama-vehicles/", base).pathname,
+                ]),
+              }
+            : {}),
           pos: r.pos as VehiclePose["pos"],
           rot: r.rot as VehiclePose["rot"],
           scale: vector(r.scale, 3) ? (r.scale as VehiclePose["scale"]) : [1, 1, 1],

@@ -1,3 +1,4 @@
+import { VehicleMotion } from "./vehicle-motion.js";
 import { signedVehicleTravel } from "./vehicle-travel.js";
 import { readBoundedResponse } from "./vehicle-http.js";
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
@@ -15,7 +16,8 @@ export class DioramaSceneHost {
   private historyRows: VehiclePose[] = [];
   private previous = new Map<string, VehiclePose>();
   private interval = 1000;
-  private receivedAt = 0;
+  private readonly motion = new VehicleMotion();
+  private generated = -Infinity;
   private expiresAt = 0;
   private frame = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -46,6 +48,7 @@ export class DioramaSceneHost {
   }
   private async poll(): Promise<void> {
     if (this.abort.signal.aborted) return;
+    const started = performance.now();
     try {
       if (document.hidden || !this.live) return;
       const response = await fetch(this.feed, {
@@ -69,6 +72,8 @@ export class DioramaSceneHost {
         generated > Date.now() + 60000
       )
         throw Error("Live vehicle publication is stale or has no timestamp");
+      if (generated < this.generated) return;
+      const changed = generated !== this.generated;
       this.previous = new Map(this.liveRows.map((row) => [row.id, row]));
       this.liveRows = parsed.objects.map((row) => {
         const previous = this.previous.get(row.id);
@@ -83,21 +88,23 @@ export class DioramaSceneHost {
           q[3] / length,
         ];
         const travel =
-          previous?.dimension === row.dimension && distance < 128
+          changed && previous?.dimension === row.dimension && distance < 128
             ? signedVehicleTravel(delta[0] ?? 0, delta[1] ?? 0, delta[2] ?? 0, rotation)
             : 0;
         return { ...row, travel: (previous?.travel ?? 0) + travel };
       });
-      this.receivedAt = performance.now();
+      this.motion.update(generated, this.liveRows, performance.now(), parsed.interval);
+      this.generated = generated;
       this.expiresAt = generated + 15000;
       this.interval = parsed.interval;
     } catch {
-      this.liveRows = [];
-      this.previous.clear();
-      this.interval = Math.min(30000, Math.max(5000, this.interval * 2));
+      this.interval = Math.min(2000, Math.max(250, this.interval * 2));
     } finally {
       if (!this.abort.signal.aborted)
-        this.timer = setTimeout(() => void this.poll(), this.interval);
+        this.timer = setTimeout(
+          () => void this.poll(),
+          Math.max(20, this.interval - (performance.now() - started)),
+        );
     }
   }
   setHistorical(
@@ -149,7 +156,11 @@ export class DioramaSceneHost {
     if (this.abort.signal.aborted) return;
     this.frame = requestAnimationFrame((next) => this.draw(next));
     if (document.hidden) return;
-    const rows = this.live ? (Date.now() <= this.expiresAt ? this.liveRows : []) : this.historyRows;
+    const rows = this.live
+      ? Date.now() <= this.expiresAt
+        ? this.motion.sample(time, this.reduced.matches)
+        : []
+      : this.historyRows;
     if (rows.length && !this.layer && !this.loading && !this.failed) {
       this.loading = true;
       void import("./diorama-vehicle-layer.js")
@@ -163,15 +174,7 @@ export class DioramaSceneHost {
           this.loading = false;
         });
     }
-    const alpha = this.reduced.matches
-      ? 1
-      : Math.max(0, Math.min(1, (time - this.receivedAt) / this.interval));
-    this.layer?.render(
-      rows,
-      this.live ? this.previous : new Map(),
-      alpha,
-      this.reduced.matches ? 0 : time / 1000,
-    );
+    this.layer?.render(rows, new Map(), 1, this.reduced.matches ? 0 : time / 1000);
     const keep = new Set<string>();
     for (const row of this.live ? rows : []) {
       if (row.shadow) continue;
