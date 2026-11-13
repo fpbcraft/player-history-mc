@@ -1,6 +1,6 @@
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
 import { aggregateCorners } from "./diorama-geometry.js";
-import { formatMinecraftTime } from "./world-status.js";
+import { formatMinecraftTime, minecraftDay } from "./world-status.js";
 
 interface Cell {
   x: number;
@@ -27,7 +27,7 @@ const finiteCell = (value: Cell): boolean => Number.isFinite(value?.x) && Number
 export class DioramaServerOverlays {
   private readonly controls = document.createElement("details");
   private readonly status = document.createElement("small");
-  private readonly clock = document.createElement("span");
+  private readonly clock = document.createElement("div");
   private readonly enabled = new Set<Key>();
   private readonly overlay: OverlayRegistration;
   private readonly listeners = new AbortController();
@@ -35,7 +35,7 @@ export class DioramaServerOverlays {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private request: AbortController | undefined;
   private lastTime:
-    | { generatedAt: number; dimensions?: Record<string, { dayTime: number }> }
+    | { generatedAt: number; dimensions?: Record<string, { dayTime: number; season?: string }> }
     | undefined;
 
   constructor(
@@ -45,12 +45,21 @@ export class DioramaServerOverlays {
   ) {
     this.controls.className = "diorama-overlay-controls";
     const summary = document.createElement("summary");
-    summary.textContent = "Overlays ";
-    summary.append(this.clock);
-    this.controls.append(summary);
+    summary.setAttribute("aria-label", "Overlays");
+    summary.title = "Overlays";
+    summary.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m3 7 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 17l9 5 9-5"/></svg>';
+    const body = document.createElement("div");
+    body.className = "map-menu-body panel";
+    const title = document.createElement("strong");
+    title.textContent = "Overlays";
+    body.append(title);
+    this.controls.append(summary, body);
+    this.clock.className = "diorama-world-clock";
+    this.clock.setAttribute("aria-label", "In-game date and time");
     const note = document.createElement("small");
     note.textContent = `Chunk overlays and heatmaps use an approximate Y=${height} reference plane. Surface height and underground occlusion are unavailable.`;
-    this.controls.append(note);
+    body.append(note);
     for (const [key, label] of [
       ["loaded", "Loaded / forced chunks"],
       ["claims", "OPAC ownership"],
@@ -65,7 +74,7 @@ export class DioramaServerOverlays {
         void this.poll();
       };
       row.append(input, document.createTextNode(` ${label}`));
-      this.controls.append(row);
+      body.append(row);
     }
     const heat = document.createElement("button");
     heat.type = "button";
@@ -83,8 +92,26 @@ export class DioramaServerOverlays {
       document.dispatchEvent(
         new CustomEvent("player-history:heatmap-toggle", { detail: { enabled: !heatEnabled } }),
       );
-    this.controls.append(heat, this.status);
-    document.body.append(this.controls);
+    body.append(heat, this.status);
+    const tools = document.getElementById("map-tools") ?? document.body;
+    tools.prepend(this.clock, this.controls);
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!this.controls.contains(event.target as Node)) this.controls.open = false;
+      },
+      { signal: this.listeners.signal },
+    );
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape" && this.controls.open) {
+          this.controls.open = false;
+          summary.focus();
+        }
+      },
+      { signal: this.listeners.signal },
+    );
     this.overlay = api.registerOverlay("server-overlays", {
       draw: (context) => this.draw(context),
     });
@@ -102,12 +129,29 @@ export class DioramaServerOverlays {
   private updateClock(): void {
     const state = this.api.getState();
     const sample = state ? this.lastTime?.dimensions?.[state.dimension] : undefined;
-    this.clock.textContent =
+    const fresh =
       sample &&
       Date.now() - (this.lastTime?.generatedAt ?? 0) <= 10000 &&
-      Number.isFinite(sample.dayTime)
-        ? formatMinecraftTime(sample.dayTime)
-        : "";
+      Number.isFinite(sample.dayTime);
+    this.clock.dataset.stale = String(!fresh);
+    this.clock.replaceChildren();
+    if (!fresh) {
+      this.clock.textContent = "World time unavailable";
+      return;
+    }
+    const season = sample.season?.replace(/_/g, " ").toLowerCase();
+    if (season && ["spring", "summer", "autumn", "fall", "winter"].includes(season)) {
+      const symbol = document.createElement("span");
+      symbol.className = "season-symbol";
+      symbol.setAttribute("aria-hidden", "true");
+      symbol.textContent =
+        season === "winter" ? "❄" : season === "summer" ? "☀" : season === "spring" ? "❀" : "❧";
+      this.clock.append(symbol, `${season[0]?.toUpperCase()}${season.slice(1)} · `);
+    }
+    this.clock.append(
+      `Day ${minecraftDay(sample.dayTime)} · ${formatMinecraftTime(sample.dayTime)}`,
+    );
+    this.clock.title = `In-game date and time · ${state?.dimension}`;
   }
 
   private async poll(): Promise<void> {
@@ -200,5 +244,6 @@ export class DioramaServerOverlays {
     clearTimeout(this.timer);
     this.overlay.remove();
     this.controls.remove();
+    this.clock.remove();
   }
 }

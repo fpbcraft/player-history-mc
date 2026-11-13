@@ -185,6 +185,8 @@ export interface IntegrationMapping {
 }
 
 export interface ChatMessageRecord {
+  id?: number;
+  time?: number;
   web?: boolean;
   name: string;
   message: string;

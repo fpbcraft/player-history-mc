@@ -17,7 +17,7 @@ import net.minecraft.world.level.GameRules;
 public final class WorldStatusPublisher {
   private static final int PUBLISH_INTERVAL_TICKS = 20;
 
-  record DimensionStatus(long dayTime, boolean daylightCycle, boolean hasSkyLight) {}
+  record DimensionStatus(long dayTime, boolean daylightCycle, boolean hasSkyLight, String season) {}
 
   record Snapshot(int version, long generatedAt, Map<String, DimensionStatus> dimensions) {}
 
@@ -68,7 +68,7 @@ public final class WorldStatusPublisher {
             new DimensionStatus(
                 level.getDayTime(),
                 level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT),
-                level.dimensionType().hasSkyLight()));
+                level.dimensionType().hasSkyLight(), SeasonStatus.season(level)));
       }
       writer.offer(destination, new Snapshot(1, System.currentTimeMillis(), dimensions));
     } catch (Exception error) {

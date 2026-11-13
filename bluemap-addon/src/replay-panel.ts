@@ -99,6 +99,7 @@ export class ReplayPanel extends HTMLElement {
   private lastMap: string | undefined;
   private heatVersion = 0;
   private chatTimer: PanelTimer | undefined;
+  private chatFeedSeen: Set<string> | undefined;
   private chatPairTimer: PanelTimer | undefined;
   private chatSessionLoading = false;
   private chatSessionStatus = "";
@@ -709,7 +710,7 @@ export class ReplayPanel extends HTMLElement {
   }
 
   private async pollChatFeed(): Promise<void> {
-    if (this.chatLoading) return;
+    if (this.chatLoading || document.hidden) return;
     this.chatLoading = true;
     const signal = this.lifecycle.signal;
     try {
@@ -717,6 +718,35 @@ export class ReplayPanel extends HTMLElement {
       if (signal.aborted) return;
       const feed = this.require<HTMLElement>(".history-webchat-feed");
       const shouldFollow = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 20;
+      const seen = new Set(
+        data.messages.map(
+          (message) => `${message.time ?? 0}:${message.id ?? 0}:${message.name}:${message.message}`,
+        ),
+      );
+      if (this.chatFeedSeen)
+        for (const message of data.messages) {
+          const key = `${message.time ?? 0}:${message.id ?? 0}:${message.name}:${message.message}`;
+          if (
+            !this.chatFeedSeen.has(key) &&
+            message.time &&
+            Date.now() - message.time < 15000 &&
+            this.require<HTMLElement>(".history-chat-panel").hidden
+          ) {
+            const registry = this.liveRegistry ?? this.manifest?.registry;
+            const player = registry?.players.find((player) => player.name === message.name);
+            const skin = player?.uuid
+              ? new URL(`skins/${player.uuid}.png`, this.baseUrl).href
+              : undefined;
+            this.showChatNotification({
+              id: `feed:${key}`,
+              name: message.name,
+              message: message.message,
+              time: formatDate(message.time, false),
+              ...(skin ? { head: skin } : {}),
+            });
+          }
+        }
+      this.chatFeedSeen = seen;
       renderWebChatFeed(feed, data.messages);
       if (shouldFollow) feed.scrollTop = feed.scrollHeight;
       this.chatFeedError = "";
@@ -784,6 +814,7 @@ export class ReplayPanel extends HTMLElement {
   }
   closeChat() {
     this.lifecycle.clearInterval(this.chatTimer);
+    this.chatTimer = this.lifecycle.interval(() => this.pollChatFeed(), 2_000);
     this.require<HTMLElement>(".history-chat-panel").hidden = true;
     preferences.saveChatOpen(false);
     this.q("webchat").hidden = false;
@@ -800,9 +831,9 @@ export class ReplayPanel extends HTMLElement {
     this.require<HTMLElement>(".history-chat-panel").hidden = !chatOpen;
     this.q("webchat").hidden = chatOpen || (this.mobileQuery.matches && historyOpen);
     this.q("webchat").setAttribute("aria-expanded", String(chatOpen));
-    if (!chatOpen) return;
-    this.pollChat();
-    this.chatTimer = this.lifecycle.interval(() => this.pollChat(), 2_000);
+    if (chatOpen) void this.pollChatSession();
+    void this.pollChatFeed();
+    this.chatTimer = this.lifecycle.interval(() => this.pollChatFeed(), 2_000);
   }
   private clearChatNotifications(): void {
     this.chatNotifications = [];
@@ -818,18 +849,20 @@ export class ReplayPanel extends HTMLElement {
     const player = registry?.players.find((candidate) => candidate.id === event.point.player);
     const mapRoot = this.host.mapRoot;
     const id = `${event.point.player}:${event.point.time}:${JSON.stringify(event.payload)}`;
-    this.chatNotifications = [
-      ...this.chatNotifications,
-      {
-        id,
-        ...(player?.uuid && mapRoot
-          ? { head: `${mapRoot}/assets/playerheads/${player.uuid}.png` }
-          : {}),
-        message: eventDetails(event.payload, {}, "CHAT"),
-        name: player?.name ?? this.names.get(event.point.player) ?? "Player",
-        time: formatDate(event.point.time, false),
-      },
-    ].slice(-4);
+    this.showChatNotification({
+      id,
+      ...(player?.uuid && mapRoot
+        ? { head: `${mapRoot}/assets/playerheads/${player.uuid}.png` }
+        : {}),
+      message: eventDetails(event.payload, {}, "CHAT"),
+      name: player?.name ?? this.names.get(event.point.player) ?? "Player",
+      time: formatDate(event.point.time, false),
+    });
+  }
+  private showChatNotification(notification: ChatNotification): void {
+    const id = notification.id;
+    if (this.chatNotifications.some((item) => item.id === id)) return;
+    this.chatNotifications = [...this.chatNotifications, notification].slice(-4);
     const root = this.require<HTMLElement>(".history-chat-notifications");
     const renderNotifications = () =>
       renderChatNotifications(root, this.chatNotifications, () => void this.openChat());
@@ -1542,7 +1575,9 @@ export class ReplayPanel extends HTMLElement {
       // Feed them into the live replay even while History is closed so the 3D avatar
       // and floating follow bar do not disappear between full-live sessions.
       this.liveReplay.update(update.points, update.generatedAt);
-      for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
+      if (!this.chatFeedSeen)
+        for (const event of update.newChats) this.notifyLiveChat(event, update.registry);
+
       this.eventRevision++;
 
       if (!this.integration)
