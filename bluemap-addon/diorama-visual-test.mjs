@@ -21,6 +21,9 @@ execFileSync(
   [join(dioramaRoot, "scripts/test-web-vehicles.mjs"), "--assets", fogAssets],
   { stdio: "inherit" },
 );
+execFileSync(process.execPath, [join(dioramaRoot, "scripts/export-web-pins.mjs"), fogAssets], {
+  stdio: "inherit",
+});
 const output = join(root, "visual-output/diorama");
 await mkdir(output, { recursive: true });
 const started = Date.now();
@@ -69,6 +72,29 @@ const server = createServer(async (req, res) => {
       shipX = Number(url.searchParams.get("x"));
       return json({ ok: true });
     }
+    if (path === "/diorama/markers.json")
+      return json({
+        markers: [
+          {
+            id: "public-harbour",
+            name: "Public Harbour",
+            initials: "",
+            icon: "assets/diorama-markers/home.png",
+            dimension: "minecraft:overworld",
+            x: -40,
+            y: 64,
+            z: 48,
+            width: 19,
+            height: 24,
+            anchorX: 9.5,
+            anchorY: 21,
+          },
+        ],
+      });
+    if (/^\/diorama\/assets\/diorama-markers\/(ship|train|home)\.png$/.test(path)) {
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(await readFile(join(fogAssets, path.slice("/diorama/".length))));
+    }
     if (path === "/diorama/map.json")
       return json({
         tileUnits: 128,
@@ -81,6 +107,7 @@ const server = createServer(async (req, res) => {
         depth: true,
         fogCoverage: true,
         roundedFog: true,
+        markerFeed: "markers.json",
         vehicleFeed: "assets/diorama-vehicles/scene.json",
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
@@ -146,7 +173,11 @@ const server = createServer(async (req, res) => {
         objects: [
           {
             id: "train/fixture",
-            label: "Synthetic Create train",
+            label: "Copper Express",
+            named: true,
+            group: "fixture-train",
+            size: 24,
+            icon: "assets/diorama-markers/train.png",
             dimension: "minecraft:overworld",
             mesh: "/assets/bluemap3d/train.bm3d",
             pos: [-20 + Math.sin((Date.now() - started) / 3000) * 5, 68, 0],
@@ -159,7 +190,11 @@ const server = createServer(async (req, res) => {
           },
           {
             id: "sable/fixture",
-            label: "Synthetic Sable ship",
+            label: "Skyward",
+            named: true,
+            group: "fixture-ship",
+            size: 16,
+            icon: "assets/diorama-markers/ship.png",
             dimension: "minecraft:overworld",
             mesh: "assets/diorama-vehicles/ship.dspr",
             atlas: "assets/diorama-vehicles/craft.png",
@@ -382,7 +417,8 @@ const server = createServer(async (req, res) => {
     }
     let file;
     if (path === "/diorama/" || path === "/diorama/index.html") file = join(mapRoot, "index.html");
-    else if (path === "/diorama/overlay-api.js") file = join(mapRoot, "overlay-api.js");
+    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js")
+      file = join(mapRoot, path.split("/").at(-1));
     else if (
       /^\/diorama\/(web-fog\.js|fog-(mask|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
         path,
@@ -519,10 +555,16 @@ try {
     await writeFile(join(output, `${name}.png`), Buffer.from(result.data, "base64"));
   };
   const orangePixels = async () => {
+    await cdp.evaluate(
+      `{const style=document.createElement('style');style.id='vehicle-pixel-oracle';style.textContent='.diorama-public-waypoints,.diorama-waypoint-pin{visibility:hidden!important}';document.head.append(style);}`,
+    );
     const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
-    return cdp.evaluate(`(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());
+    const count =
+      await cdp.evaluate(`(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());
       const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext("2d");context.drawImage(image,0,0);
       const data=context.getImageData(1000,660,460,220).data;let count=0;for(let i=0;i<data.length;i+=4)if(data[i]>220&&data[i+1]>160&&data[i+1]<220&&data[i+2]<180)count++;image.close();return count;})()`);
+    await cdp.evaluate("document.getElementById('vehicle-pixel-oracle').remove()");
+    return count;
   };
   const greenPixels = async () => {
     const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
@@ -618,6 +660,24 @@ try {
   await cdp.evaluate('document.querySelector(".diorama-history-tooltip").style.visibility=""');
   await cdp.evaluate("fetch('/fixture/ship-position?x=24')");
   await delay(300);
+  await wait('document.querySelectorAll(".diorama-public-pin").length===1');
+  assert.equal(
+    await cdp.evaluate('document.querySelector(".diorama-public-pin").getAttribute("aria-label")'),
+    "Public Harbour",
+  );
+  await cdp.evaluate('document.getElementById("out").click()');
+  await wait(
+    `document.querySelectorAll('.diorama-waypoint-pin[data-named="true"][data-zoomed-out="true"]').length===2`,
+  );
+  assert.equal(
+    await cdp.evaluate(
+      `getComputedStyle(document.querySelector('.diorama-waypoint-pin[data-zoomed-out="true"] .diorama-pin-label')).visibility`,
+    ),
+    "visible",
+  );
+  await capture("desktop-named-vehicle-pins");
+  await cdp.evaluate('document.getElementById("in").click()');
+  await wait("window.diorama.getState().scale===2");
   // Simulate a terrain revision without reloading the viewer or changing the vehicle model URL.
   assert.equal(
     requests.filter((path) => path.includes("entities3d.json")).length,
@@ -783,6 +843,8 @@ try {
     join(output, "results.json"),
     JSON.stringify(
       {
+        namedVehiclePins: true,
+        publicWaypointPins: true,
         liveMovement: true,
         liveVehicleMeshes: true,
         terrainDepth: true,
