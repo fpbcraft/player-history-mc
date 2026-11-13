@@ -728,8 +728,10 @@ try {
   );
   await cdp.evaluate('document.querySelector(".diorama-waypoint-pin[data-named=true][data-zoomed-out=true]").focus()');
   assert.equal(await cdp.evaluate('getComputedStyle(document.activeElement.querySelector(".diorama-pin-label")).visibility'),"visible","Touch/keyboard focus reveals the pin name");
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".diorama-object-marker[data-pin-kind=sablePins]").length'),1,"The grouped Sable ship must use its own pin switch");
   await cdp.evaluate('document.activeElement.blur(); window.diorama.setVisible("sablePins",false)');
   await wait('document.querySelectorAll(".diorama-object-marker[data-pin-kind=sablePins]").length===0');
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".diorama-object-marker[data-pin-kind=trainPins]").length'),1,"Hiding Sable pins must retain train pins");
   await cdp.evaluate('window.diorama.setVisible("trainPins",false)');
   await wait('document.querySelectorAll(".diorama-object-marker").length===0');
   await cdp.evaluate('window.diorama.setVisible("sablePins",true);window.diorama.setVisible("trainPins",true)');
