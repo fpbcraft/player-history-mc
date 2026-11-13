@@ -5,6 +5,7 @@ export interface WorldPosition {
   dimension?: string;
 }
 export interface DioramaViewport {
+  referenceY?: number;
   dimension: string;
   dimensions: string[];
   u: number;
@@ -34,6 +35,7 @@ export interface DepthTile {
 export interface DioramaApi {
   depthTiles?(): DepthTile[];
   vehicleFeed?(): string | undefined;
+  registerVisibility?(key: string, label: string, icon?: string): void;
   visible?(key: string): boolean;
   setVisible?(key: string, value: boolean): void;
   version: 1;

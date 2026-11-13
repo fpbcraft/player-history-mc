@@ -1,4 +1,9 @@
-import { vehicleMarkers, updateVehiclePin, arrangeVehicleLabels } from "./vehicle-markers.js";
+import {
+  vehicleMarkers,
+  updateVehiclePin,
+  arrangeVehicleLabels,
+  vehiclePinVisible,
+} from "./vehicle-markers.js";
 import { VehicleMotion } from "./vehicle-motion.js";
 import { signedVehicleTravel } from "./vehicle-travel.js";
 import { readBoundedResponse } from "./vehicle-http.js";
@@ -198,7 +203,7 @@ export class DioramaSceneHost {
     const labels: { element: HTMLButtonElement; x: number; y: number; name: string }[] = [];
     const scale = state?.scale ?? 1;
     for (const row of vehicleMarkers(this.live ? rows : [], scale)) {
-      if (row.shadow) continue;
+      if (!vehiclePinVisible(row, this.api.visible?.("allVehicles") === true)) continue;
       const pinKind = /train|contraption/i.test(row.id) ? "trainPins" : "sablePins";
       if (this.api.visible?.(pinKind) === false) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
@@ -228,14 +233,14 @@ export class DioramaSceneHost {
         z: row.pos[2],
         dimension: row.dimension,
       });
-      marker.dataset.zoomedOut = String((row.size ?? 32) * scale < 28);
-      if (row.named && (row.size ?? 32) * scale < 28)
+      marker.dataset.zoomedOut = String((row.size ?? 32) * scale < 64);
+      if (row.named && (row.size ?? 32) * scale < 64)
         labels.push({ element: marker, x: pixel.x, y: pixel.y, name: row.label });
       marker.title = row.label;
       marker.setAttribute("aria-label", row.label);
       marker.style.transform = `translate(${pixel.x}px,${pixel.y}px) translate(-50%,-87.5%)`;
       marker.dataset.model = String(
-        (this.layer?.has(row.id) ?? false) && !(row.named && (row.size ?? 32) * scale < 28),
+        (this.layer?.has(row.id) ?? false) && !((row.size ?? 32) * scale < 64),
       );
     }
     if (state) arrangeVehicleLabels(labels, state.width, state.height);

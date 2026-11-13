@@ -625,10 +625,10 @@ try {
   assert.equal(await cdp.evaluate("window.diorama.getState().pixelRatio"), 2);
   await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
   await wait('document.querySelector(".diorama-world-clock")?.textContent.includes("Autumn · Day 132 · 12:00")');
-  assert.equal(await cdp.evaluate('document.querySelector(".diorama-overlay-controls summary").getAttribute("aria-label")'),"Overlays");
+  assert.equal(await cdp.evaluate('document.querySelector(".diorama-overlay-controls")'),null,"Overlay switches live in Map visibility");
   assert.ok(await cdp.evaluate('!document.querySelector("#map-update").hidden && document.querySelector("#map-update").dateTime.length > 0'));
   await assertBottomControls();
-  const controlStyles=await cdp.evaluate('["#dims",".diorama-player-bar",".diorama-world-clock",".diorama-overlay-controls summary",".map-visibility summary","bluemap-player-replay>[name=open]",".history-chat-launcher"].map(selector=>{const style=getComputedStyle(document.querySelector(selector));return [style.backgroundColor,style.borderTopColor,style.borderRadius].join("|")})');
+  const controlStyles=await cdp.evaluate('["#dims",".diorama-player-bar",".diorama-world-clock",".map-visibility summary","bluemap-player-replay>[name=open]",".history-chat-launcher"].map(selector=>{const style=getComputedStyle(document.querySelector(selector));return [style.backgroundColor,style.borderTopColor,style.borderRadius].join("|")})');
   assert.equal(new Set(controlStyles).size,1,"Map controls must share panel colours, borders and corners");
   const topPositions=await cdp.evaluate('["#dims",".diorama-player-bar","#map-tools"].map(selector=>document.querySelector(selector).getBoundingClientRect().top)');
   assert.ok(topPositions.every(top=>Math.abs(top-topPositions[0])<1),"Desktop controls and player strip align at the top");
@@ -1002,6 +1002,15 @@ try {
     true,
     "No horizontal page overflow",
   );
+
+  const mobileLayout=await cdp.evaluate('({players:document.querySelector(".diorama-player-bar").getBoundingClientRect().top,tools:document.querySelector("#map-tools").getBoundingClientRect().bottom,selector:getComputedStyle(document.querySelector("#dimension-select")).display,dims:getComputedStyle(document.querySelector("#dims")).display})');
+  assert.ok(mobileLayout.players>mobileLayout.tools,"Mobile players belong below toolbar");
+  assert.notEqual(mobileLayout.selector,"none");assert.equal(mobileLayout.dims,"none");
+  await cdp.evaluate('window.diorama.setVisible("loaded",true);window.diorama.setVisible("claims",true);window.diorama.setVisible("allVehicles",true);window.diorama.setVisible("heatmap",true);window.diorama.setVisible("clouds",false)');
+  await cdp.send("Page.reload",{});
+  await wait('document.querySelector("input[data-visibility=claims]")');
+  for(const key of ["loaded","claims","allVehicles","heatmap"]){assert.equal(await cdp.evaluate(`window.diorama.visible(${JSON.stringify(key)})`),true,"Visibility persists across reload");}
+  assert.equal(await cdp.evaluate('window.diorama.visible("clouds")'),false);
   await cdp.evaluate("window.diorama.dispose()");
   assert.equal(await cdp.evaluate('document.querySelector("bluemap-player-replay")'), null);
   const polls = requests.filter(

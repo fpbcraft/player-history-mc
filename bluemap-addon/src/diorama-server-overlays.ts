@@ -10,6 +10,7 @@ interface Cell {
   forceLoadMarked?: boolean;
 }
 interface DimensionData {
+  referenceY?: number;
   loaded?: Cell[];
   pinned?: Cell[];
   claims?: Cell[];
@@ -43,75 +44,98 @@ export class DioramaServerOverlays {
     private readonly base: URL,
     private readonly height = 64,
   ) {
-    this.controls.className = "diorama-overlay-controls";
-    const summary = document.createElement("summary");
-    summary.setAttribute("aria-label", "Overlays");
-    summary.title = "Overlays";
-    summary.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m3 7 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 17l9 5 9-5"/></svg>';
-    const body = document.createElement("div");
-    body.className = "map-menu-body panel";
-    const title = document.createElement("strong");
-    title.textContent = "Overlays";
-    body.append(title);
-    this.controls.append(summary, body);
     this.clock.className = "diorama-world-clock";
     this.clock.setAttribute("aria-label", "In-game date and time");
-    const note = document.createElement("small");
-    note.textContent = `Chunk overlays and heatmaps use an approximate Y=${height} reference plane. Surface height and underground occlusion are unavailable.`;
-    body.append(note);
-    for (const [key, label] of [
+    const settings = [
       ["loaded", "Loaded / forced chunks"],
-      ["claims", "OPAC ownership"],
+      ["claims", "Claims"],
       ["entities", "Entity density"],
-    ] as const) {
-      const row = document.createElement("label");
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.onchange = () => {
-        input.checked ? this.enabled.add(key) : this.enabled.delete(key);
-        this.overlay.invalidate();
-        void this.poll();
-      };
-      row.append(input, document.createTextNode(` ${label}`));
-      body.append(row);
-    }
-    const heat = document.createElement("button");
-    heat.type = "button";
-    heat.textContent = "Toggle activity heatmap";
-    let heatEnabled = false;
-    document.addEventListener(
-      "player-history:heatmap-state",
-      (event) => {
-        heatEnabled = Boolean((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
-        heat.setAttribute("aria-pressed", String(heatEnabled));
-      },
-      { signal: this.listeners.signal },
-    );
-    heat.onclick = () =>
-      document.dispatchEvent(
-        new CustomEvent("player-history:heatmap-toggle", { detail: { enabled: !heatEnabled } }),
+    ] as const;
+    if (api.registerVisibility) {
+      for (const [key, label] of settings) {
+        api.registerVisibility(key, label, "layers");
+        if (api.visible?.(key)) this.enabled.add(key);
+      }
+      api.registerVisibility("heatmap", "Activity heatmap", "layers");
+      api.events.addEventListener(
+        "visibility",
+        (event) => {
+          const { key, value } = (event as CustomEvent<{ key: string; value: boolean }>).detail;
+          if (key === "heatmap")
+            document.dispatchEvent(
+              new CustomEvent("player-history:heatmap-toggle", { detail: { enabled: value } }),
+            );
+          if (settings.some(([id]) => id === key)) {
+            value ? this.enabled.add(key as Key) : this.enabled.delete(key as Key);
+            this.overlay.invalidate();
+            void this.poll();
+          }
+        },
+        { signal: this.listeners.signal },
       );
-    body.append(heat, this.status);
+      document.addEventListener(
+        "player-history:heatmap-state",
+        (event) =>
+          api.setVisible?.(
+            "heatmap",
+            Boolean((event as CustomEvent<{ enabled: boolean }>).detail.enabled),
+          ),
+        { signal: this.listeners.signal },
+      );
+    }
+
+    if (!api.registerVisibility) {
+      // Older core viewers retain their existing overlay controls during rolling upgrades.
+      this.controls.className = "diorama-overlay-controls";
+      const summary = document.createElement("summary");
+      summary.textContent = "Layers";
+      summary.setAttribute("aria-label", "Overlays");
+      const body = document.createElement("div");
+      body.className = "map-menu-body panel";
+      let saved: string[] = [];
+      try {
+        saved = JSON.parse(localStorage.getItem("diorama-server-overlays") || "[]");
+      } catch {}
+      for (const [key, label] of settings) {
+        if (Array.isArray(saved) && saved.includes(key)) this.enabled.add(key);
+        const row = document.createElement("label"),
+          input = document.createElement("input");
+        input.type = "checkbox";
+        input.setAttribute("role", "switch");
+        input.checked = this.enabled.has(key);
+        input.onchange = () => {
+          input.checked ? this.enabled.add(key) : this.enabled.delete(key);
+          try {
+            localStorage.setItem("diorama-server-overlays", JSON.stringify([...this.enabled]));
+          } catch {}
+          this.overlay.invalidate();
+          void this.poll();
+        };
+        row.append(label, input);
+        body.append(row);
+      }
+      const heat = document.createElement("input");
+      heat.type = "checkbox";
+      heat.setAttribute("role", "switch");
+      heat.onchange = () =>
+        document.dispatchEvent(
+          new CustomEvent("player-history:heatmap-toggle", { detail: { enabled: heat.checked } }),
+        );
+      const row = document.createElement("label");
+      row.append("Activity heatmap", heat);
+      body.append(row, this.status);
+      this.controls.append(summary, body);
+      document.addEventListener(
+        "player-history:heatmap-state",
+        (event) => {
+          heat.checked = Boolean((event as CustomEvent<{ enabled: boolean }>).detail.enabled);
+        },
+        { signal: this.listeners.signal },
+      );
+    }
     const tools = document.getElementById("map-tools") ?? document.body;
-    tools.prepend(this.clock, this.controls);
-    document.addEventListener(
-      "pointerdown",
-      (event) => {
-        if (!this.controls.contains(event.target as Node)) this.controls.open = false;
-      },
-      { signal: this.listeners.signal },
-    );
-    document.addEventListener(
-      "keydown",
-      (event) => {
-        if (event.key === "Escape" && this.controls.open) {
-          this.controls.open = false;
-          summary.focus();
-        }
-      },
-      { signal: this.listeners.signal },
-    );
+    tools.prepend(this.clock);
+    if (!api.registerVisibility) tools.append(this.controls);
     this.overlay = api.registerOverlay("server-overlays", {
       draw: (context) => this.draw(context),
     });
@@ -146,11 +170,18 @@ export class DioramaServerOverlays {
       symbol.setAttribute("aria-hidden", "true");
       symbol.textContent =
         season === "winter" ? "❄" : season === "summer" ? "☀" : season === "spring" ? "❀" : "❧";
-      this.clock.append(symbol, `${season[0]?.toUpperCase()}${season.slice(1)} · `);
+      const name = document.createElement("span");
+      name.className = "season-name";
+      name.textContent = `${season[0]?.toUpperCase()}${season.slice(1)}`;
+      const separator = document.createElement("span");
+      separator.className = "season-separator";
+      separator.textContent = " · ";
+      this.clock.append(symbol, name, separator);
     }
-    this.clock.append(
-      `Day ${minecraftDay(sample.dayTime)} · ${formatMinecraftTime(sample.dayTime)}`,
-    );
+    const date = document.createElement("span");
+    date.className = "clock-date";
+    date.textContent = `Day ${minecraftDay(sample.dayTime)} · ${formatMinecraftTime(sample.dayTime)}`;
+    this.clock.append(date);
     this.clock.title = `In-game date and time · ${state?.dimension}`;
   }
 
@@ -196,6 +227,14 @@ export class DioramaServerOverlays {
     }
   }
 
+  private referenceHeight(): number {
+    const dimension = this.api.getState()?.dimension;
+    const value = dimension ? this.snapshot?.dimensions?.[dimension]?.referenceY : undefined;
+    return Number.isFinite(value)
+      ? (value as number)
+      : (this.api.getState()?.referenceY ?? this.height);
+  }
+
   private cell(
     context: CanvasRenderingContext2D,
     cell: Cell,
@@ -203,7 +242,13 @@ export class DioramaServerOverlays {
     outline = false,
   ): void {
     if (!finiteCell(cell)) return;
-    const corners = aggregateCorners(this.api, cell.x * 16, cell.z * 16, 16, this.height);
+    const corners = aggregateCorners(
+      this.api,
+      cell.x * 16,
+      cell.z * 16,
+      16,
+      this.referenceHeight(),
+    );
     context.beginPath();
     corners.forEach((point, index) => {
       if (point) index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y);
