@@ -794,13 +794,21 @@ try {
           else delete performance.now;
         }
       }
-      return draw.apply(this, args);
+      const result=draw.apply(this,args);
+      const [state]=args,gl=this.gl,rgba=new Uint8Array(4);
+      const x=Math.floor(((24-state.u)*state.scale+state.width/2+64)/(state.width+128)*this.canvas.width);
+      const y=this.canvas.height-1-Math.floor(((-44-state.v)*state.scale+state.height/2+64)/(state.height+128)*this.canvas.height);
+      gl.readPixels(x,y,1,1,gl.RGBA,gl.UNSIGNED_BYTE,rgba);window.__knownFogPixel=[...rgba];
+      return result;
     };
   })()`);
   await wait(
     'window.__fixtureFog?.transition && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
   );
   await wait('document.querySelector("#fog").dataset.fogMaskWorker === "worker" && document.querySelector("#fog").dataset.fogMaskPending === "false"');
+  assert.deepEqual(await cdp.evaluate('window.__knownFogPixel'),[0,0,0,0],"Explored cloud interiors must be transparent black, never opaque white");
+  assert.equal(await cdp.evaluate('window.__fixtureFog.gl.getContextAttributes().premultipliedAlpha'),true);
+  assert.equal(await cdp.evaluate('document.querySelector("#fog").dataset.fogShader'),"web-surface");
   const knownCoverage = await cdp.evaluate(
     "window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0)",
   );
