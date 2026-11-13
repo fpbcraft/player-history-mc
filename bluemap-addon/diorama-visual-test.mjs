@@ -596,18 +596,16 @@ try {
   });
   await wait('document.querySelectorAll(".diorama-history-marker").length >= 2');
   assert.equal(await cdp.evaluate("window.diorama.getState().pixelRatio"), 2);
+  await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
+  const tileRequests = requests.filter((path) => path.endsWith(".jpg")).length;
   const initial = await cdp.evaluate(
     'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
   );
-  await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
-  const tileRequests = requests.filter((path) => path.endsWith(".jpg")).length;
-  await delay(2200);
-  assert.notEqual(
-    await cdp.evaluate(
-      'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
-    ),
-    initial,
-    "Live markers must move",
+  await wait(
+    `(() => {
+      const marker = document.querySelector('.diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)');
+      return marker && marker.style.transform !== ${JSON.stringify(initial)};
+    })()`,
   );
   assert.equal(
     requests.filter((path) => path.endsWith(".jpg")).length,
@@ -715,20 +713,46 @@ try {
     `window.diorama.depthTiles().some(tile=>tile.url.includes("v="+String(${start + 2})))`,
   );
 
+  await cdp.evaluate(`(async () => {
+    const { FogGpu } = await import(new URL('fog-gpu.js', location.href));
+    const draw = FogGpu.prototype.draw;
+    window.__fixtureFogDraw = draw;
+    FogGpu.prototype.draw = function (...args) {
+      window.__fixtureFog = this;
+      if (this.transition && Number.isFinite(window.__fixtureFogAge)) {
+        // Software WebGL can block inside draw; keep the reveal clock fixed through it.
+        const now = performance.now();
+        const descriptor = Object.getOwnPropertyDescriptor(performance, 'now');
+        this.transition.started = now - window.__fixtureFogAge;
+        Object.defineProperty(performance, 'now', { configurable: true, value: () => now });
+        try { return draw.apply(this, args); }
+        finally {
+          if (descriptor) Object.defineProperty(performance, 'now', descriptor);
+          else delete performance.now;
+        }
+      }
+      return draw.apply(this, args);
+    };
+  })()`);
+  await wait(
+    'window.__fixtureFog?.transition && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
+  );
+  const knownCoverage = await cdp.evaluate(
+    "window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0)",
+  );
   await cdp.evaluate("fetch('/fixture/fog-coverage?value=0')");
-  await delay(5500);
+  await wait(
+    'window.__fixtureFog.transition.to.rgba.every((value, i) => i % 4 !== 0 || value === 0) && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
+  );
   const hiddenGreen = await greenPixels();
   const hiddenBrightness = await revealBrightness();
-  await cdp.evaluate("fetch('/fixture/fog-coverage?value=255')");
+  await cdp.evaluate("window.__fixtureFogAge = 400; fetch('/fixture/fog-coverage?value=255')");
   await wait(
-    'Number(document.querySelector("#fog")?.dataset.fogRevealProgress) > .3 && Number(document.querySelector("#fog")?.dataset.fogRevealProgress) < .7',
+    `window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0) === ${knownCoverage} && Number(document.querySelector('#fog').dataset.fogRevealProgress) >= .49 && Number(document.querySelector('#fog').dataset.fogRevealProgress) <= .51`,
   );
-  await cdp.evaluate('Object.defineProperty(document,"hidden",{configurable:true,get:()=>true})');
   await capture("desktop-cloud-reveal");
   const partialBrightness = await revealBrightness();
-  await cdp.evaluate(
-    'delete document.hidden;document.dispatchEvent(new Event("visibilitychange"))',
-  );
+  await cdp.evaluate("window.__fixtureFogAge = 800");
   await wait('Number(document.querySelector("#fog")?.dataset.fogRevealProgress) === 1');
   const revealedGreen = await greenPixels();
   const revealedBrightness = await revealBrightness();
@@ -740,6 +764,13 @@ try {
     partialBrightness < hiddenBrightness - 10 && partialBrightness > revealedBrightness + 10,
     `Terrain pixels must fade in during reveal: ${hiddenBrightness}, ${partialBrightness}, ${revealedBrightness}`,
   );
+  await cdp.evaluate(`(async () => {
+    const { FogGpu } = await import(new URL('fog-gpu.js', location.href));
+    FogGpu.prototype.draw = window.__fixtureFogDraw;
+    delete window.__fixtureFog;
+    delete window.__fixtureFogDraw;
+    delete window.__fixtureFogAge;
+  })()`);
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
