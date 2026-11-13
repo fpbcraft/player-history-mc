@@ -4,13 +4,16 @@ import type { VehiclePose } from "./vehicle-scene.js";
 export const vehicleModelVisible = (row: VehiclePose, scale: number): boolean =>
   (row.size ?? 32) * scale >= 12;
 
+export const vehiclePinVisible = (row: VehiclePose, includeUnnamed = false): boolean =>
+  !row.shadow && (row.named === true || includeUnnamed);
+
 /** One named train pin at distant zoom, while every carriage continues rendering independently. */
 export const vehicleMarkers = (rows: readonly VehiclePose[], scale: number): VehiclePose[] => {
   const groups = new Map<string, VehiclePose[]>(),
     out: VehiclePose[] = [];
   for (const row of rows) {
     if (row.shadow) continue;
-    const small = (row.size ?? 32) * scale < 28;
+    const small = (row.size ?? 32) * scale < 64;
     if (row.named && small && row.group) {
       const key = `${row.dimension}|${row.group}`;
       const group = groups.get(key) ?? [];

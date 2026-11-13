@@ -519,6 +519,7 @@ export class ReplayPanel extends HTMLElement {
     this.q("heat").onclick = () => {
       void this.setHeatmapOverlay(!this.heatEnabled);
     };
+    window.diorama?.setVisible?.("heatmap", this.heatEnabled);
     document.addEventListener(
       "player-history:heatmap-toggle",
       (event) => {

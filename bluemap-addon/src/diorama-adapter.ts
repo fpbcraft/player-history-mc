@@ -341,7 +341,7 @@ export class DioramaAdapter implements MapAdapter {
           (row[2] ?? 0) * heat.size,
           (row[3] ?? 0) * heat.size,
           heat.size,
-          this.height,
+          this.api.getState()?.referenceY ?? this.height,
         );
         context.beginPath();
         corners.forEach((corner, i) => {
