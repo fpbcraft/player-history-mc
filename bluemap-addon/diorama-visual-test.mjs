@@ -744,11 +744,24 @@ try {
   await wait(
     'window.__fixtureFog.transition.to.rgba.every((value, i) => i % 4 !== 0 || value === 0) && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
   );
+  await cdp.evaluate("window.__fixtureUnknownFog = window.__fixtureFog.transition.to");
   const hiddenGreen = await greenPixels();
   const hiddenBrightness = await revealBrightness();
   await cdp.evaluate("window.__fixtureFogAge = 400; fetch('/fixture/fog-coverage?value=255')");
   await wait(
     `window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0) === ${knownCoverage} && Number(document.querySelector('#fog').dataset.fogRevealProgress) >= .49 && Number(document.querySelector('#fog').dataset.fogRevealProgress) <= .51`,
+  );
+  await cdp.evaluate(`{
+    // Tile arrivals can already reveal parts of the map. Start one complete, controlled transition.
+    const gpu = window.__fixtureFog;
+    const known = gpu.transition.to;
+    const unknown = window.__fixtureUnknownFog;
+    gpu.transition = { from: unknown, to: unknown, started: performance.now() - 800 };
+    document.querySelector('#fog').dataset.fogRevealProgress = 'pending';
+    gpu.update(known, true);
+  }`);
+  await wait(
+    'Number(document.querySelector("#fog").dataset.fogRevealProgress) >= .49 && Number(document.querySelector("#fog").dataset.fogRevealProgress) <= .51',
   );
   await capture("desktop-cloud-reveal");
   const partialBrightness = await revealBrightness();
@@ -770,6 +783,7 @@ try {
     delete window.__fixtureFog;
     delete window.__fixtureFogDraw;
     delete window.__fixtureFogAge;
+    delete window.__fixtureUnknownFog;
   })()`);
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
