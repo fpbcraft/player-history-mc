@@ -147,6 +147,23 @@ class ObjectHistoryTest {
     }
   }
   @Test
+  void dioramaManifestKeepsVehicleIdsAndOmitsUnrenderedMobProviders() throws Exception {
+    var options=new ObjectHistoryRecorder.Options(60000,-1,64,.25,1,30000);
+    Path publicRoot=root.resolve("public-filtered");
+    try(var recorder=new ObjectHistoryRecorder(root.resolve("objects-filtered"),options,ignored->{})){
+      recorder.publishTo(publicRoot);
+      recorder.providerSnapshot("surface_mobs",List.of(snapshot("mob",1,0,1,1)),System.currentTimeMillis());
+      recorder.providerSnapshot("sable_ships",List.of(snapshot("ship",2,0,1,2)),System.currentTimeMillis());
+    }
+    var full=com.google.gson.JsonParser.parseString(Files.readString(publicRoot.resolve("objects/manifest.json"))).getAsJsonObject();
+    var filtered=com.google.gson.JsonParser.parseString(Files.readString(publicRoot.resolve("objects/diorama-manifest.json"))).getAsJsonObject();
+    assertEquals(2,full.getAsJsonObject("registry").getAsJsonArray("objects").size());
+    var objects=filtered.getAsJsonObject("registry").getAsJsonArray("objects");assertEquals(1,objects.size());assertEquals("sable_ships",objects.get(0).getAsJsonObject().get("provider").getAsString());
+    assertEquals(1,objects.get(0).getAsJsonObject().get("id").getAsInt());
+    assertEquals(full.get("chunkRanges"),filtered.get("chunkRanges"));
+    assertEquals(full.getAsJsonObject("registry").get("worlds"),filtered.getAsJsonObject("registry").get("worlds"));
+  }
+  @Test
   void delayedGeometryCannotCrossRecorderSessions() throws Exception {
     var options = new ObjectHistoryRecorder.Options(60_000, -1, 64, .25, 1, 30_000);
     try (var first = new ObjectHistoryRecorder(root.resolve("first"), options, ignored -> {});

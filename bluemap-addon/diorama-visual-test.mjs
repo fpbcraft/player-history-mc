@@ -111,6 +111,7 @@ const server = createServer(async (req, res) => {
         roundedFog: true,
         markerFeed: "markers.json",
         vehicleFeed: "assets/diorama-vehicles/scene.json",
+        queueFeed: "queue-status.json",
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
           folder: world.id ? "nether" : "overworld",
@@ -283,7 +284,8 @@ const server = createServer(async (req, res) => {
         Buffer.concat([Buffer.from(buffer, 0, 16), deflateSync(Buffer.from(buffer, 16))]),
       );
     }
-    if (path === "/player-history/data/objects/manifest.json")
+    if (path === "/diorama/queue-status.json") return json({version:1,generatedAt:Date.now(),paused:false,dimensions:{"minecraft:overworld":{queuedTiles:2,waitingChunks:3,truncated:false,tiles:[-1,-1,0,0]}}});
+    if (path === "/player-history/data/objects/diorama-manifest.json")
       return json({
         protocolVersion: 3,
         earliestTimestamp: start,
@@ -301,6 +303,7 @@ const server = createServer(async (req, res) => {
               sourceId: "fixture-train",
               label: "Recorded train",
             },
+            {id:2,provider:"sable_ships",sourceId:"fixture-recorded-ship",label:"Recorded Sable ship"},
           ],
           worlds: ["minecraft:overworld"],
         },
@@ -313,18 +316,19 @@ const server = createServer(async (req, res) => {
             atlas: "meshes/craft.png",
             lastReferencedAt: started,
           },
+          {provider:"sable_ships",sourceId:"fixture-recorded-ship",version:1,mesh:"meshes/train.dspr",atlas:"meshes/craft.png",lastReferencedAt:started},
         ],
       });
     if (path.includes("/data/objects/chunks/")) {
       const bucket = +path.split("/").at(-1).replace(".json", "");
       return json(
-        Array.from({ length: 7 }, (_, i) => ({
-          object: 1,
+        [1,2].flatMap(object=>Array.from({ length: 7 }, (_, i) => ({
+          object,
           time: bucket + i * 10000,
           world: 0,
           x: -20 * 32,
           y: 68 * 32,
-          z: 0,
+          z: object===2?20*32:0,
           qx: 0,
           qy: 0,
           qz: 0,
@@ -335,7 +339,7 @@ const server = createServer(async (req, res) => {
           geometry: 1,
           flags: 0,
           groups: [],
-        })),
+        }))),
       );
     }
     if (path === "/diorama/extensions.json")
@@ -429,7 +433,7 @@ const server = createServer(async (req, res) => {
     }
     let file;
     if (path === "/diorama/" || path === "/diorama/index.html") file = join(mapRoot, "index.html");
-    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js")
+    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js" || path === "/diorama/web-queue.js")
       file = join(mapRoot, path.split("/").at(-1));
     else if (
       /^\/diorama\/(web-fog\.js|fog-(mask|mask-task|mask-worker|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
@@ -630,6 +634,16 @@ try {
   assert.ok(topPositions.every(top=>Math.abs(top-topPositions[0])<1),"Desktop controls and player strip align at the top");
   await cdp.evaluate('document.querySelector(".map-visibility summary").click()');
   await capture("desktop-visibility-menu");
+  const beforeQueueTiles=requests.filter(path=>path.endsWith(".jpg")).length;
+  await cdp.evaluate('document.querySelector("input[data-visibility=queuedTiles]").click()');
+  await wait('Array.from(document.querySelectorAll("small.map-update")).some(el=>!el.hidden&&el.textContent.includes("2 tiles queued · 3 chunks waiting"))');
+  assert.equal(requests.filter(path=>path.endsWith(".jpg")).length,beforeQueueTiles,"Queue overlay must not reload terrain");
+  await cdp.evaluate('document.querySelector("input[data-visibility=queuedTiles]").click()');
+  await delay(100);
+  const queuePolls=requests.filter(path=>path.endsWith("queue-status.json")).length;
+  await delay(2100);
+  assert.equal(requests.filter(path=>path.endsWith("queue-status.json")).length,queuePolls,"Disabled queue overlay must stop polling");
+
   await cdp.evaluate('document.querySelector("input[data-visibility=clouds]").click()');
   await wait('document.querySelector("#fog").style.display === "none"');
   await cdp.evaluate('document.querySelector("input[data-visibility=clouds]").click()');
@@ -896,8 +910,14 @@ try {
   await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start + 270000})`);
   await wait('document.querySelectorAll(".diorama-history-event").length>0');
   await wait(
-    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 1',
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2',
   );
+  assert.ok(requests.some(path=>path.endsWith("objects/diorama-manifest.json")));
+  assert.ok(!requests.some(path=>path.endsWith("objects/manifest.json")),"Native viewer must use its compact vehicle manifest");
+  for(const offset of [330000,390000,270000]){
+    await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start+offset})`);
+    await wait('Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2');
+  }
   await capture("desktop-replay");
   const before = await cdp.evaluate("window.diorama.getState().scale");
   await cdp.send("Input.dispatchMouseEvent", {

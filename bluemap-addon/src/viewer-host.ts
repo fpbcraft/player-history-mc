@@ -3,6 +3,7 @@ import type { IntegrationMapping } from "./types.js";
 
 export interface ViewerHost {
   readonly baseUrl: URL;
+  readonly objectManifestName?: "diorama-manifest.json";
   readonly mapRoot?: string | undefined;
   createAdapter(): MapAdapter;
   createObjectAdapter?(): Promise<ObjectMapAdapter>;

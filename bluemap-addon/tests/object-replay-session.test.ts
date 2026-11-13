@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import { OBJECT_BREAK } from "../src/object-replay.js";
 import { ObjectReplaySession } from "../src/object-replay-session.js";
-import type {
-  ObjectHistoryManifest,
-  ObjectHistoryPoint,
-} from "../src/types.js";
+import type { ObjectHistoryManifest, ObjectHistoryPoint } from "../src/types.js";
 
 const point = (time: number, x: number, world = 0): ObjectHistoryPoint => ({
   object: 1,
@@ -42,17 +39,14 @@ const manifest = (duration = 100): ObjectHistoryManifest => ({
 });
 
 test("object replay session owns loaded-window readiness and world mapping", async () => {
-  const session = new ObjectReplaySession(
-    "/objects",
-    (_base, duration) => ({
-      duration,
-      setAvailableRanges() {},
-      clear() {},
-      async window() {
-        return [point(150, 32)];
-      },
-    }),
-  );
+  const session = new ObjectReplaySession("/objects", (_base, duration) => ({
+    duration,
+    setAvailableRanges() {},
+    clear() {},
+    async window() {
+      return [point(150, 32)];
+    },
+  }));
   session.configure(manifest());
 
   const pending = await session.window(150);
@@ -67,17 +61,14 @@ test("object replay session owns loaded-window readiness and world mapping", asy
 });
 
 test("object replay session suppresses poses for another or unknown world", async () => {
-  const session = new ObjectReplaySession(
-    "/objects",
-    (_base, duration) => ({
-      duration,
-      setAvailableRanges() {},
-      clear() {},
-      async window() {
-        return [point(150, 32, 1)];
-      },
-    }),
-  );
+  const session = new ObjectReplaySession("/objects", (_base, duration) => ({
+    duration,
+    setAvailableRanges() {},
+    clear() {},
+    async window() {
+      return [point(150, 32, 1)];
+    },
+  }));
   session.configure(manifest());
   const window = await session.window(150);
   session.applyWindow(window);
@@ -88,17 +79,14 @@ test("object replay session suppresses poses for another or unknown world", asyn
 });
 
 test("reset invalidates an in-flight object window", async () => {
-  const session = new ObjectReplaySession(
-    "/objects",
-    (_base, duration) => ({
-      duration,
-      setAvailableRanges() {},
-      clear() {},
-      async window() {
-        return [point(150, 32)];
-      },
-    }),
-  );
+  const session = new ObjectReplaySession("/objects", (_base, duration) => ({
+    duration,
+    setAvailableRanges() {},
+    clear() {},
+    async window() {
+      return [point(150, 32)];
+    },
+  }));
   session.configure(manifest());
 
   const window = await session.window(150);
@@ -110,22 +98,39 @@ test("reset invalidates an in-flight object window", async () => {
 
 test("removing the manifest clears object replay availability", () => {
   let clears = 0;
-  const session = new ObjectReplaySession(
-    "/objects",
-    (_base, duration) => ({
-      duration,
-      setAvailableRanges() {},
-      clear() {
-        clears++;
-      },
-      async window() {
-        return [];
-      },
-    }),
-  );
+  const session = new ObjectReplaySession("/objects", (_base, duration) => ({
+    duration,
+    setAvailableRanges() {},
+    clear() {
+      clears++;
+    },
+    async window() {
+      return [];
+    },
+  }));
   session.configure(manifest());
   session.configure(undefined);
 
   assert.equal(clears, 1);
   assert.equal(session.frame(150, "minecraft:overworld"), undefined);
+});
+
+test("adjacent prefetched object poses stay available while a seek window is loading", async () => {
+  const session = new ObjectReplaySession("/objects", (_base, duration) => ({
+    duration,
+    setAvailableRanges() {},
+    clear() {},
+    async window() {
+      return [point(150, 32), point(250, 64)];
+    },
+  }));
+  session.configure(manifest());
+  session.applyWindow(await session.window(150));
+  assert.equal(session.frame(225, "minecraft:overworld")?.poses.length, 1);
+  assert.equal(session.frame(225, "minecraft:overworld")?.poses[0]?.x, 1); // BREAK topology retains the prior pose.
+  assert.equal(
+    session.frame(350, "minecraft:overworld")?.poses.length,
+    0,
+    "Unfetched distant times cannot invent a position",
+  );
 });
