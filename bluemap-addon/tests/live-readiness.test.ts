@@ -208,7 +208,7 @@ it("a pending account request does not slow public-message polling", async () =>
   void panel.openChat();
   await flush();
   await vi.advanceTimersByTimeAsync(4_000);
-  expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/messages"))).toHaveLength(3);
+  expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/messages"))).toHaveLength(4); // Includes the closed-panel baseline poll.
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/session"))).toHaveLength(1);
 });
 
@@ -325,4 +325,27 @@ it("clears live markers and offline locations when public presence expires", asy
   expect(playerCalls.mock.calls.at(-1)?.[0]).toHaveLength(0);
   expect(rosterCalls.mock.calls.at(-1)?.[0]).toHaveLength(0);
   expect(offlineCalls.mock.calls.at(-1)?.[0]).toHaveLength(0);
+});
+
+it("notifies new public chats while closed without replaying backlog or duplicate polls", async () => {
+  const messages = [{ id: 1, time: Date.now() - 60000, name: "Player", message: "Old backlog" }];
+  const original = fetcher.getMockImplementation();
+  fetcher.mockImplementation((input, options) =>
+    String(input).includes("/messages")
+      ? Promise.resolve(Response.json({ messages }))
+      : original(input, options),
+  );
+  document.body.append(panel);
+  await flush();
+  expect(panel.querySelectorAll(".history-chat-notification")).toHaveLength(0);
+  messages.push({ id: 2, time: Date.now(), name: "Player", message: "New live message" });
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(panel.querySelector(".history-chat-notification")?.textContent).toContain(
+    "New live message",
+  );
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(panel.querySelectorAll(".history-chat-notification")).toHaveLength(1);
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes("/session"))).toBe(false);
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(panel.querySelectorAll(".history-chat-notification")).toHaveLength(0);
 });

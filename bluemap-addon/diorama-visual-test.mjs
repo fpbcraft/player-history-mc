@@ -58,6 +58,7 @@ const requests = [];
 let terrainRevision = start;
 let terrainHeight = 64;
 let fogCoverage = 255;
+const chatMessages=[{id:1,time:Date.now()-60000,name:"Ada",message:"Fixture: station ready"}];
 let fineCoverageDelay = 0;
 let shipX = 24;
 const server = createServer(async (req, res) => {
@@ -401,7 +402,7 @@ const server = createServer(async (req, res) => {
       return json({
         version: 1,
         generatedAt: Date.now(),
-        dimensions: { "minecraft:overworld": { dayTime: 6000 } },
+        dimensions: { "minecraft:overworld": { dayTime: 3150000, season: "autumn" } },
       });
     if (path === "/player-history/server-overlays.json")
       return json({
@@ -416,8 +417,8 @@ const server = createServer(async (req, res) => {
           },
         },
       });
-    if (path === "/player-history-api/messages")
-      return json({ messages: [{ name: "Ada", message: "Fixture: station ready" }] });
+    if(path === "/fixture/chat-message") {chatMessages.push({id:chatMessages.length+1,time:Date.now(),name:"Ada",message:"New live fixture chat"});return json({ok:true});}
+    if (path === "/player-history-api/messages") return json({ messages: chatMessages });
     if (path === "/player-history-api/session") return json({ linked: false });
     if (path === "/player-history-api/pair") return json({ token: "fixture-only", code: "ABC123" });
     if (path.endsWith(".jpg")) {
@@ -428,7 +429,7 @@ const server = createServer(async (req, res) => {
     }
     let file;
     if (path === "/diorama/" || path === "/diorama/index.html") file = join(mapRoot, "index.html");
-    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js")
+    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js")
       file = join(mapRoot, path.split("/").at(-1));
     else if (
       /^\/diorama\/(web-fog\.js|fog-(mask|mask-task|mask-worker|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
@@ -541,6 +542,7 @@ try {
   const cdp = new Cdp(socket);
   await cdp.send("Runtime.enable");
   await cdp.send("Page.enable");
+  await cdp.send("Page.bringToFront");
   const wait = async (expression) => {
     for (let i = 0; i < 100; i++) {
       if (await cdp.evaluate(expression)) return;
@@ -560,6 +562,16 @@ try {
           requests: requests.slice(-30),
         }),
     );
+  };
+  const assertBottomControls = async () => {
+    const collision=await cdp.evaluate(`(() => {
+      const zoom=document.querySelector('.zoom').getBoundingClientRect();
+      return ['bluemap-player-replay > [name="open"]','bluemap-player-replay > section','#map-update','.history-chat-launcher'].filter(selector=>{
+        const element=document.querySelector(selector);if(!element||element.hidden)return false;
+        const r=element.getBoundingClientRect();return r.left<zoom.right&&r.right>zoom.left&&r.top<zoom.bottom&&r.bottom>zoom.top;
+      });
+    })()`);
+    assert.deepEqual(collision,[],"Zoom, History, chat and map-update controls must never overlap");
   };
   const capture = async (name) => {
     const result = await cdp.send("Page.captureScreenshot", { format: "png" });
@@ -608,6 +620,36 @@ try {
   await wait('document.querySelectorAll(".diorama-history-marker").length >= 2');
   assert.equal(await cdp.evaluate("window.diorama.getState().pixelRatio"), 2);
   await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
+  await wait('document.querySelector(".diorama-world-clock")?.textContent.includes("Autumn · Day 132 · 12:00")');
+  assert.equal(await cdp.evaluate('document.querySelector(".diorama-overlay-controls summary").getAttribute("aria-label")'),"Overlays");
+  assert.ok(await cdp.evaluate('!document.querySelector("#map-update").hidden && document.querySelector("#map-update").dateTime.length > 0'));
+  await assertBottomControls();
+  const controlStyles=await cdp.evaluate('["#dims",".diorama-player-bar",".diorama-world-clock",".diorama-overlay-controls summary",".map-visibility summary","bluemap-player-replay>[name=open]",".history-chat-launcher"].map(selector=>{const style=getComputedStyle(document.querySelector(selector));return [style.backgroundColor,style.borderTopColor,style.borderRadius].join("|")})');
+  assert.equal(new Set(controlStyles).size,1,"Map controls must share panel colours, borders and corners");
+  const topPositions=await cdp.evaluate('["#dims",".diorama-player-bar","#map-tools"].map(selector=>document.querySelector(selector).getBoundingClientRect().top)');
+  assert.ok(topPositions.every(top=>Math.abs(top-topPositions[0])<1),"Desktop controls and player strip align at the top");
+  await cdp.evaluate('document.querySelector(".map-visibility summary").click()');
+  await capture("desktop-visibility-menu");
+  await cdp.evaluate('document.querySelector("input[data-visibility=clouds]").click()');
+  await wait('document.querySelector("#fog").style.display === "none"');
+  await cdp.evaluate('document.querySelector("input[data-visibility=clouds]").click()');
+  await wait('document.querySelector("#fog").style.display !== "none"');
+  await wait('document.querySelectorAll(".diorama-public-pin").length===1');
+  await cdp.evaluate('document.querySelector("input[data-visibility=sharedMarkers]").click()');
+  await wait('document.querySelectorAll(".diorama-public-pin").length===0');
+  await cdp.evaluate('document.querySelector("input[data-visibility=sharedMarkers]").click()');
+  await wait('document.querySelectorAll(".diorama-public-pin").length===1');
+  await cdp.evaluate('document.querySelector(".map-visibility summary").click()');
+  await wait('document.querySelector(".history-webchat-feed")?.textContent.includes("Fixture: station ready")');
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".history-chat-notification").length'),0,"Initial chat backlog must not notify");
+  await cdp.evaluate("fetch('/fixture/chat-message')");
+  await wait('document.querySelector(".history-chat-notification")?.textContent.includes("New live fixture chat")');
+  await capture("desktop-live-chat-bubble");
+  await delay(2100);
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".history-chat-notification").length'),1,"Repeated polls must not duplicate chat bubbles");
+  await cdp.evaluate('document.querySelector(".history-chat-notification").click()');
+  await wait('document.querySelector(".history-chat-panel").hidden===false');
+  await cdp.evaluate('document.querySelector("[name=chat-close]").click()');
   const tileRequests = requests.filter((path) => path.endsWith(".jpg")).length;
   const initial = await cdp.evaluate(
     'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
@@ -682,8 +724,18 @@ try {
     await cdp.evaluate(
       `getComputedStyle(document.querySelector('.diorama-waypoint-pin[data-zoomed-out="true"] .diorama-pin-label')).visibility`,
     ),
-    "visible",
+    "hidden",
   );
+  await cdp.evaluate('document.querySelector(".diorama-waypoint-pin[data-named=true][data-zoomed-out=true]").focus()');
+  assert.equal(await cdp.evaluate('getComputedStyle(document.activeElement.querySelector(".diorama-pin-label")).visibility'),"visible","Touch/keyboard focus reveals the pin name");
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".diorama-object-marker[data-pin-kind=sablePins]").length'),1,"The grouped Sable ship must use its own pin switch");
+  await cdp.evaluate('document.activeElement.blur(); window.diorama.setVisible("sablePins",false)');
+  await wait('document.querySelectorAll(".diorama-object-marker[data-pin-kind=sablePins]").length===0');
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".diorama-object-marker[data-pin-kind=trainPins]").length'),1,"Hiding Sable pins must retain train pins");
+  await cdp.evaluate('window.diorama.setVisible("trainPins",false)');
+  await wait('document.querySelectorAll(".diorama-object-marker").length===0');
+  await cdp.evaluate('window.diorama.setVisible("sablePins",true);window.diorama.setVisible("trainPins",true)');
+  await wait('document.querySelectorAll(".diorama-waypoint-pin[data-named=true][data-zoomed-out=true]").length===2');
   await capture("desktop-named-vehicle-pins");
   await cdp.evaluate('document.getElementById("in").click()');
   await wait("window.diorama.getState().scale===2");
@@ -886,6 +938,7 @@ try {
   await wait('document.querySelector("#fog").dataset.fogQuality === "touch" && document.querySelector("#fog").dataset.fogMaskPending === "false"');
   assert.ok(await cdp.evaluate('Number(document.querySelector("#fog").dataset.fogPixels) <= 92000'), "Tablet clouds must respect their pixel budget at DPR 2");
   assert.equal(await cdp.evaluate('document.querySelector("#fog").dataset.fogMaskWorker'), "worker");
+  await assertBottomControls();
   await capture("tablet-clouds");
   await cdp.evaluate('window.diorama.setDimension("minecraft:the_nether")');
   await cdp.send("Emulation.setDeviceMetricsOverride", {
@@ -908,6 +961,7 @@ try {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await cdp.evaluate('document.querySelector("bluemap-player-replay").open()');
   await delay(200);
+  await assertBottomControls();
   await capture("mobile-replay-controls");
   assert.equal(
     await cdp.evaluate("document.documentElement.scrollWidth <= innerWidth"),
@@ -935,6 +989,8 @@ try {
     join(output, "results.json"),
     JSON.stringify(
       {
+        redesignedControls: true,
+        liveChatBubbles: true,
         cloudWorker: true,
         tabletCloudPixelBudget: true,
         persistentZoomCoverage: true,

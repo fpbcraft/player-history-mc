@@ -369,6 +369,8 @@ export const parseChatFeed = (value: unknown): ChatFeed => {
         {
           name: message.name,
           message: message.message,
+          ...(Number.isSafeInteger(message.id) ? { id: message.id as number } : {}),
+          ...(Number.isSafeInteger(message.time) ? { time: message.time as number } : {}),
           ...(typeof message.web === "boolean" ? { web: message.web } : {}),
         },
       ];

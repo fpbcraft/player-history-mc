@@ -186,6 +186,8 @@ export class DioramaSceneHost {
     const scale = state?.scale ?? 1;
     for (const row of vehicleMarkers(this.live ? rows : [], scale)) {
       if (row.shadow) continue;
+      const pinKind = /train|contraption/i.test(row.id) ? "trainPins" : "sablePins";
+      if (this.api.visible?.(pinKind) === false) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
       const pixel = this.api.screen({ x: row.pos[0], y: row.pos[1], z: row.pos[2] });
       if (!pixel) continue;
@@ -197,11 +199,15 @@ export class DioramaSceneHost {
         marker.className = "diorama-history-marker diorama-object-marker";
         marker.addEventListener("click", () => {
           const target = this.markerTargets.get(row.id);
-          if (target) this.api.navigate(target);
+          if (target) {
+            marker?.focus();
+            this.api.navigate(target);
+          }
         });
         this.markers.append(marker);
         this.buttons.set(row.id, marker);
       }
+      marker.dataset.pinKind = pinKind;
       updateVehiclePin(marker, row);
       this.markerTargets.set(row.id, {
         x: row.pos[0],
