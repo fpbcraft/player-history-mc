@@ -1,3 +1,5 @@
+import { decodeCraftSprite } from "../src/craft-sprite-format.js";
+import { craftSpriteFixture } from "../vehicle-fixture.mjs";
 import { animateVehicle } from "../src/vehicle-resources.js";
 import { signedVehicleTravel } from "../src/vehicle-travel.js";
 import { deflateSync } from "node:zlib";
@@ -134,4 +136,51 @@ it("keeps mirrored axles in step and reverses travel-driven animation", () => {
   const forward = left.quaternion.clone();
   animateVehicle(root, parts, -4, 0);
   expect(left.quaternion.angleTo(forward.clone().invert())).toBeCloseTo(0);
+});
+
+it("decodes shared craft depth and refuses invalid or oversized expansion", async () => {
+  const bytes = Uint8Array.from(craftSpriteFixture()).buffer;
+  const sprite = await decodeCraftSprite(bytes);
+  expect(sprite.width).toBe(64);
+  expect(sprite.height).toBe(24);
+  expect(sprite.offsetU).toBe(-8);
+  expect(sprite.depth).toHaveLength(64 * 24);
+  const bad = bytes.slice(0);
+  new DataView(bad).setUint32(8, 4096, true);
+  await expect(decodeCraftSprite(bad)).rejects.toThrow();
+  await expect(decodeCraftSprite(bytes.slice(0, 40))).rejects.toThrow();
+});
+it("resolves an independent publisher behind a map subpath", () => {
+  const row = {
+    id: "sable/1",
+    dimension: "minecraft:overworld",
+    mesh: "assets/diorama-vehicles/a.dspr",
+    atlas: "assets/diorama-vehicles/a.png",
+    pos: [0, 80, 0],
+    rot: [0, 0, 0, 1],
+  };
+  const feed = parseVehicleFeed({ objects: [row] }, "https://map.test/diorama/");
+  expect(feed.objects[0]?.mesh).toBe("https://map.test/diorama/assets/diorama-vehicles/a.dspr");
+  expect(feed.objects[0]?.atlas).toBe("https://map.test/diorama/assets/diorama-vehicles/a.png");
+});
+
+it("preserves the craft camera and rejects invalid projection metadata", async () => {
+  const original = Uint8Array.from(craftSpriteFixture());
+  const bytes = new Uint8Array(original.length + 32);
+  bytes.set(original.subarray(0, 32));
+  bytes.set(original.subarray(32), 64);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(4, 2, true);
+  view.setFloat64(32, 0.6, true);
+  view.setFloat64(40, 0.8, true);
+  view.setUint32(48, 3, true);
+  view.setUint32(52, 4, true);
+  expect((await decodeCraftSprite(bytes.buffer)).projection).toEqual({
+    sin: 0.6,
+    cos: 0.8,
+    facing: 3,
+    pixelsPerUnit: 4,
+  });
+  view.setFloat64(32, 2, true);
+  await expect(decodeCraftSprite(bytes.buffer)).rejects.toThrow();
 });

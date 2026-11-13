@@ -41,6 +41,17 @@ public final class ObjectHistoryApi {
       recorder.archiveGeometry(provider, sourceId, version, sourceMesh, sourceAtlas);
   }
 
+  /** Opaque recorder identity for asynchronous optional publishers. */
+  public static Object session() { return active; }
+
+  /** A delayed archive job must never publish old-world geometry into a new recorder session. */
+  public static boolean archiveGeometryInSession(Object session, String provider, String sourceId,
+      long version, Path sourceMesh, Path sourceAtlas) throws IOException {
+    if (!(session instanceof ObjectHistoryRecorder recorder) || active != recorder) return false;
+    recorder.archiveGeometry(provider, sourceId, version, sourceMesh, sourceAtlas);
+    return true;
+  }
+
   public static boolean available() {
     return active != null;
   }

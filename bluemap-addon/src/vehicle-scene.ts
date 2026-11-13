@@ -5,6 +5,7 @@ export interface VehiclePose {
   dimension: string;
   mesh: string;
   atlas?: string;
+  shadow?: boolean;
   pos: [number, number, number];
   rot: [number, number, number, number];
   scale: [number, number, number];
@@ -69,8 +70,18 @@ export const parseVehicleFeed = (
           dimension: r.dimension,
           mesh: publicAssetUrl(r.mesh, base, [
             "/assets/bluemap3d/",
+            new URL("assets/diorama-vehicles/", base).pathname,
             "/player-history/data/objects/",
           ]),
+          ...(typeof r.atlas === "string"
+            ? {
+                atlas: publicAssetUrl(r.atlas, base, [
+                  new URL("assets/diorama-vehicles/", base).pathname,
+                  "/assets/bluemap3d/",
+                ]),
+              }
+            : {}),
+          ...(r.shadow === true ? { shadow: true } : {}),
           pos: r.pos as VehiclePose["pos"],
           rot: r.rot as VehiclePose["rot"],
           scale: vector(r.scale, 3) ? (r.scale as VehiclePose["scale"]) : [1, 1, 1],

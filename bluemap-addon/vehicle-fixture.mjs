@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 export const vehicleFixture = () => {
   const atlas = new TextEncoder().encode("/assets/bluemap3d/white.png");
   const positions = [
@@ -28,5 +29,20 @@ export const vehicleFixture = () => {
 };
 export const whitePng = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGP4DwQACfsD/fteaysAAAAASUVORK5CYII=",
+  "base64",
+);
+
+export const craftSpriteFixture = () => {
+  const header = Buffer.alloc(32);
+  header.write("DSPR");
+  header.writeUInt32LE(1, 4);
+  header.writeUInt32LE(64, 8);
+  header.writeUInt32LE(24, 12);
+  header.writeDoubleLE(-8, 16);
+  header.writeDoubleLE(-3, 24);
+  return Buffer.concat([header, deflateSync(Buffer.alloc(64 * 24 * 4))]);
+};
+export const craftPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAEAAAAAYCAYAAABKtPtEAAAATUlEQVR4nO3QMREAIBDAsLeGRHQiAmRkoEP2XufsdX82OkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAK0BOkBrgA7QGqADtAboAO0ByWho8V6zCTUAAAAASUVORK5CYII=",
   "base64",
 );

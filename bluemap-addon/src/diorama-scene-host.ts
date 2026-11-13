@@ -26,7 +26,10 @@ export class DioramaSceneHost {
   private readonly reduced = matchMedia("(prefers-reduced-motion: reduce)");
   constructor(
     private readonly api: DioramaApi,
-    private readonly feed = new URL("/assets/bluemap3d/entities3d.json", location.origin),
+    private readonly feed = new URL(
+      api.vehicleFeed?.() ?? "/assets/bluemap3d/entities3d.json",
+      location.origin,
+    ),
   ) {
     this.markers.className = "diorama-history-markers";
     this.overlay = api.registerOverlay("live-vehicles", { element: this.markers });
@@ -52,7 +55,7 @@ export class DioramaSceneHost {
       if (!response.ok) throw Error("Live vehicles unavailable");
       const text = new TextDecoder().decode(await readBoundedResponse(response, 2 * 1024 * 1024));
       const json: unknown = JSON.parse(text),
-        parsed = parseVehicleFeed(json, new URL("/", this.feed).href);
+        parsed = parseVehicleFeed(json, new URL("../../", this.feed).href);
       const generated =
         typeof json === "object" &&
         json &&
@@ -171,6 +174,7 @@ export class DioramaSceneHost {
     );
     const keep = new Set<string>();
     for (const row of this.live ? rows : []) {
+      if (row.shadow) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
       const pixel = this.api.screen({ x: row.pos[0], y: row.pos[1], z: row.pos[2] });
       if (!pixel) continue;

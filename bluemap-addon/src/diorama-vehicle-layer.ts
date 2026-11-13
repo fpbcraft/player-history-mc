@@ -1,3 +1,4 @@
+import { DioramaCraftSprites } from "./diorama-craft-sprites.js";
 import * as T from "three";
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
 import { updateVehicleCamera } from "./diorama-camera.js";
@@ -21,6 +22,7 @@ export class DioramaVehicleLayer {
   private readonly camera = new T.OrthographicCamera();
   private readonly resources = new VehicleResources();
   private readonly depth: VehicleDepthLayer;
+  private readonly sprites: DioramaCraftSprites;
   private readonly overlay: OverlayRegistration;
   private readonly drawn = new Map<string, DrawnVehicle>();
   private readonly visible = new Set<string>();
@@ -38,6 +40,8 @@ export class DioramaVehicleLayer {
     this.renderer.domElement.style.zIndex = "1";
     this.overlay = api.registerOverlay("vehicle-models", { element: this.renderer.domElement });
     this.depth = new VehicleDepthLayer(api);
+    this.sprites = new DioramaCraftSprites(api);
+    this.scene.add(this.sprites.root);
     this.scene.add(this.depth.root);
     this.renderer.domElement.addEventListener(
       "webglcontextlost",
@@ -89,19 +93,27 @@ export class DioramaVehicleLayer {
         );
       })
       .slice(0, 128);
-    const keys = new Set(wanted.map((row) => row.id));
+    for (const id of this.sprites.update(
+      wanted.filter((row) => row.mesh.endsWith(".dspr")),
+      previous,
+      alpha,
+      state,
+    ))
+      this.visible.add(id);
+    const models = wanted.filter((row) => !row.mesh.endsWith(".dspr"));
+    const keys = new Set(models.map((row) => row.id));
     for (const [id, entry] of this.drawn)
       if (!keys.has(id)) {
         this.scene.remove(entry.root);
         this.drawn.delete(id);
       }
     this.resources.begin([
-      ...wanted.map((row) => `${row.mesh}|${row.atlas ?? ""}`),
+      ...models.map((row) => `${row.mesh}|${row.atlas ?? ""}`),
       ...[...this.drawn.values()].map((entry) => entry.key),
     ]);
     const rotation = new T.Quaternion(),
       position = new T.Vector3();
-    for (const row of wanted) {
+    for (const row of models) {
       const key = `${row.mesh}|${row.atlas ?? ""}`,
         resource = this.resources.get(row.mesh, row.atlas);
       let entry = this.drawn.get(row.id);
@@ -148,6 +160,7 @@ export class DioramaVehicleLayer {
     this.listeners.abort();
     this.resources.dispose();
     this.depth.dispose();
+    this.sprites.dispose();
     this.overlay.remove();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
