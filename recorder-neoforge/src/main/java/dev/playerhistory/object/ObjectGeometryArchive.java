@@ -71,7 +71,8 @@ public final class ObjectGeometryArchive {
     Objects.requireNonNull(sourceMesh, "sourceMesh");
     Key key = new Key(provider, sourceId, version);
     String stem = digest(provider + "\u0000" + sourceId + "\u0000" + version);
-    String meshName = stem + ".bm3d";
+    boolean sprite = sourceMesh.getFileName().toString().endsWith(".dspr");
+    String meshName = stem + (sprite ? ".dspr" : ".bm3d");
     String atlasName = stem + ".png";
     String meshRelative = "geometry/" + meshName;
     String atlasRelative = "geometry/" + atlasName;
@@ -85,7 +86,8 @@ public final class ObjectGeometryArchive {
       Files.createDirectories(targetMesh.getParent());
 
       String publicAtlasUrl = "player-history/data/objects/" + atlasRelative;
-      byte[] rewritten = rewriteAtlasUrl(Files.readAllBytes(sourceMesh), publicAtlasUrl);
+      byte[] source = Files.readAllBytes(sourceMesh);
+      byte[] rewritten = sprite ? validateCraftSprite(source) : rewriteAtlasUrl(source, publicAtlasUrl);
       writeAtomically(targetMesh, rewritten);
 
       if (sourceAtlas != null && Files.isRegularFile(sourceAtlas))
@@ -175,6 +177,23 @@ public final class ObjectGeometryArchive {
   private void save() throws IOException {
     JsonFiles.write(root.resolve("geometry-index.json"), entries.values());
     dirty = false;
+  }
+
+  private static byte[] validateCraftSprite(byte[] source) throws IOException {
+    if (source.length < 33 || source.length > 17 * 1024 * 1024) throw new IOException("Invalid craft sprite size");
+    ByteBuffer header = ByteBuffer.wrap(source).order(ByteOrder.LITTLE_ENDIAN);
+    if (header.getInt(0) != 0x52505344 || (header.getInt(4) != 1 && header.getInt(4) != 2)) throw new IOException("Invalid craft sprite header");
+    int width = header.getInt(8), height = header.getInt(12);
+    if (width < 1 || height < 1 || width > 2048 || height > 2048 || !Double.isFinite(header.getDouble(16)) || !Double.isFinite(header.getDouble(24))) throw new IOException("Invalid craft dimensions");
+    int offset = header.getInt(4) == 2 ? 64 : 32;
+    if(source.length <= offset)throw new IOException("Truncated craft projection");
+    try (var input = new java.util.zip.InflaterInputStream(new java.io.ByteArrayInputStream(source,offset,source.length-offset))) {
+      long expected = (long) width * height * 4;
+      long read = 0; byte[] buffer = new byte[8192]; int n;
+      while ((n = input.read(buffer)) != -1) { read += n; if (read > expected) throw new IOException("Craft depth exceeds dimensions"); }
+      if (read != expected) throw new IOException("Truncated craft depth");
+    }
+    return source;
   }
 
   private static byte[] rewriteAtlasUrl(byte[] source, String atlasUrl) throws IOException {

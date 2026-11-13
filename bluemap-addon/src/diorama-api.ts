@@ -33,6 +33,7 @@ export interface DepthTile {
 }
 export interface DioramaApi {
   depthTiles?(): DepthTile[];
+  vehicleFeed?(): string | undefined;
   version: 1;
   events: EventTarget;
   getState(): DioramaViewport | null;

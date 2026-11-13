@@ -147,6 +147,45 @@ class ObjectHistoryTest {
     }
   }
   @Test
+  void delayedGeometryCannotCrossRecorderSessions() throws Exception {
+    var options = new ObjectHistoryRecorder.Options(60_000, -1, 64, .25, 1, 30_000);
+    try (var first = new ObjectHistoryRecorder(root.resolve("first"), options, ignored -> {});
+         var second = new ObjectHistoryRecorder(root.resolve("second"), options, ignored -> {})) {
+      ObjectHistoryApi.install(first);
+      Object session = ObjectHistoryApi.session();
+      ObjectHistoryApi.clear(first);
+      ObjectHistoryApi.install(second);
+      try {
+        assertFalse(ObjectHistoryApi.archiveGeometryInSession(session,"sable_ships","old-world",1,
+            root.resolve("not-present.dspr"),root.resolve("not-present.png")));
+      } finally { ObjectHistoryApi.clear(second); }
+    }
+  }
+
+  @Test
+  void archivesDioramaSpritesWithoutMeshRewritingAndRejectsExpansion() throws Exception {
+    Path sprite=root.resolve("craft.dspr"),atlas=root.resolve("craft.png");
+    ByteBuffer header=ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN);
+    header.putInt(0x52505344).putInt(1).putInt(2).putInt(2).putDouble(-3).putDouble(4);
+    var output=new ByteArrayOutputStream();output.write(header.array());
+    try(var zip=new java.util.zip.DeflaterOutputStream(output)){zip.write(new byte[16]);}
+    byte[] original=output.toByteArray();Files.write(sprite,original);Files.write(atlas,new byte[]{1,2,3});
+    var archive=new ObjectGeometryArchive(root.resolve("archive"),ignored->{});
+    archive.archive("sable_ships","ship",17,sprite,atlas);
+    var entry=archive.entries().getFirst();
+    assertTrue(entry.mesh().endsWith(".dspr"));
+    assertArrayEquals(original,Files.readAllBytes(root.resolve("archive").resolve(entry.mesh())));
+    Path publicRoot=root.resolve("public");archive.publishTo(publicRoot);
+    assertArrayEquals(original,Files.readAllBytes(publicRoot.resolve(entry.mesh())));
+    var overflow=new ByteArrayOutputStream();overflow.write(header.array());
+    try(var zip=new java.util.zip.DeflaterOutputStream(overflow)){zip.write(new byte[100]);}
+    Files.write(sprite,overflow.toByteArray());
+    assertThrows(IOException.class,()->archive.archive("sable_ships","bad",18,sprite,atlas));
+    archive.prune(Long.MAX_VALUE);assertEquals(0,archive.size());
+    assertFalse(Files.exists(publicRoot.resolve(entry.mesh())));
+  }
+
+  @Test
   void archivesAndRewritesBlueMap3DGeometry() throws Exception {
     long now = System.currentTimeMillis();
     var options = new ObjectHistoryRecorder.Options(60_000, -1, 64, .25, 1, 30_000);

@@ -56,6 +56,9 @@ public final class PublicAssetsIntegration {
     if (ModList.get().isLoaded("playerhistory_bluemap")) {
       overlays = null; status = null; skins = null; equipment = null;
     } else {
+      DioramaVehicleHistory vehicles = new DioramaVehicleHistory(log);
+      NeoForge.EVENT_BUS.addListener(vehicles::tick);
+      NeoForge.EVENT_BUS.addListener(vehicles::stop);
       overlays = new ServerOverlayPublisher(log);
       status = new WorldStatusPublisher(log);
       skins = new PlayerSkinPublisher(log);

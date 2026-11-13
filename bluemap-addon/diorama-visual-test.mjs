@@ -1,5 +1,5 @@
 import { deflateSync } from "node:zlib";
-import { vehicleFixture, whitePng } from "./vehicle-fixture.mjs";
+import { vehicleFixture, whitePng, craftSpriteFixture, craftPng } from "./vehicle-fixture.mjs";
 import { createServer } from "node:http";
 import { readFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -64,6 +64,7 @@ const server = createServer(async (req, res) => {
         background: "#15171c",
         updated: terrainRevision,
         depth: true,
+        vehicleFeed: "assets/diorama-vehicles/scene.json",
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
           folder: world.id ? "nether" : "overworld",
@@ -77,7 +78,7 @@ const server = createServer(async (req, res) => {
       terrainRevision++;
       return json({ ok: true });
     }
-    if (path === "/assets/bluemap3d/entities3d.json")
+    if (path === "/diorama/assets/diorama-vehicles/scene.json")
       return json({
         generatedAt: Date.now(),
         intervalMs: 500,
@@ -86,7 +87,7 @@ const server = createServer(async (req, res) => {
             id: "train/fixture",
             label: "Synthetic Create train",
             dimension: "minecraft:overworld",
-            mesh: "assets/bluemap3d/train.bm3d",
+            mesh: "/assets/bluemap3d/train.bm3d",
             pos: [-20 + Math.sin((Date.now() - started) / 3000) * 5, 68, 0],
             rot: [
               0,
@@ -99,12 +100,21 @@ const server = createServer(async (req, res) => {
             id: "sable/fixture",
             label: "Synthetic Sable ship",
             dimension: "minecraft:overworld",
-            mesh: "assets/bluemap3d/train.bm3d",
+            mesh: "assets/diorama-vehicles/ship.dspr",
+            atlas: "assets/diorama-vehicles/craft.png",
             pos: [24, 90, 8],
             rot: [0, 0, 0, 1],
           },
         ],
       });
+    if (path.endsWith(".dspr")) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      return res.end(craftSpriteFixture());
+    }
+    if (path.endsWith("craft.png")) {
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(craftPng);
+    }
     if (path.endsWith(".bm3d")) {
       res.writeHead(200, { "Content-Type": "application/octet-stream" });
       return res.end(Buffer.from(vehicleFixture()));
@@ -161,8 +171,8 @@ const server = createServer(async (req, res) => {
             provider: "create_contraptions",
             sourceId: "fixture-train",
             version: 1,
-            mesh: "meshes/train.bm3d",
-            atlas: "meshes/white.png",
+            mesh: "meshes/train.dspr",
+            atlas: "meshes/craft.png",
             lastReferencedAt: started,
           },
         ],
@@ -452,7 +462,18 @@ try {
   assert.ok((await orangePixels()) > 10, "Actual orange vehicle mesh pixels must be visible");
   await capture("desktop-live-vehicles");
   // Simulate a terrain revision without reloading the viewer or changing the vehicle model URL.
-  const meshRequests = requests.filter((path) => path.endsWith(".bm3d")).length;
+  assert.equal(
+    requests.filter((path) => path.includes("entities3d.json")).length,
+    0,
+    "Advertised independent feed must not poll BlueMap3D",
+  );
+  assert.ok(
+    requests.some((path) => path.endsWith(".dspr")),
+    "Shared Diorama craft sprites must load",
+  );
+  const meshRequests = requests.filter(
+    (path) => path.endsWith(".bm3d") || path.endsWith(".dspr"),
+  ).length;
   await cdp.evaluate(`fetch('/fixture/terrain-height?y=200')`);
   await wait(
     `window.diorama.depthTiles().some(tile=>tile.url.includes("v="+String(${start + 1})))`,
@@ -468,7 +489,7 @@ try {
   assert.ok(occluded, "Nearer terrain depth must hide vehicle pixels");
   await capture("desktop-vehicles-occluded");
   assert.equal(
-    requests.filter((path) => path.endsWith(".bm3d")).length,
+    requests.filter((path) => path.endsWith(".bm3d") || path.endsWith(".dspr")).length,
     meshRequests,
     "Terrain revisions must not reload vehicle models",
   );
