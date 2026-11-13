@@ -15,6 +15,10 @@ export class DioramaSceneHost {
   private live = true;
   private liveRows: VehiclePose[] = [];
   private historyRows: VehiclePose[] = [];
+  private objectRegistry: ObjectRegistryEntry[] | undefined;
+  private geometryRegistry: ObjectGeometryEntry[] | undefined;
+  private readonly objectIndex = new Map<number, ObjectRegistryEntry>();
+  private readonly geometryIndex = new Map<string, ObjectGeometryEntry>();
   private previous = new Map<string, VehiclePose>();
   private interval = 1000;
   private readonly motion = new VehicleMotion();
@@ -120,16 +124,25 @@ export class DioramaSceneHost {
   ): void {
     const state = this.api.getState();
     if (!state) return;
+    if (this.objectRegistry !== objects) {
+      this.objectRegistry = objects;
+      this.objectIndex.clear();
+      for (const object of objects) this.objectIndex.set(object.id, object);
+    }
+    if (this.geometryRegistry !== geometries) {
+      this.geometryRegistry = geometries;
+      this.geometryIndex.clear();
+      for (const geometry of geometries)
+        this.geometryIndex.set(
+          JSON.stringify([geometry.provider, geometry.sourceId, geometry.version]),
+          geometry,
+        );
+    }
     this.historyRows = poses.flatMap((pose): VehiclePose[] => {
-      const object = objects.find((item) => item.id === pose.object);
+      const object = this.objectIndex.get(pose.object);
       const geometry =
         object &&
-        geometries.find(
-          (item) =>
-            item.provider === object.provider &&
-            item.sourceId === object.sourceId &&
-            item.version === pose.geometry,
-        );
+        this.geometryIndex.get(JSON.stringify([object.provider, object.sourceId, pose.geometry]));
       if (!object || !geometry) return [];
       try {
         return [

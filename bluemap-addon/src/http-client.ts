@@ -51,14 +51,18 @@ export class HistoryClient {
     return parseLiveSnapshot(await this.json(`data/presence.json?t=${Date.now()}`, signal));
   }
 
-  async objectManifest(signal?: AbortSignal): Promise<ObjectHistoryManifest | null> {
-    const response = await this.fetcher(new URL("data/objects/manifest.json", this.base), {
+  async objectManifest(
+    signal?: AbortSignal,
+    name = "manifest.json",
+  ): Promise<ObjectHistoryManifest | null> {
+    const response = await this.fetcher(new URL(`data/objects/${name}`, this.base), {
       cache: "no-store",
       signal: signal
         ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
         : AbortSignal.timeout(15_000),
     });
-    if (response.status === 404) return null;
+    if (response.status === 404)
+      return name === "manifest.json" ? null : this.objectManifest(signal);
     if (!response.ok) throw new Error(`Object history HTTP ${response.status}`);
     if (!response.json) throw new Error("Object history response is not JSON");
     return parseObjectManifest(await response.json());

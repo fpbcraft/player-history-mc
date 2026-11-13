@@ -36,12 +36,7 @@ export class DioramaCraftSprites {
       ...rows.map((row) => `${row.mesh}|${row.atlas ?? ""}`),
       ...[...this.drawn].filter(([id]) => keep.has(id)).map(([, drawn]) => drawn.entry.key),
     ]);
-    for (const [key, entry] of this.entries)
-      if (!this.wanted.has(key)) {
-        this.release(entry);
-        this.entries.delete(key);
-      }
-    for (const [key, request] of this.pending) if (!this.wanted.has(key)) request.abort();
+    // Keep a bounded LRU across seeks. Empty pending windows must not abort all model loads.
     // One material/texture resource per published image, with an independent mesh per visible row.
     for (const [id, drawn] of this.drawn)
       if (!keep.has(id)) {
@@ -51,6 +46,10 @@ export class DioramaCraftSprites {
     for (const row of rows) {
       const key = `${row.mesh}|${row.atlas ?? ""}`;
       const found = this.entries.get(key);
+      if (found) {
+        this.entries.delete(key);
+        this.entries.set(key, found);
+      }
       if (!found) this.load(row, key);
       const entry = found ?? this.drawn.get(row.id)?.entry;
       if (!entry) continue;
@@ -107,6 +106,7 @@ export class DioramaCraftSprites {
     return [...this.shown];
   }
   private load(row: VehiclePose, key: string): void {
+    this.evict();
     if (
       this.disposed ||
       !row.atlas ||
@@ -120,13 +120,13 @@ export class DioramaCraftSprites {
     this.pending.set(key, abort);
     void loadCraftSprite(row.mesh, row.atlas, key, abort.signal)
       .then((entry) => {
+        this.evict(entry.sprite.width * entry.sprite.height * 8);
         const used = [...this.entries.values()].reduce(
           (sum, value) => sum + value.sprite.width * value.sprite.height * 8,
           0,
         );
         if (
           this.disposed ||
-          !this.wanted.has(key) ||
           used + entry.sprite.width * entry.sprite.height * 8 > 128 * 1024 * 1024
         ) {
           releaseCraftSprite(entry);
@@ -139,6 +139,19 @@ export class DioramaCraftSprites {
         if (this.retry.size > 128) this.retry.delete(this.retry.keys().next().value ?? "");
       })
       .finally(() => this.pending.delete(key));
+  }
+  private evict(incoming = 0): void {
+    let bytes = [...this.entries.values()].reduce(
+      (sum, entry) => sum + entry.sprite.width * entry.sprite.height * 8,
+      0,
+    );
+    for (const [key, entry] of this.entries) {
+      if (this.entries.size < 32 && bytes + incoming <= 128 * 1024 * 1024) break;
+      if (this.wanted.has(key)) continue;
+      this.entries.delete(key);
+      bytes -= entry.sprite.width * entry.sprite.height * 8;
+      this.release(entry);
+    }
   }
   private drop(mesh: T.Mesh<T.BufferGeometry, T.ShaderMaterial>): void {
     this.root.remove(mesh);

@@ -1045,7 +1045,10 @@ export class ReplayPanel extends HTMLElement {
       }
       this.cache.setAvailableRanges(m.chunkRanges);
       if (this.opened) {
-        const objectManifest = await this.historyClient.objectManifest(controller.signal);
+        const objectManifest = await this.historyClient.objectManifest(
+          controller.signal,
+          this.host.objectManifestName,
+        );
         if (!this.requests.current("manifest", controller) || !this.opened) return;
         this.objectReplay?.configure(objectManifest ?? undefined);
         if (!objectManifest) this.objectAdapter?.clear();

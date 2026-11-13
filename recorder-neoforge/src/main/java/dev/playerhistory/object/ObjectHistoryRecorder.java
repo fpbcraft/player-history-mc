@@ -408,7 +408,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
       Files.createDirectories(pub);
       JsonFiles.write(pub.resolve("chunks/" + start + ".json"), List.copyOf(points));
       publishedChunks.add(start);
-      JsonFiles.write(pub.resolve("manifest.json"), publicManifest());
+      writePublicManifests(pub);
     }
 
     JsonFiles.write(
@@ -445,6 +445,18 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
               registry.snapshot()));
     lastLiveFlush = now;
   }
+
+  private void writePublicManifests(Path pub) throws IOException {
+    Map<String,Object> full=publicManifest();
+    JsonFiles.write(pub.resolve("manifest.json"),full);
+    var filtered=new LinkedHashMap<String,Object>(full);
+    var snapshot=registry.snapshot();
+    filtered.put("registry",new ObjectRegistry.Snapshot(snapshot.objects().stream().filter(entry->dioramaProvider(entry.provider())).toList(),snapshot.worlds()));
+    filtered.put("geometries",geometryArchive.entries().stream().filter(entry->dioramaProvider(entry.provider())).toList());
+    JsonFiles.write(pub.resolve("diorama-manifest.json"),filtered);
+  }
+  private static final java.util.Set<String> DIORAMA_PROVIDERS=java.util.Set.of("sable_ships","create_trains","create_contraptions","create_bearings");
+  private static boolean dioramaProvider(String provider) {return DIORAMA_PROVIDERS.contains(provider);}
 
   private Map<String, Object> publicManifest() {
     var result = new LinkedHashMap<String, Object>();
@@ -487,7 +499,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
       } catch (IOException error) {
         log.warn("Could not publish object-history chunk " + file + ": " + error);
       }
-      JsonFiles.write(pub.resolve("manifest.json"), publicManifest());
+      writePublicManifests(pub);
     }
   }
 

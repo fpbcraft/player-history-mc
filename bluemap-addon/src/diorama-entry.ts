@@ -11,6 +11,7 @@ const mount = (api: DioramaApi): void => {
   const scene = new DioramaSceneHost(api);
   configureViewerHost(() => ({
     baseUrl,
+    objectManifestName: "diorama-manifest.json",
     createAdapter: () => new DioramaAdapter(api, baseUrl),
     createObjectAdapter: async () => {
       const { DioramaObjectAdapter } = await import("./diorama-object-adapter.js");

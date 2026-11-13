@@ -38,6 +38,7 @@ export class ObjectReplaySession {
   private cache: ObjectReplayCache | undefined;
   private engine = new ObjectReplayEngine(32, 32767);
   private loadedBucket: number | undefined;
+  private loadedTimes: [number, number] | undefined;
 
   constructor(
     private readonly base: string,
@@ -55,17 +56,14 @@ export class ObjectReplaySession {
     if (!this.cache || this.cache.duration !== manifest.chunkDurationMs) {
       this.generation++;
       this.cache?.clear();
-      this.cache = this.cacheFactory(
-        this.base,
-        manifest.chunkDurationMs,
-        manifest.chunkRanges,
-      );
+      this.cache = this.cacheFactory(this.base, manifest.chunkDurationMs, manifest.chunkRanges);
       this.engine = new ObjectReplayEngine(
         manifest.positionScale,
         manifest.quaternionScale,
         manifest.scaleScale,
       );
       this.loadedBucket = undefined;
+      this.loadedTimes = undefined;
     }
     this.cache.setAvailableRanges(manifest.chunkRanges);
   }
@@ -75,6 +73,7 @@ export class ObjectReplaySession {
     this.cache?.clear();
     this.engine.setPoints([]);
     this.loadedBucket = undefined;
+    this.loadedTimes = undefined;
   }
 
   async window(time: number): Promise<ObjectReplayWindow> {
@@ -87,6 +86,13 @@ export class ObjectReplaySession {
   applyWindow(window: ObjectReplayWindow): boolean {
     if (window.generation !== this.generation || !this.cache) return false;
     this.engine.setPoints(window.points);
+    let first = Infinity,
+      last = -Infinity;
+    for (const point of window.points) {
+      first = Math.min(first, point.time);
+      last = Math.max(last, point.time);
+    }
+    this.loadedTimes = first <= last ? [first, last] : undefined;
     this.loadedBucket = Math.floor(window.time / this.cache.duration);
     return true;
   }
@@ -96,9 +102,10 @@ export class ObjectReplaySession {
     const cache = this.cache;
     if (!manifest || !cache) return undefined;
 
-    const world =
-      worldKey === undefined ? -1 : manifest.registry.worlds.indexOf(worldKey);
-    const ready = Math.floor(time / cache.duration) === this.loadedBucket;
+    const world = worldKey === undefined ? -1 : manifest.registry.worlds.indexOf(worldKey);
+    const ready =
+      Math.floor(time / cache.duration) === this.loadedBucket ||
+      Boolean(this.loadedTimes && time >= this.loadedTimes[0] && time <= this.loadedTimes[1]);
     return {
       poses: ready && world >= 0 ? this.engine.poses(time, world) : [],
       objects: manifest.registry.objects,
@@ -113,5 +120,6 @@ export class ObjectReplaySession {
     this.cache = undefined;
     this.engine = new ObjectReplayEngine(32, 32767);
     this.loadedBucket = undefined;
+    this.loadedTimes = undefined;
   }
 }
