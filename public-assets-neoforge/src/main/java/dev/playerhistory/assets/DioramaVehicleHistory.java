@@ -33,7 +33,7 @@ final class DioramaVehicleHistory {
       if(time<=last || System.currentTimeMillis()-time>15000)return;
       last=time;
       Map<String,List<ObjectSnapshot>> providers=new LinkedHashMap<>();
-      providers.put("create_contraptions",new ArrayList<>());providers.put("sable_ships",new ArrayList<>());
+      providers.put("create_trains",new ArrayList<>());providers.put("create_contraptions",new ArrayList<>());providers.put("sable_ships",new ArrayList<>());
       for(Object row:(List<?>)value(snapshot,"vehicles")) {
         String provider=(String)value(row,"provider"),source=(String)value(row,"sourceId");
         long version=((Number)value(row,"version")).longValue();

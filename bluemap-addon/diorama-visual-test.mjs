@@ -5,13 +5,25 @@ import { readFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 const root = dirname(fileURLToPath(import.meta.url));
-const mapRoot = resolve(
-  process.env.DIORAMA_ROOT ?? join(root, "../../diorama"),
-  "src/main/resources/diorama/web",
+const dioramaRoot = resolve(process.env.DIORAMA_ROOT ?? join(root, "../../diorama"));
+const mapRoot = resolve(dioramaRoot, "src/main/resources/diorama/web");
+const fogAssets = await mkdtemp(join(tmpdir(), "diorama-fog-fixture-"));
+execFileSync(
+  process.execPath,
+  [join(dioramaRoot, "scripts/test-web-fog.mjs"), "--assets", fogAssets],
+  { stdio: "inherit" },
 );
+execFileSync(
+  process.execPath,
+  [join(dioramaRoot, "scripts/test-web-vehicles.mjs"), "--assets", fogAssets],
+  { stdio: "inherit" },
+);
+execFileSync(process.execPath, [join(dioramaRoot, "scripts/export-web-pins.mjs"), fogAssets], {
+  stdio: "inherit",
+});
 const output = join(root, "visual-output/diorama");
 await mkdir(output, { recursive: true });
 const started = Date.now();
@@ -45,6 +57,8 @@ const events = [
 const requests = [];
 let terrainRevision = start;
 let terrainHeight = 64;
+let fogCoverage = 255;
+let shipX = 24;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   requests.push(url.pathname);
@@ -54,6 +68,33 @@ const server = createServer(async (req, res) => {
   };
   try {
     const path = url.pathname;
+    if (path === "/fixture/ship-position") {
+      shipX = Number(url.searchParams.get("x"));
+      return json({ ok: true });
+    }
+    if (path === "/diorama/markers.json")
+      return json({
+        markers: [
+          {
+            id: "public-harbour",
+            name: "Public Harbour",
+            initials: "",
+            icon: "assets/diorama-markers/home.png",
+            dimension: "minecraft:overworld",
+            x: -40,
+            y: 64,
+            z: 48,
+            width: 19,
+            height: 24,
+            anchorX: 9.5,
+            anchorY: 21,
+          },
+        ],
+      });
+    if (/^\/diorama\/assets\/diorama-markers\/(ship|train|home)\.png$/.test(path)) {
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(await readFile(join(fogAssets, path.slice("/diorama/".length))));
+    }
     if (path === "/diorama/map.json")
       return json({
         tileUnits: 128,
@@ -64,6 +105,9 @@ const server = createServer(async (req, res) => {
         background: "#15171c",
         updated: terrainRevision,
         depth: true,
+        fogCoverage: true,
+        roundedFog: true,
+        markerFeed: "markers.json",
         vehicleFeed: "assets/diorama-vehicles/scene.json",
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
@@ -72,6 +116,50 @@ const server = createServer(async (req, res) => {
           tiles: [[-1, -1, 0, -1, -1, 0, 0, 0]],
         })),
       });
+    if (path === "/fixture/fog-coverage") {
+      fogCoverage = Number(url.searchParams.get("value"));
+      terrainRevision++;
+      return json({ ok: true });
+    }
+    if (path.endsWith(".fog.png")) {
+      const raw = Buffer.alloc((64 * 4 + 1) * 64);
+      for (let y = 0; y < 64; y++)
+        for (let x = 0; x < 64; x++) {
+          const offset = y * 257 + 1 + x * 4;
+          raw[offset] = raw[offset + 1] = raw[offset + 2] = fogCoverage;
+          raw[offset + 3] = 255;
+        }
+      const crc = (bytes) => {
+        let crc = 0xffffffff;
+        for (const byte of bytes) {
+          crc ^= byte;
+          for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+        }
+        return (crc ^ 0xffffffff) >>> 0;
+      };
+      const chunk = (name, body) => {
+        const kind = Buffer.from(name),
+          length = Buffer.alloc(4),
+          sum = Buffer.alloc(4);
+        length.writeUInt32BE(body.length);
+        sum.writeUInt32BE(crc(Buffer.concat([kind, body])));
+        return Buffer.concat([length, kind, body, sum]);
+      };
+      const header = Buffer.alloc(13);
+      header.writeUInt32BE(64);
+      header.writeUInt32BE(64, 4);
+      header[8] = 8;
+      header[9] = 6;
+      res.writeHead(200, { "Content-Type": "image/png" });
+      return res.end(
+        Buffer.concat([
+          Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+          chunk("IHDR", header),
+          chunk("IDAT", deflateSync(raw)),
+          chunk("IEND", Buffer.alloc(0)),
+        ]),
+      );
+    }
     if (path === "/diorama/updates.json") return json({ updated: terrainRevision });
     if (path === "/fixture/terrain-height") {
       terrainHeight = Number(url.searchParams.get("y"));
@@ -81,11 +169,15 @@ const server = createServer(async (req, res) => {
     if (path === "/diorama/assets/diorama-vehicles/scene.json")
       return json({
         generatedAt: Date.now(),
-        intervalMs: 500,
+        intervalMs: 100,
         objects: [
           {
             id: "train/fixture",
-            label: "Synthetic Create train",
+            label: "Copper Express",
+            named: true,
+            group: "fixture-train",
+            size: 24,
+            icon: "assets/diorama-markers/train.png",
             dimension: "minecraft:overworld",
             mesh: "/assets/bluemap3d/train.bm3d",
             pos: [-20 + Math.sin((Date.now() - started) / 3000) * 5, 68, 0],
@@ -98,15 +190,49 @@ const server = createServer(async (req, res) => {
           },
           {
             id: "sable/fixture",
-            label: "Synthetic Sable ship",
+            label: "Skyward",
+            named: true,
+            group: "fixture-ship",
+            size: 16,
+            icon: "assets/diorama-markers/ship.png",
             dimension: "minecraft:overworld",
             mesh: "assets/diorama-vehicles/ship.dspr",
             atlas: "assets/diorama-vehicles/craft.png",
-            pos: [24, 90, 8],
+            caster: "assets/diorama-vehicles/ship.dshd",
+            pos: [shipX, 90, 8],
             rot: [0, 0, 0, 1],
           },
         ],
       });
+    if (path.endsWith(".dshd")) {
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      return res.end(await readFile(join(fogAssets, "fixture-caster.dshd")));
+    }
+    if (path.endsWith(".ground")) {
+      const match = /(-?\d+)_(-?\d+)\.ground$/.exec(path),
+        tileV = Number(match?.[2] ?? 0);
+      const body = Buffer.alloc(16 + 512 * 512 * 13);
+      body.writeUInt32BE(0x44475244);
+      body.writeUInt32BE(1, 4);
+      body.writeUInt32BE(512, 8);
+      body.writeUInt32BE(512, 12);
+      const sin = Math.sin((40 * Math.PI) / 180),
+        cos = Math.cos((40 * Math.PI) / 180);
+      for (let y = 0; y < 512; y++)
+        for (let x = 0; x < 512; x++) {
+          const at = 16 + (y * 512 + x) * 13,
+            v = tileV * 128 + (y + 0.5) / 4;
+          body.writeFloatBE(terrainHeight, at);
+          body.writeFloatBE(
+            -(sin * terrainHeight + (cos * (v + terrainHeight * cos)) / sin),
+            at + 4,
+          );
+          body[at + 8] = 200;
+          body.writeUInt32BE(0xff183020, at + 9);
+        }
+      res.writeHead(200, { "Content-Type": "application/octet-stream" });
+      return res.end(deflateSync(body));
+    }
     if (path.endsWith(".dspr")) {
       res.writeHead(200, { "Content-Type": "application/octet-stream" });
       return res.end(craftSpriteFixture());
@@ -291,15 +417,27 @@ const server = createServer(async (req, res) => {
     }
     let file;
     if (path === "/diorama/" || path === "/diorama/index.html") file = join(mapRoot, "index.html");
-    else if (path === "/diorama/overlay-api.js") file = join(mapRoot, "overlay-api.js");
+    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js")
+      file = join(mapRoot, path.split("/").at(-1));
+    else if (
+      /^\/diorama\/(web-fog\.js|fog-(mask|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
+        path,
+      )
+    )
+      file = join(fogAssets, path.split("/").at(-1));
     else if (path.startsWith("/player-history/") && !path.includes(".."))
       file = join(root, "dist", path.slice("/player-history/".length));
     if (!file) throw Error("missing");
     const body = await readFile(file);
     res.writeHead(200, {
       "Content-Type":
-        { ".js": "text/javascript", ".css": "text/css", ".html": "text/html" }[extname(file)] ??
-        "application/octet-stream",
+        {
+          ".js": "text/javascript",
+          ".css": "text/css",
+          ".html": "text/html",
+          ".fsh": "text/plain",
+          ".png": "image/png",
+        }[extname(file)] ?? "application/octet-stream",
     });
     res.end(body);
   } catch {
@@ -333,8 +471,14 @@ class Cdp {
     this.nextId = 0;
     this.calls = new Map();
     this.runtimeErrors = [];
+    this.consoleErrors = [];
     socket.addEventListener("message", ({ data }) => {
       const message = JSON.parse(data);
+      if (
+        message.method === "Runtime.consoleAPICalled" &&
+        ["error", "warning", "warn"].includes(message.params.type)
+      )
+        this.consoleErrors.push(message.params.args.map((arg) => arg.description ?? arg.value));
       if (message.method === "Runtime.exceptionThrown") {
         this.runtimeErrors.push(message.params.exceptionDetails);
       }
@@ -397,6 +541,8 @@ try {
         "\n" +
         JSON.stringify({
           errors: cdp.runtimeErrors,
+          console: cdp.consoleErrors,
+          fog: await cdp.evaluate('document.querySelector("#fog")?.dataset.fogRenderer'),
           state: await cdp.evaluate(
             `({text:document.body.innerText,api:!!window.diorama,state:window.diorama?.getState(),markers:[...document.querySelectorAll(".diorama-history-marker")].map(e=>({hidden:e.hidden,style:e.style.cssText,rect:e.getBoundingClientRect().toJSON()})),active:document.activeElement?.className})`,
           ),
@@ -409,10 +555,35 @@ try {
     await writeFile(join(output, `${name}.png`), Buffer.from(result.data, "base64"));
   };
   const orangePixels = async () => {
+    await cdp.evaluate(
+      `{const style=document.createElement('style');style.id='vehicle-pixel-oracle';style.textContent='.diorama-public-waypoints,.diorama-waypoint-pin{visibility:hidden!important}';document.head.append(style);}`,
+    );
+    const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+    const count =
+      await cdp.evaluate(`(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());
+      const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext("2d");context.drawImage(image,0,0);
+      const data=context.getImageData(1000,660,460,220).data;let count=0;for(let i=0;i<data.length;i+=4)if(data[i]>220&&data[i+1]>160&&data[i+1]<220&&data[i+2]<180)count++;image.close();return count;})()`);
+    await cdp.evaluate("document.getElementById('vehicle-pixel-oracle').remove()");
+    return count;
+  };
+  const greenPixels = async () => {
     const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
     return cdp.evaluate(`(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());
       const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext("2d");context.drawImage(image,0,0);
-      const data=context.getImageData(1000,660,460,220).data;let count=0;for(let i=0;i<data.length;i+=4)if(data[i]>220&&data[i+1]>160&&data[i+1]<220&&data[i+2]<180)count++;image.close();return count;})()`);
+      const data=context.getImageData(800,500,900,700).data;let count=0;for(let i=0;i<data.length;i+=4)if(data[i+1]>data[i]*1.2&&data[i+1]>data[i+2]*1.08&&data[i+1]>45)count++;image.close();return count;})()`);
+  };
+  const revealBrightness = async () => {
+    const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+    return cdp.evaluate(
+      `(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());const c=document.createElement("canvas");c.width=image.width;c.height=image.height;const ctx=c.getContext("2d");ctx.drawImage(image,0,0);const a=ctx.getImageData(1100,1100,100,100).data;let sum=0;for(let i=0;i<a.length;i+=4)sum+=(a[i]+a[i+1]+a[i+2])/3;image.close();return sum/(a.length/4);})()`,
+    );
+  };
+  const shadowPixels = async (x) => {
+    const pixel = await cdp.evaluate(`window.diorama.screen({x:${x},y:64,z:8})`);
+    const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+    return cdp.evaluate(
+      `(async()=>{const image=await createImageBitmap(await (await fetch("data:image/png;base64,${shot.data}")).blob());const canvas=document.createElement("canvas");canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext("2d");ctx.drawImage(image,0,0);const data=ctx.getImageData(${pixel.x * 2 - 14},${pixel.y * 2 - 8},28,16).data;let count=0;for(let i=0;i<data.length;i+=4)if(Math.abs(data[i]-32)<4&&Math.abs(data[i+1]-48)<4&&Math.abs(data[i+2]-24)<4)count++;image.close();return count;})()`,
+    );
   };
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 1280,
@@ -425,18 +596,16 @@ try {
   });
   await wait('document.querySelectorAll(".diorama-history-marker").length >= 2');
   assert.equal(await cdp.evaluate("window.diorama.getState().pixelRatio"), 2);
+  await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
+  const tileRequests = requests.filter((path) => path.endsWith(".jpg")).length;
   const initial = await cdp.evaluate(
     'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
   );
-  await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
-  const tileRequests = requests.filter((path) => path.endsWith(".jpg")).length;
-  await delay(2200);
-  assert.notEqual(
-    await cdp.evaluate(
-      'document.querySelector(".diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)").style.transform',
-    ),
-    initial,
-    "Live markers must move",
+  await wait(
+    `(() => {
+      const marker = document.querySelector('.diorama-history-marker:not(.diorama-history-offline):not(.diorama-object-marker)');
+      return marker && marker.style.transform !== ${JSON.stringify(initial)};
+    })()`,
   );
   assert.equal(
     requests.filter((path) => path.endsWith(".jpg")).length,
@@ -458,9 +627,55 @@ try {
   await wait(
     'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.depthTiles) > 0',
   );
+  await wait('document.querySelector("#fog")?.dataset.fogRenderer === "webgl"');
+  await wait('Number(document.querySelector("#fog")?.dataset.fogRevealProgress) === 1');
+  await capture("desktop-cloud-border");
   await capture("desktop-live-tooltip");
   assert.ok((await orangePixels()) > 10, "Actual orange vehicle mesh pixels must be visible");
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleShadows) > 0',
+  );
   await capture("desktop-live-vehicles");
+  await cdp.evaluate(
+    'document.querySelector(".diorama-history-tooltip").style.visibility="hidden"',
+  );
+  assert.ok(
+    (await shadowPixels(24)) > 30,
+    "Native sun-shaded terrain pixels must be drawn under the ship",
+  );
+  await cdp.evaluate("fetch('/fixture/ship-position?x=56')");
+  await delay(500);
+  assert.ok(
+    (await shadowPixels(56)) > 30,
+    "Shadow must follow the interpolated ship across terrain",
+  );
+  assert.equal(
+    await shadowPixels(24),
+    0,
+    "Shadow must leave the old ground without copied terrain artifacts",
+  );
+  await capture("desktop-moving-shadow");
+  await cdp.evaluate('document.querySelector(".diorama-history-tooltip").style.visibility=""');
+  await cdp.evaluate("fetch('/fixture/ship-position?x=24')");
+  await delay(300);
+  await wait('document.querySelectorAll(".diorama-public-pin").length===1');
+  assert.equal(
+    await cdp.evaluate('document.querySelector(".diorama-public-pin").getAttribute("aria-label")'),
+    "Public Harbour",
+  );
+  await cdp.evaluate('document.getElementById("out").click()');
+  await wait(
+    `document.querySelectorAll('.diorama-waypoint-pin[data-named="true"][data-zoomed-out="true"]').length===2`,
+  );
+  assert.equal(
+    await cdp.evaluate(
+      `getComputedStyle(document.querySelector('.diorama-waypoint-pin[data-zoomed-out="true"] .diorama-pin-label')).visibility`,
+    ),
+    "visible",
+  );
+  await capture("desktop-named-vehicle-pins");
+  await cdp.evaluate('document.getElementById("in").click()');
+  await wait("window.diorama.getState().scale===2");
   // Simulate a terrain revision without reloading the viewer or changing the vehicle model URL.
   assert.equal(
     requests.filter((path) => path.includes("entities3d.json")).length,
@@ -498,6 +713,88 @@ try {
     `window.diorama.depthTiles().some(tile=>tile.url.includes("v="+String(${start + 2})))`,
   );
 
+  await cdp.evaluate(`(async () => {
+    const { FogGpu } = await import(new URL('fog-gpu.js', location.href));
+    const draw = FogGpu.prototype.draw;
+    window.__fixtureFogDraw = draw;
+    FogGpu.prototype.draw = function (...args) {
+      window.__fixtureFog = this;
+      if (this.transition && Number.isFinite(window.__fixtureFogAge)) {
+        // Software WebGL can block inside draw; keep the reveal clock fixed through it.
+        const now = performance.now();
+        const descriptor = Object.getOwnPropertyDescriptor(performance, 'now');
+        this.transition.started = now - window.__fixtureFogAge;
+        Object.defineProperty(performance, 'now', { configurable: true, value: () => now });
+        try { return draw.apply(this, args); }
+        finally {
+          if (descriptor) Object.defineProperty(performance, 'now', descriptor);
+          else delete performance.now;
+        }
+      }
+      return draw.apply(this, args);
+    };
+  })()`);
+  await wait(
+    'window.__fixtureFog?.transition && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
+  );
+  const knownCoverage = await cdp.evaluate(
+    "window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0)",
+  );
+  await cdp.evaluate("fetch('/fixture/fog-coverage?value=0')");
+  await wait(
+    'window.__fixtureFog.transition.to.rgba.every((value, i) => i % 4 !== 0 || value === 0) && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
+  );
+  await cdp.evaluate("window.__fixtureUnknownFog = window.__fixtureFog.transition.to");
+  const hiddenGreen = await greenPixels();
+  const hiddenBrightness = await revealBrightness();
+  await cdp.evaluate("window.__fixtureFogAge = 400; fetch('/fixture/fog-coverage?value=255')");
+  await wait(
+    `window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0) === ${knownCoverage} && Number(document.querySelector('#fog').dataset.fogRevealProgress) >= .49 && Number(document.querySelector('#fog').dataset.fogRevealProgress) <= .51`,
+  );
+  await cdp.evaluate(`{
+    // Tile arrivals can already reveal parts of the map. Start one complete, controlled transition.
+    const gpu = window.__fixtureFog;
+    const known = gpu.transition.to;
+    const unknown = window.__fixtureUnknownFog;
+    gpu.transition = { from: unknown, to: unknown, started: performance.now() - 800 };
+    document.querySelector('#fog').dataset.fogRevealProgress = 'pending';
+    gpu.update(known, true);
+  }`);
+  await wait(
+    'Number(document.querySelector("#fog").dataset.fogRevealProgress) >= .49 && Number(document.querySelector("#fog").dataset.fogRevealProgress) <= .51',
+  );
+  await capture("desktop-cloud-reveal");
+  const partialBrightness = await revealBrightness();
+  await cdp.evaluate("window.__fixtureFogAge = 800");
+  await wait('Number(document.querySelector("#fog")?.dataset.fogRevealProgress) === 1');
+  const revealedGreen = await greenPixels();
+  const revealedBrightness = await revealBrightness();
+  assert.ok(
+    revealedGreen > hiddenGreen + 1000,
+    "Clouds must cover unknown terrain and reveal actual terrain pixels",
+  );
+  assert.ok(
+    partialBrightness < hiddenBrightness - 10 && partialBrightness > revealedBrightness + 10,
+    `Terrain pixels must fade in during reveal: ${hiddenBrightness}, ${partialBrightness}, ${revealedBrightness}`,
+  );
+  await cdp.evaluate(`(async () => {
+    const { FogGpu } = await import(new URL('fog-gpu.js', location.href));
+    FogGpu.prototype.draw = window.__fixtureFogDraw;
+    delete window.__fixtureFog;
+    delete window.__fixtureFogDraw;
+    delete window.__fixtureFogAge;
+    delete window.__fixtureUnknownFog;
+  })()`);
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  await delay(100);
+  assert.equal(
+    await cdp.evaluate('Number(document.querySelector("#fog")?.dataset.fogRevealProgress)'),
+    1,
+    "Reduced motion skips reveal interpolation",
+  );
+  await cdp.send("Emulation.setEmulatedMedia", { features: [] });
   await cdp.evaluate('document.querySelector("bluemap-player-replay").open()');
   await wait('Number(document.querySelector("[name=timeline]").max)>1');
   await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start + 270000})`);
@@ -582,10 +879,17 @@ try {
     "Dispose must stop polling",
   );
   assert.deepEqual(cdp.runtimeErrors, []);
+  assert.deepEqual(
+    cdp.consoleErrors,
+    [],
+    "Browser must compile fog and shadow shaders without errors or warnings",
+  );
   await writeFile(
     join(output, "results.json"),
     JSON.stringify(
       {
+        namedVehiclePins: true,
+        publicWaypointPins: true,
         liveMovement: true,
         liveVehicleMeshes: true,
         terrainDepth: true,
@@ -599,6 +903,9 @@ try {
         touch: true,
         highDpi: true,
         cleanup: true,
+        cloudBorders: true,
+        cloudRevealPixels: true,
+        reducedMotion: true,
         fixture: true,
       },
       null,
@@ -613,4 +920,5 @@ try {
   server.close();
   await delay(250);
   await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  await rm(fogAssets, { recursive: true, force: true });
 }

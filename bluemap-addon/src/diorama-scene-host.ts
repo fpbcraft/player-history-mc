@@ -1,3 +1,5 @@
+import { vehicleMarkers, updateVehiclePin, arrangeVehicleLabels } from "./vehicle-markers.js";
+import { VehicleMotion } from "./vehicle-motion.js";
 import { signedVehicleTravel } from "./vehicle-travel.js";
 import { readBoundedResponse } from "./vehicle-http.js";
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
@@ -15,12 +17,17 @@ export class DioramaSceneHost {
   private historyRows: VehiclePose[] = [];
   private previous = new Map<string, VehiclePose>();
   private interval = 1000;
-  private receivedAt = 0;
+  private readonly motion = new VehicleMotion();
+  private generated = -Infinity;
   private expiresAt = 0;
   private frame = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly abort = new AbortController();
   private readonly markers = document.createElement("div");
+  private readonly markerTargets = new Map<
+    string,
+    { x: number; y: number; z: number; dimension: string }
+  >();
   private readonly buttons = new Map<string, HTMLButtonElement>();
   private readonly overlay: OverlayRegistration;
   private readonly reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -46,6 +53,7 @@ export class DioramaSceneHost {
   }
   private async poll(): Promise<void> {
     if (this.abort.signal.aborted) return;
+    const started = performance.now();
     try {
       if (document.hidden || !this.live) return;
       const response = await fetch(this.feed, {
@@ -69,6 +77,8 @@ export class DioramaSceneHost {
         generated > Date.now() + 60000
       )
         throw Error("Live vehicle publication is stale or has no timestamp");
+      if (generated < this.generated) return;
+      const changed = generated !== this.generated;
       this.previous = new Map(this.liveRows.map((row) => [row.id, row]));
       this.liveRows = parsed.objects.map((row) => {
         const previous = this.previous.get(row.id);
@@ -83,21 +93,23 @@ export class DioramaSceneHost {
           q[3] / length,
         ];
         const travel =
-          previous?.dimension === row.dimension && distance < 128
+          changed && previous?.dimension === row.dimension && distance < 128
             ? signedVehicleTravel(delta[0] ?? 0, delta[1] ?? 0, delta[2] ?? 0, rotation)
             : 0;
         return { ...row, travel: (previous?.travel ?? 0) + travel };
       });
-      this.receivedAt = performance.now();
+      this.motion.update(generated, this.liveRows, performance.now(), parsed.interval);
+      this.generated = generated;
       this.expiresAt = generated + 15000;
       this.interval = parsed.interval;
     } catch {
-      this.liveRows = [];
-      this.previous.clear();
-      this.interval = Math.min(30000, Math.max(5000, this.interval * 2));
+      this.interval = Math.min(2000, Math.max(250, this.interval * 2));
     } finally {
       if (!this.abort.signal.aborted)
-        this.timer = setTimeout(() => void this.poll(), this.interval);
+        this.timer = setTimeout(
+          () => void this.poll(),
+          Math.max(20, this.interval - (performance.now() - started)),
+        );
     }
   }
   setHistorical(
@@ -149,7 +161,11 @@ export class DioramaSceneHost {
     if (this.abort.signal.aborted) return;
     this.frame = requestAnimationFrame((next) => this.draw(next));
     if (document.hidden) return;
-    const rows = this.live ? (Date.now() <= this.expiresAt ? this.liveRows : []) : this.historyRows;
+    const rows = this.live
+      ? Date.now() <= this.expiresAt
+        ? this.motion.sample(time, this.reduced.matches)
+        : []
+      : this.historyRows;
     if (rows.length && !this.layer && !this.loading && !this.failed) {
       this.loading = true;
       void import("./diorama-vehicle-layer.js")
@@ -163,17 +179,12 @@ export class DioramaSceneHost {
           this.loading = false;
         });
     }
-    const alpha = this.reduced.matches
-      ? 1
-      : Math.max(0, Math.min(1, (time - this.receivedAt) / this.interval));
-    this.layer?.render(
-      rows,
-      this.live ? this.previous : new Map(),
-      alpha,
-      this.reduced.matches ? 0 : time / 1000,
-    );
+    this.layer?.render(rows, new Map(), 1, this.reduced.matches ? 0 : time / 1000);
     const keep = new Set<string>();
-    for (const row of this.live ? rows : []) {
+    const state = this.api.getState();
+    const labels: { element: HTMLButtonElement; x: number; y: number; name: string }[] = [];
+    const scale = state?.scale ?? 1;
+    for (const row of vehicleMarkers(this.live ? rows : [], scale)) {
       if (row.shadow) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
       const pixel = this.api.screen({ x: row.pos[0], y: row.pos[1], z: row.pos[2] });
@@ -184,19 +195,36 @@ export class DioramaSceneHost {
         marker = document.createElement("button");
         marker.type = "button";
         marker.className = "diorama-history-marker diorama-object-marker";
-        marker.textContent = /train|contraption/.test(row.id) ? "🚂" : "⛵";
+        marker.addEventListener("click", () => {
+          const target = this.markerTargets.get(row.id);
+          if (target) this.api.navigate(target);
+        });
         this.markers.append(marker);
         this.buttons.set(row.id, marker);
       }
+      updateVehiclePin(marker, row);
+      this.markerTargets.set(row.id, {
+        x: row.pos[0],
+        y: row.pos[1],
+        z: row.pos[2],
+        dimension: row.dimension,
+      });
+      marker.dataset.zoomedOut = String((row.size ?? 32) * scale < 28);
+      if (row.named && (row.size ?? 32) * scale < 28)
+        labels.push({ element: marker, x: pixel.x, y: pixel.y, name: row.label });
       marker.title = row.label;
       marker.setAttribute("aria-label", row.label);
-      marker.style.transform = `translate(${pixel.x}px,${pixel.y}px) translate(-50%,-50%)`;
-      marker.dataset.model = String(this.layer?.has(row.id) ?? false);
+      marker.style.transform = `translate(${pixel.x}px,${pixel.y}px) translate(-50%,-87.5%)`;
+      marker.dataset.model = String(
+        (this.layer?.has(row.id) ?? false) && !(row.named && (row.size ?? 32) * scale < 28),
+      );
     }
+    if (state) arrangeVehicleLabels(labels, state.width, state.height);
     for (const [id, marker] of this.buttons)
       if (!keep.has(id)) {
         marker.remove();
         this.buttons.delete(id);
+        this.markerTargets.delete(id);
       }
   }
   dispose(): void {
@@ -206,5 +234,6 @@ export class DioramaSceneHost {
     this.layer?.dispose();
     this.overlay.remove();
     this.buttons.clear();
+    this.markerTargets.clear();
   }
 }

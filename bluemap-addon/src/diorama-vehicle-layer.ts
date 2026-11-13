@@ -1,3 +1,4 @@
+import { VehicleShadowLayer } from "./vehicle-shadow-layer.js";
 import { DioramaCraftSprites } from "./diorama-craft-sprites.js";
 import * as T from "three";
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
@@ -23,6 +24,7 @@ export class DioramaVehicleLayer {
   private readonly resources = new VehicleResources();
   private readonly depth: VehicleDepthLayer;
   private readonly sprites: DioramaCraftSprites;
+  private readonly shadows: VehicleShadowLayer;
   private readonly overlay: OverlayRegistration;
   private readonly drawn = new Map<string, DrawnVehicle>();
   private readonly visible = new Set<string>();
@@ -41,6 +43,8 @@ export class DioramaVehicleLayer {
     this.overlay = api.registerOverlay("vehicle-models", { element: this.renderer.domElement });
     this.depth = new VehicleDepthLayer(api);
     this.sprites = new DioramaCraftSprites(api);
+    this.shadows = new VehicleShadowLayer(api);
+    this.scene.add(this.shadows.root);
     this.scene.add(this.sprites.root);
     this.scene.add(this.depth.root);
     this.renderer.domElement.addEventListener(
@@ -93,6 +97,7 @@ export class DioramaVehicleLayer {
         );
       })
       .slice(0, 128);
+    this.shadows.update(wanted, state);
     for (const id of this.sprites.update(
       wanted.filter((row) => row.mesh.endsWith(".dspr")),
       previous,
@@ -155,12 +160,14 @@ export class DioramaVehicleLayer {
     this.renderer.render(this.scene, this.camera);
     this.renderer.domElement.dataset.vehicleModels = String(this.visible.size);
     this.renderer.domElement.dataset.depthTiles = String(this.depth.root.children.length);
+    this.renderer.domElement.dataset.vehicleShadows = String(this.shadows.root.children.length);
   }
   dispose(): void {
     this.listeners.abort();
     this.resources.dispose();
     this.depth.dispose();
     this.sprites.dispose();
+    this.shadows.dispose();
     this.overlay.remove();
     this.renderer.dispose();
     this.renderer.forceContextLoss();

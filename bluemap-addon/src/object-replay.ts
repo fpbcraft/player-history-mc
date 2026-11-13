@@ -49,7 +49,7 @@ const normalizedQuaternion = (
   return [x, y, z, w];
 };
 
-const slerp = (
+export const slerp = (
   from: [number, number, number, number],
   target: [number, number, number, number],
   ratio: number,

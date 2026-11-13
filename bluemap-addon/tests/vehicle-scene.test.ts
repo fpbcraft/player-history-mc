@@ -49,7 +49,7 @@ it("bounds and validates poses, dimensions, duplicates and polling rates", () =>
     { intervalMs: 1, objects: [row, row, { ...row, id: "bad", pos: [NaN, 0, 0] }] },
     "https://map.test/",
   );
-  expect(parsed.interval).toBe(250);
+  expect(parsed.interval).toBe(100);
   expect(parsed.objects).toHaveLength(1);
   expect(parsed.objects[0]?.dimension).toBe("mod:moon");
   expect(() => parseVehicleFeed({ objects: Array(2001).fill(row) }, "https://map.test/")).toThrow();

@@ -31,3 +31,11 @@
 
 .diorama-object-marker[data-model="true"] { opacity: 0; }
 .diorama-object-marker[data-model="true"]:focus-visible { opacity: 1; }
+
+.diorama-waypoint-pin { width:38px;height:48px;border:0;background:transparent;overflow:visible; }
+.diorama-pin-picture { position:absolute;inset:0;width:38px;height:48px;image-rendering:pixelated; }
+.diorama-pin-initials { position:absolute;left:6px;top:5px;width:26px;height:24px;display:grid;place-items:center;color:white;font:bold 11px monospace;text-shadow:1px 1px #101418,-1px -1px #101418; }
+.diorama-pin-label { position:absolute;left:42px;top:6px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 5px;border-radius:3px;background:#15171ce8;color:#fff;font:12px sans-serif;visibility:hidden; }
+.diorama-waypoint-pin[data-zoomed-out="true"] .diorama-pin-label,
+.diorama-waypoint-pin:hover .diorama-pin-label,
+.diorama-waypoint-pin:focus-visible .diorama-pin-label { visibility:visible; }
