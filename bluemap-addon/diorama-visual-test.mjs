@@ -904,7 +904,7 @@ try {
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
-  await delay(100);
+  await wait('matchMedia("(prefers-reduced-motion: reduce)").matches && Number(document.querySelector("#fog")?.dataset.fogRevealProgress) === 1');
   assert.equal(
     await cdp.evaluate('Number(document.querySelector("#fog")?.dataset.fogRevealProgress)'),
     1,
