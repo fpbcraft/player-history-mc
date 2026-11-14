@@ -29,6 +29,14 @@ public final class ObjectGeometryArchive {
 
   private record Key(String provider, String sourceId, long version) {}
 
+  @FunctionalInterface
+  interface Publisher {
+    void copy(Path source, Path target) throws IOException;
+  }
+
+  private final Object publicationLock = new Object();
+  private final LinkedHashSet<Key> pendingPublications = new LinkedHashSet<>();
+  private final Publisher publisher;
   private final Path root;
   private final LogSink log;
   private final Map<Key, Entry> entries = new LinkedHashMap<>();
@@ -37,6 +45,11 @@ public final class ObjectGeometryArchive {
   private boolean dirty;
 
   public ObjectGeometryArchive(Path root, LogSink log) throws IOException {
+    this(root, log, ObjectGeometryArchive::copyPublishedFile);
+  }
+
+  ObjectGeometryArchive(Path root, LogSink log, Publisher publisher) throws IOException {
+    this.publisher = publisher;
     this.root = root;
     this.log = log;
     Files.createDirectories(root.resolve("geometry"));
@@ -106,15 +119,40 @@ public final class ObjectGeometryArchive {
         new Entry(provider, sourceId, version, meshRelative, atlasRelative, referenced));
     dirty = true;
 
-    Path pub = publicRoot;
-    if (pub != null) publishEntry(entries.get(key), pub);
+    if (publicRoot != null) pendingPublications.add(key);
   }
 
-  public synchronized void publishTo(Path publicObjectsRoot) throws IOException {
-    publicRoot = publicObjectsRoot;
-    Files.createDirectories(publicObjectsRoot.resolve("geometry"));
-    for (Entry entry : entries.values()) publishEntry(entry, publicObjectsRoot);
-    save();
+  /** Selects the destination without doing filesystem work on the caller's thread. */
+  public synchronized void publishTo(Path publicObjectsRoot) {
+    publicRoot = Objects.requireNonNull(publicObjectsRoot);
+    pendingPublications.clear();
+    pendingPublications.addAll(entries.keySet());
+  }
+
+  public synchronized boolean hasPendingPublications() {
+    return !pendingPublications.isEmpty();
+  }
+
+  /** Called by the recorder writer; never holds the metadata monitor during public file IO. */
+  public void publishNext() {
+    synchronized (publicationLock) {
+      Entry entry;
+      Path pub;
+      synchronized (this) {
+        Iterator<Key> iterator = pendingPublications.iterator();
+        if (!iterator.hasNext()) return;
+        Key key = iterator.next();
+        iterator.remove();
+        entry = entries.get(key);
+        pub = publicRoot;
+      }
+      if (entry == null || pub == null) return;
+      try {
+        publishEntry(entry, pub);
+      } catch (IOException error) {
+        log.warn("Could not publish object geometry " + entry.mesh() + ": " + error);
+      }
+    }
   }
 
   public synchronized List<Entry> entries() {
@@ -125,7 +163,15 @@ public final class ObjectGeometryArchive {
     if (dirty) save();
   }
 
-  public synchronized void prune(long cutoff) throws IOException {
+  public void prune(long cutoff) throws IOException {
+    synchronized (publicationLock) {
+      synchronized (this) {
+        pruneEntries(cutoff);
+      }
+    }
+  }
+
+  private void pruneEntries(long cutoff) throws IOException {
     Iterator<Map.Entry<Key, Entry>> iterator = entries.entrySet().iterator();
     while (iterator.hasNext()) {
       Map.Entry<Key, Entry> row = iterator.next();
@@ -139,6 +185,7 @@ public final class ObjectGeometryArchive {
         Files.deleteIfExists(pub.resolve(entry.mesh()));
         Files.deleteIfExists(pub.resolve(entry.atlas()));
       }
+      pendingPublications.remove(row.getKey());
       references.remove(row.getKey());
       iterator.remove();
       dirty = true;
@@ -151,9 +198,9 @@ public final class ObjectGeometryArchive {
   }
 
   private void publishEntry(Entry entry, Path pub) throws IOException {
-    copyAtomically(root.resolve(entry.mesh()), pub.resolve(entry.mesh()));
+    publisher.copy(root.resolve(entry.mesh()), pub.resolve(entry.mesh()));
     Path atlas = root.resolve(entry.atlas());
-    if (Files.isRegularFile(atlas)) copyAtomically(atlas, pub.resolve(entry.atlas()));
+    if (Files.isRegularFile(atlas)) publisher.copy(atlas, pub.resolve(entry.atlas()));
   }
 
   private void load() throws IOException {
@@ -239,11 +286,22 @@ public final class ObjectGeometryArchive {
     }
   }
 
+  private static void copyPublishedFile(Path source, Path target) throws IOException {
+    // Versioned archive paths are immutable; atomic publication makes a complete existing
+    // file reusable across restarts. Repair missing or truncated public copies.
+    if (Files.isRegularFile(target) && Files.size(source) == Files.size(target)) return;
+    copyAtomically(source, target);
+  }
+
   private static void copyAtomically(Path source, Path target) throws IOException {
     Files.createDirectories(target.getParent());
     Path temp = target.resolveSibling(target.getFileName() + ".tmp");
-    Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
-    move(temp, target);
+    try {
+      Files.copy(source, temp, StandardCopyOption.REPLACE_EXISTING);
+      move(temp, target);
+    } finally {
+      Files.deleteIfExists(temp);
+    }
   }
 
   private static void writeAtomically(Path target, byte[] bytes) throws IOException {
