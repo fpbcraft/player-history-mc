@@ -195,6 +195,12 @@ export class PlayerRoster {
       this.hideDetails();
       return;
     }
+    if (this.root.classList.contains("diorama-player-bar") && innerWidth <= 760) {
+      this.details.style.maxWidth = `${Math.max(120, Math.min(240, innerWidth - strip.right - 16))}px`;
+      this.details.style.left = `${Math.max(8, Math.min(innerWidth - this.details.offsetWidth - 8, strip.right + 8))}px`;
+      this.details.style.top = `${Math.max(8, Math.min(innerHeight - this.details.offsetHeight - 8, bounds.top))}px`;
+      return;
+    }
     this.details.style.maxWidth = innerWidth <= 600 ? `${Math.max(120, strip.width - 8)}px` : "";
     const width = this.details.offsetWidth;
     const height = this.details.offsetHeight;

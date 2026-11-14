@@ -50,18 +50,22 @@ export const updateVehiclePin = (marker: HTMLButtonElement, row: VehiclePose): v
     image.hidden = !row.icon;
     if (row.icon && image.src !== row.icon) image.src = row.icon;
   }
-  if (initials)
-    initials.textContent = row.named
-      ? row.label
-          .trim()
-          .split(/\s+/)
-          .map((word) => [...word][0] ?? "")
-          .slice(0, 2)
-          .join("")
-          .toUpperCase()
-      : /train|contraption/.test(row.id)
-        ? "T"
-        : "S";
+  if (initials) {
+    if (!row.named && !/train|contraption/.test(row.id)) {
+      initials.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 2-1 3-2 1-3-1-2 4 2 2v2l-2 2 2 4 3-1 2 1 1 3h4l1-3 2-1 3 1 2-4-2-2v-2l2-2-2-4-3 1-2-1-1-3Z"/><circle cx="12" cy="12" r="4" fill="#17212b"/></svg>';
+    } else {
+      initials.textContent = row.named
+        ? row.label
+            .trim()
+            .split(/\s+/)
+            .map((word) => [...word][0] ?? "")
+            .slice(0, 2)
+            .join("")
+            .toUpperCase()
+        : "T";
+    }
+  }
   if (label) label.textContent = row.named ? row.label : "";
   marker.dataset.named = String(row.named === true);
 };
