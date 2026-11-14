@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: fpbcraft/diorama
-          ref: e62902e208af64130f03ab1d0b3ecf2b404dfe4f
+          ref: f4ad4011902d7c57debd04a33481c845cfa1fd3a
           path: diorama-fixture
       - name: Check Diorama viewer in the browser
         working-directory: bluemap-addon

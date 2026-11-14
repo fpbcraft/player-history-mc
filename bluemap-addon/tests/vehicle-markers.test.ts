@@ -60,3 +60,14 @@ it("keeps vehicle pins named-only by default and allows opting in to unnamed cra
   expect(vehiclePinVisible(car("anonymous", 0, { named: false }), true)).toBe(true);
   expect(vehiclePinVisible(car("shadow", 0, { shadow: true }), true)).toBe(false);
 });
+
+it("draws a cog for unnamed Sable ships and restores initials after naming", () => {
+  const button = document.createElement("button");
+  const row = car("sable_ships/anonymous", 0, { named: false, label: "Unnamed ship" });
+  updateVehiclePin(button, row);
+  expect(button.querySelector(".diorama-pin-initials svg")).not.toBeNull();
+  expect(button.querySelector(".diorama-pin-initials")?.textContent).not.toBe("S");
+  updateVehiclePin(button, { ...row, named: true, label: "Copper Finch" });
+  expect(button.querySelector(".diorama-pin-initials svg")).toBeNull();
+  expect(button.querySelector(".diorama-pin-initials")?.textContent).toBe("CF");
+});

@@ -159,6 +159,10 @@ export class DioramaAdapter implements MapAdapter {
       const element = document.createElement("button");
       element.type = "button";
       element.className = "diorama-history-marker";
+      element.classList.toggle(
+        "diorama-player-marker",
+        key.startsWith("player:") || key.startsWith("offline:"),
+      );
       element.append(...create());
       marker = { element, point, label, dimension: this.mapId };
       const item = marker;
@@ -181,7 +185,8 @@ export class DioramaAdapter implements MapAdapter {
     marker.point = point;
     marker.label = label;
     marker.element.setAttribute("aria-label", label);
-    marker.element.style.borderColor = playerColor(point.player);
+    if (!marker.element.classList.contains("diorama-player-marker"))
+      marker.element.style.borderColor = playerColor(point.player);
     return marker;
   }
 

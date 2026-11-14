@@ -904,7 +904,7 @@ try {
   await cdp.send("Emulation.setEmulatedMedia", {
     features: [{ name: "prefers-reduced-motion", value: "reduce" }],
   });
-  await delay(100);
+  await wait('matchMedia("(prefers-reduced-motion: reduce)").matches && Number(document.querySelector("#fog")?.dataset.fogRevealProgress) === 1');
   assert.equal(
     await cdp.evaluate('Number(document.querySelector("#fog")?.dataset.fogRevealProgress)'),
     1,
@@ -1003,9 +1003,24 @@ try {
     "No horizontal page overflow",
   );
 
-  const mobileLayout=await cdp.evaluate('({players:document.querySelector(".diorama-player-bar").getBoundingClientRect().top,tools:document.querySelector("#map-tools").getBoundingClientRect().bottom,selector:getComputedStyle(document.querySelector("#dimension-select")).display,dims:getComputedStyle(document.querySelector("#dims")).display})');
-  assert.ok(mobileLayout.players>mobileLayout.tools,"Mobile players belong below toolbar");
-  assert.notEqual(mobileLayout.selector,"none");assert.equal(mobileLayout.dims,"none");
+  const mobileLayout=await cdp.evaluate('({players:document.querySelector(".diorama-player-bar").getBoundingClientRect().toJSON(),direction:getComputedStyle(document.querySelector(".diorama-player-bar")).flexDirection,selector:getComputedStyle(document.querySelector("#dimension-button")).display,dims:getComputedStyle(document.querySelector("#dims")).display,coords:getComputedStyle(document.querySelector("#where")).display,updated:document.querySelector("#map-update").getBoundingClientRect().toJSON()})');
+  assert.equal(mobileLayout.direction,"column");
+  assert.ok(mobileLayout.players.left<=16 && mobileLayout.players.top<80,"Mobile players belong at the top edge beside the map");
+  assert.notEqual(mobileLayout.selector,"none");assert.equal(mobileLayout.dims,"none");assert.equal(mobileLayout.coords,"none");
+  assert.ok(mobileLayout.updated.bottom>844-70);
+  await cdp.evaluate('document.querySelector("#dimension-button").click()');
+  assert.equal(await cdp.evaluate('document.querySelector("#dimension-menu").matches(":popover-open")'),true);
+  await cdp.evaluate('document.querySelector("#dimension-menu button").click()');
+  assert.equal(await cdp.evaluate('document.querySelector("#dimension-menu").matches(":popover-open")'),false);
+  assert.equal(await cdp.evaluate('window.diorama.getState().dimension'),"minecraft:overworld");
+  await cdp.evaluate('document.querySelector("bluemap-player-replay").close()');
+  await capture("mobile-edge-roster");
+  await cdp.evaluate('window.diorama.navigate({x:-40,y:64,z:48,dimension:"minecraft:overworld"})');
+  await wait('document.querySelector(".diorama-public-pin")');
+  for (const selector of [".diorama-player-marker", ".diorama-public-pin"]) {
+    const zoomed=await cdp.evaluate(`(() => {const marker=document.querySelector(${JSON.stringify(selector)});const before=window.diorama.getState().scale;marker.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:160,clientY:300,deltaY:-120}));return window.diorama.getState().scale>before;})()`);
+    assert.equal(zoomed,true,"Map markers must pass the wheel gesture to zoom");
+  }
   await cdp.evaluate('window.diorama.setVisible("loaded",true);window.diorama.setVisible("claims",true);window.diorama.setVisible("allVehicles",true);window.diorama.setVisible("heatmap",true);window.diorama.setVisible("clouds",false)');
   await cdp.send("Page.reload",{});
   await wait('document.querySelector("input[data-visibility=claims]")');
