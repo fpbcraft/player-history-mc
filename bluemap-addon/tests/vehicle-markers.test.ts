@@ -45,3 +45,18 @@ it("uses text for names and initials, reuses the native pin image, and safely up
   expect(button.querySelectorAll("img")).toHaveLength(1);
   expect(button.querySelector(".diorama-pin-initials")?.textContent).toBe("NS");
 });
+
+it("uses pins instead of full model rendering for tiny overview craft", async () => {
+  const { vehicleModelVisible } = await import("../src/vehicle-markers.js");
+  expect(vehicleModelVisible({ size: 32 } as VehiclePose, 0.15)).toBe(false);
+  expect(vehicleModelVisible({ size: 32 } as VehiclePose, 1)).toBe(true);
+  expect(vehicleModelVisible({ size: 128 } as VehiclePose, 0.15)).toBe(true);
+});
+
+it("keeps vehicle pins named-only by default and allows opting in to unnamed craft", async () => {
+  const { vehiclePinVisible } = await import("../src/vehicle-markers.js");
+  expect(vehiclePinVisible(car("named", 0))).toBe(true);
+  expect(vehiclePinVisible(car("anonymous", 0, { named: false }))).toBe(false);
+  expect(vehiclePinVisible(car("anonymous", 0, { named: false }), true)).toBe(true);
+  expect(vehiclePinVisible(car("shadow", 0, { shadow: true }), true)).toBe(false);
+});

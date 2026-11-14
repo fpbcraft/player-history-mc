@@ -31,6 +31,7 @@ public final class ServerOverlayPublisher {
   record ChunkCell(int x, int z) {}
   record EntityCell(int x, int z, int total, int living, int items, int players) {}
   record DimensionData(
+      int referenceY,
       List<ChunkCell> loaded,
       List<ChunkCell> pinned,
       List<EntityCell> entities,
@@ -101,6 +102,7 @@ public final class ServerOverlayPublisher {
         dimensions.put(
             key,
             new DimensionData(
+                level.getChunkSource().getGenerator().getSpawnHeight(level),
                 loaded,
                 pinnedChunks(level, dimensionClaims),
                 entityDensity(level),

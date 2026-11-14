@@ -1,4 +1,9 @@
-import { vehicleMarkers, updateVehiclePin, arrangeVehicleLabels } from "./vehicle-markers.js";
+import {
+  vehicleMarkers,
+  updateVehiclePin,
+  arrangeVehicleLabels,
+  vehiclePinVisible,
+} from "./vehicle-markers.js";
 import { VehicleMotion } from "./vehicle-motion.js";
 import { signedVehicleTravel } from "./vehicle-travel.js";
 import { readBoundedResponse } from "./vehicle-http.js";
@@ -15,6 +20,10 @@ export class DioramaSceneHost {
   private live = true;
   private liveRows: VehiclePose[] = [];
   private historyRows: VehiclePose[] = [];
+  private objectRegistry: ObjectRegistryEntry[] | undefined;
+  private geometryRegistry: ObjectGeometryEntry[] | undefined;
+  private readonly objectIndex = new Map<number, ObjectRegistryEntry>();
+  private readonly geometryIndex = new Map<string, ObjectGeometryEntry>();
   private previous = new Map<string, VehiclePose>();
   private interval = 1000;
   private readonly motion = new VehicleMotion();
@@ -120,16 +129,25 @@ export class DioramaSceneHost {
   ): void {
     const state = this.api.getState();
     if (!state) return;
+    if (this.objectRegistry !== objects) {
+      this.objectRegistry = objects;
+      this.objectIndex.clear();
+      for (const object of objects) this.objectIndex.set(object.id, object);
+    }
+    if (this.geometryRegistry !== geometries) {
+      this.geometryRegistry = geometries;
+      this.geometryIndex.clear();
+      for (const geometry of geometries)
+        this.geometryIndex.set(
+          JSON.stringify([geometry.provider, geometry.sourceId, geometry.version]),
+          geometry,
+        );
+    }
     this.historyRows = poses.flatMap((pose): VehiclePose[] => {
-      const object = objects.find((item) => item.id === pose.object);
+      const object = this.objectIndex.get(pose.object);
       const geometry =
         object &&
-        geometries.find(
-          (item) =>
-            item.provider === object.provider &&
-            item.sourceId === object.sourceId &&
-            item.version === pose.geometry,
-        );
+        this.geometryIndex.get(JSON.stringify([object.provider, object.sourceId, pose.geometry]));
       if (!object || !geometry) return [];
       try {
         return [
@@ -185,7 +203,7 @@ export class DioramaSceneHost {
     const labels: { element: HTMLButtonElement; x: number; y: number; name: string }[] = [];
     const scale = state?.scale ?? 1;
     for (const row of vehicleMarkers(this.live ? rows : [], scale)) {
-      if (row.shadow) continue;
+      if (!vehiclePinVisible(row, this.api.visible?.("allVehicles") === true)) continue;
       const pinKind = /train|contraption/i.test(row.id) ? "trainPins" : "sablePins";
       if (this.api.visible?.(pinKind) === false) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
@@ -215,14 +233,14 @@ export class DioramaSceneHost {
         z: row.pos[2],
         dimension: row.dimension,
       });
-      marker.dataset.zoomedOut = String((row.size ?? 32) * scale < 28);
-      if (row.named && (row.size ?? 32) * scale < 28)
+      marker.dataset.zoomedOut = String((row.size ?? 32) * scale < 64);
+      if (row.named && (row.size ?? 32) * scale < 64)
         labels.push({ element: marker, x: pixel.x, y: pixel.y, name: row.label });
       marker.title = row.label;
       marker.setAttribute("aria-label", row.label);
       marker.style.transform = `translate(${pixel.x}px,${pixel.y}px) translate(-50%,-87.5%)`;
       marker.dataset.model = String(
-        (this.layer?.has(row.id) ?? false) && !(row.named && (row.size ?? 32) * scale < 28),
+        (this.layer?.has(row.id) ?? false) && !((row.size ?? 32) * scale < 64),
       );
     }
     if (state) arrangeVehicleLabels(labels, state.width, state.height);

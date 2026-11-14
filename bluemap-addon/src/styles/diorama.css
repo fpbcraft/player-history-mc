@@ -23,7 +23,7 @@
 .diorama-world-clock[data-stale=true]{color:#b4b9c1;}
 .diorama-world-clock .season-symbol{font-size:19px;color:#e4ae65;}
 .diorama-overlay-controls svg{width:22px;height:22px;}
-@media(max-width:760px){.diorama-player-bar{left:auto!important;right:12px;transform:none;max-width:44vw;}.diorama-world-clock{max-width:calc(100vw - 128px);padding-inline:10px;font-size:12px;gap:5px;}.diorama-world-clock .season-symbol{display:none;}}
+@media(max-width:760px){.diorama-player-bar{top:calc(var(--map-top,12px) + 54px)!important;left:50%!important;right:auto;transform:translateX(-50%);max-width:calc(100vw - 24px);}.diorama-world-clock{max-width:calc(100vw - 194px);padding-inline:10px;font-size:12px;gap:5px;}.diorama-world-clock{flex-direction:column;gap:0;line-height:14px;}.diorama-world-clock .season-name{font-size:10px;color:var(--muted);}.diorama-world-clock .season-symbol,.diorama-world-clock .season-separator{display:none;}}
 @media(max-width:420px){.diorama-world-clock{font-size:11px;}}
 
 .diorama-history-marker .history-roster-face img { position: absolute; width: 256px; height: auto;

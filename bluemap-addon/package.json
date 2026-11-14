@@ -16,7 +16,8 @@
     "visual:build": "node visual-build.mjs",
     "visual:test": "npm run visual:build && node visual-test.mjs",
     "dev": "node dev.mjs",
-    "visual:diorama": "node diorama-visual-test.mjs"
+    "visual:diorama": "node diorama-visual-test.mjs",
+    "build:preview": "node build-preview.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",

@@ -22,22 +22,24 @@ This is the fast regression layer for UI changes. Fixture data must stay determi
 
 ## Vercel live-backend preview
 
-The repository root `vercel.json` implements the same basic model as `npm run dev`, but for a hosted preview:
+The repository-root Vercel project now builds a complete Diorama PR viewer with `npm --prefix bluemap-addon run build:preview`:
 
-1. build the Player History frontend from the branch/PR;
-2. serve requests for `player-history/player-history-*.js` and `.css` from that build;
-3. proxy every other request to `https://map.fpbcraft.com`.
+1. build Player History from the PR;
+2. fetch the exact public Diorama commit pinned by the browser CI checkout;
+3. copy its standalone HTML, modules, shader and deterministic noise into the preview output;
+4. serve the PR's `/player-history/diorama-history.js`, CSS and versioned modules;
+5. proxy map metadata, terrain, public history, vehicles, markers and chat to `https://map.fpbcraft.com`.
 
-The result is a normal BlueMap page backed by the real fpbcraft server and its current Player History dataset, while the browser executes the frontend from the branch being reviewed.
+The Vercel project's existing Git integration creates a preview for every branch/PR. Keep its root directory at the repository root. The preview opens Diorama directly; the existing BlueMap addon asset rewrite rules remain available for compatibility. No Minecraft client or server JAR update is needed to review frontend changes in that preview. Backend behavior still comes from the server's installed build.
 
-With Vercel Git integration enabled for this repository, pushes to branches and pull requests get independent preview deployments automatically. The Vercel project should use the repository root as its root directory.
+The source pin must be a full commit SHA, and the standalone frontend must include every worker/shader resource. A missing export fails the build instead of silently using production frontend files. `/frontend-preview.json` records the Diorama source commit and the Player History deployment commit. Core frontend PRs need a paired Player History pin update to generate a preview for that core change.
 
-The preview intentionally disables rewrite caching so live/history data is not frozen by the preview layer.
+The public origin must be up and accessible from Vercel. Local/Tailscale-only lab addresses cannot be fetched by its hosted proxy. Preview requests use the real backend, including its authenticated chat API. Rewrite caching stays disabled for live data.
 
 ### What each mode catches
 
 Use the deterministic fixture and its CI artifact for layout, responsive behavior, controls, component rendering, and screenshot evidence.
 
-Use the Vercel preview for real BlueMap integration, 3D player/object rendering, live data, map switching, skins/assets, and backend compatibility.
+Use the Vercel preview for real Diorama integration, 3D player/object rendering, live data, map switching, skins/assets, and backend compatibility.
 
 Minecraft-side recording, persistence, provider discovery, and mod interoperability still require Java/integration coverage or a disposable server test; the browser layers do not replace those tests.

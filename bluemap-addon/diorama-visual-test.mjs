@@ -111,6 +111,7 @@ const server = createServer(async (req, res) => {
         roundedFog: true,
         markerFeed: "markers.json",
         vehicleFeed: "assets/diorama-vehicles/scene.json",
+        queueFeed: "queue-status.json",
         dimensions: registry.worlds.map((world) => ({
           id: world.key,
           folder: world.id ? "nether" : "overworld",
@@ -283,7 +284,8 @@ const server = createServer(async (req, res) => {
         Buffer.concat([Buffer.from(buffer, 0, 16), deflateSync(Buffer.from(buffer, 16))]),
       );
     }
-    if (path === "/player-history/data/objects/manifest.json")
+    if (path === "/diorama/queue-status.json") return json({version:1,generatedAt:Date.now(),paused:false,dimensions:{"minecraft:overworld":{queuedTiles:2,waitingChunks:3,truncated:false,tiles:[-1,-1,0,0]}}});
+    if (path === "/player-history/data/objects/diorama-manifest.json")
       return json({
         protocolVersion: 3,
         earliestTimestamp: start,
@@ -301,6 +303,7 @@ const server = createServer(async (req, res) => {
               sourceId: "fixture-train",
               label: "Recorded train",
             },
+            {id:2,provider:"sable_ships",sourceId:"fixture-recorded-ship",label:"Recorded Sable ship"},
           ],
           worlds: ["minecraft:overworld"],
         },
@@ -313,18 +316,19 @@ const server = createServer(async (req, res) => {
             atlas: "meshes/craft.png",
             lastReferencedAt: started,
           },
+          {provider:"sable_ships",sourceId:"fixture-recorded-ship",version:1,mesh:"meshes/train.dspr",atlas:"meshes/craft.png",lastReferencedAt:started},
         ],
       });
     if (path.includes("/data/objects/chunks/")) {
       const bucket = +path.split("/").at(-1).replace(".json", "");
       return json(
-        Array.from({ length: 7 }, (_, i) => ({
-          object: 1,
+        [1,2].flatMap(object=>Array.from({ length: 7 }, (_, i) => ({
+          object,
           time: bucket + i * 10000,
           world: 0,
           x: -20 * 32,
           y: 68 * 32,
-          z: 0,
+          z: object===2?20*32:0,
           qx: 0,
           qy: 0,
           qz: 0,
@@ -335,7 +339,7 @@ const server = createServer(async (req, res) => {
           geometry: 1,
           flags: 0,
           groups: [],
-        })),
+        }))),
       );
     }
     if (path === "/diorama/extensions.json")
@@ -429,7 +433,7 @@ const server = createServer(async (req, res) => {
     }
     let file;
     if (path === "/diorama/" || path === "/diorama/index.html") file = join(mapRoot, "index.html");
-    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js")
+    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js" || path === "/diorama/web-queue.js")
       file = join(mapRoot, path.split("/").at(-1));
     else if (
       /^\/diorama\/(web-fog\.js|fog-(mask|mask-task|mask-worker|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
@@ -621,15 +625,25 @@ try {
   assert.equal(await cdp.evaluate("window.diorama.getState().pixelRatio"), 2);
   await wait("window.__fill().wanted > 0 && window.__fill().loaded === window.__fill().wanted");
   await wait('document.querySelector(".diorama-world-clock")?.textContent.includes("Autumn · Day 132 · 12:00")');
-  assert.equal(await cdp.evaluate('document.querySelector(".diorama-overlay-controls summary").getAttribute("aria-label")'),"Overlays");
+  assert.equal(await cdp.evaluate('document.querySelector(".diorama-overlay-controls")'),null,"Overlay switches live in Map visibility");
   assert.ok(await cdp.evaluate('!document.querySelector("#map-update").hidden && document.querySelector("#map-update").dateTime.length > 0'));
   await assertBottomControls();
-  const controlStyles=await cdp.evaluate('["#dims",".diorama-player-bar",".diorama-world-clock",".diorama-overlay-controls summary",".map-visibility summary","bluemap-player-replay>[name=open]",".history-chat-launcher"].map(selector=>{const style=getComputedStyle(document.querySelector(selector));return [style.backgroundColor,style.borderTopColor,style.borderRadius].join("|")})');
+  const controlStyles=await cdp.evaluate('["#dims",".diorama-player-bar",".diorama-world-clock",".map-visibility summary","bluemap-player-replay>[name=open]",".history-chat-launcher"].map(selector=>{const style=getComputedStyle(document.querySelector(selector));return [style.backgroundColor,style.borderTopColor,style.borderRadius].join("|")})');
   assert.equal(new Set(controlStyles).size,1,"Map controls must share panel colours, borders and corners");
   const topPositions=await cdp.evaluate('["#dims",".diorama-player-bar","#map-tools"].map(selector=>document.querySelector(selector).getBoundingClientRect().top)');
   assert.ok(topPositions.every(top=>Math.abs(top-topPositions[0])<1),"Desktop controls and player strip align at the top");
   await cdp.evaluate('document.querySelector(".map-visibility summary").click()');
   await capture("desktop-visibility-menu");
+  const beforeQueueTiles=requests.filter(path=>path.endsWith(".jpg")).length;
+  await cdp.evaluate('document.querySelector("input[data-visibility=queuedTiles]").click()');
+  await wait('Array.from(document.querySelectorAll("small.map-update")).some(el=>!el.hidden&&el.textContent.includes("2 tiles queued · 3 chunks waiting"))');
+  assert.equal(requests.filter(path=>path.endsWith(".jpg")).length,beforeQueueTiles,"Queue overlay must not reload terrain");
+  await cdp.evaluate('document.querySelector("input[data-visibility=queuedTiles]").click()');
+  await delay(100);
+  const queuePolls=requests.filter(path=>path.endsWith("queue-status.json")).length;
+  await delay(2100);
+  assert.equal(requests.filter(path=>path.endsWith("queue-status.json")).length,queuePolls,"Disabled queue overlay must stop polling");
+
   await cdp.evaluate('document.querySelector("input[data-visibility=clouds]").click()');
   await wait('document.querySelector("#fog").style.display === "none"');
   await cdp.evaluate('document.querySelector("input[data-visibility=clouds]").click()');
@@ -737,6 +751,12 @@ try {
   await cdp.evaluate('window.diorama.setVisible("sablePins",true);window.diorama.setVisible("trainPins",true)');
   await wait('document.querySelectorAll(".diorama-waypoint-pin[data-named=true][data-zoomed-out=true]").length===2');
   await capture("desktop-named-vehicle-pins");
+  await cdp.evaluate('document.getElementById("out").click();document.getElementById("out").click()');
+  await wait('document.querySelector("canvas[data-vehicle-models]")?.style.display === "none"');
+  assert.equal(await cdp.evaluate('document.querySelectorAll(".diorama-object-marker").length'),2,"Overview must retain vehicle pins without full models");
+  await capture("desktop-overview-clouds");
+  await cdp.evaluate('document.getElementById("in").click();document.getElementById("in").click()');
+
   await cdp.evaluate('document.getElementById("in").click()');
   await wait("window.diorama.getState().scale===2");
   // Simulate a terrain revision without reloading the viewer or changing the vehicle model URL.
@@ -794,13 +814,21 @@ try {
           else delete performance.now;
         }
       }
-      return draw.apply(this, args);
+      const result=draw.apply(this,args);
+      const [state]=args,gl=this.gl,rgba=new Uint8Array(4);
+      const x=Math.floor(((24-state.u)*state.scale+state.width/2+64)/(state.width+128)*this.canvas.width);
+      const y=this.canvas.height-1-Math.floor(((-44-state.v)*state.scale+state.height/2+64)/(state.height+128)*this.canvas.height);
+      gl.readPixels(x,y,1,1,gl.RGBA,gl.UNSIGNED_BYTE,rgba);window.__knownFogPixel=[...rgba];
+      return result;
     };
   })()`);
   await wait(
     'window.__fixtureFog?.transition && Number(document.querySelector("#fog").dataset.fogRevealProgress) === 1',
   );
   await wait('document.querySelector("#fog").dataset.fogMaskWorker === "worker" && document.querySelector("#fog").dataset.fogMaskPending === "false"');
+  assert.deepEqual(await cdp.evaluate('window.__knownFogPixel'),[0,0,0,0],"Explored cloud interiors must be transparent black, never opaque white");
+  assert.equal(await cdp.evaluate('window.__fixtureFog.gl.getContextAttributes().premultipliedAlpha'),true);
+  assert.equal(await cdp.evaluate('document.querySelector("#fog").dataset.fogShader'),"web-surface");
   const knownCoverage = await cdp.evaluate(
     "window.__fixtureFog.transition.to.rgba.reduce((sum, value, i) => sum + (i % 4 === 0 ? value : 0), 0)",
   );
@@ -835,7 +863,7 @@ try {
   const revealedBrightness = await revealBrightness();
   assert.ok(
     revealedGreen > hiddenGreen + 1000,
-    "Clouds must cover unknown terrain and reveal actual terrain pixels",
+    `Clouds must cover unknown terrain and reveal actual terrain pixels: ${hiddenGreen} -> ${revealedGreen}; brightness ${hiddenBrightness} -> ${revealedBrightness}`,
   );
   assert.ok(
     partialBrightness < hiddenBrightness - 10 && partialBrightness > revealedBrightness + 10,
@@ -888,8 +916,14 @@ try {
   await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start + 270000})`);
   await wait('document.querySelectorAll(".diorama-history-event").length>0');
   await wait(
-    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 1',
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2',
   );
+  assert.ok(requests.some(path=>path.endsWith("objects/diorama-manifest.json")));
+  assert.ok(!requests.some(path=>path.endsWith("objects/manifest.json")),"Native viewer must use its compact vehicle manifest");
+  for(const offset of [330000,390000,270000]){
+    await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start+offset})`);
+    await wait('Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2');
+  }
   await capture("desktop-replay");
   const before = await cdp.evaluate("window.diorama.getState().scale");
   await cdp.send("Input.dispatchMouseEvent", {
@@ -968,6 +1002,15 @@ try {
     true,
     "No horizontal page overflow",
   );
+
+  const mobileLayout=await cdp.evaluate('({players:document.querySelector(".diorama-player-bar").getBoundingClientRect().top,tools:document.querySelector("#map-tools").getBoundingClientRect().bottom,selector:getComputedStyle(document.querySelector("#dimension-select")).display,dims:getComputedStyle(document.querySelector("#dims")).display})');
+  assert.ok(mobileLayout.players>mobileLayout.tools,"Mobile players belong below toolbar");
+  assert.notEqual(mobileLayout.selector,"none");assert.equal(mobileLayout.dims,"none");
+  await cdp.evaluate('window.diorama.setVisible("loaded",true);window.diorama.setVisible("claims",true);window.diorama.setVisible("allVehicles",true);window.diorama.setVisible("heatmap",true);window.diorama.setVisible("clouds",false)');
+  await cdp.send("Page.reload",{});
+  await wait('document.querySelector("input[data-visibility=claims]")');
+  for(const key of ["loaded","claims","allVehicles","heatmap"]){assert.equal(await cdp.evaluate(`window.diorama.visible(${JSON.stringify(key)})`),true,"Visibility persists across reload");}
+  assert.equal(await cdp.evaluate('window.diorama.visible("clouds")'),false);
   await cdp.evaluate("window.diorama.dispose()");
   assert.equal(await cdp.evaluate('document.querySelector("bluemap-player-replay")'), null);
   const polls = requests.filter(
