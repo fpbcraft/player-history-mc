@@ -192,7 +192,7 @@ class ObjectHistoryTest {
     var entry=archive.entries().getFirst();
     assertTrue(entry.mesh().endsWith(".dspr"));
     assertArrayEquals(original,Files.readAllBytes(root.resolve("archive").resolve(entry.mesh())));
-    Path publicRoot=root.resolve("public");archive.publishTo(publicRoot);
+    Path publicRoot=root.resolve("public");archive.publishTo(publicRoot);archive.publishNext();
     assertArrayEquals(original,Files.readAllBytes(publicRoot.resolve(entry.mesh())));
     var overflow=new ByteArrayOutputStream();overflow.write(header.array());
     try(var zip=new java.util.zip.DeflaterOutputStream(overflow)){zip.write(new byte[100]);}

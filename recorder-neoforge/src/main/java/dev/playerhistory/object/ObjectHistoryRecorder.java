@@ -219,11 +219,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
   public void publishTo(Path publicDatasetRoot) {
     Path target = publicDatasetRoot.resolve("objects");
     publicRoot = target;
-    try {
-      geometryArchive.publishTo(target);
-    } catch (IOException error) {
-      log.warn("Could not publish object geometry archive: " + error);
-    }
+    geometryArchive.publishTo(target);
   }
 
   public void archiveGeometry(
@@ -299,16 +295,19 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
 
   private void run() {
     try {
-      while (running || !queue.isEmpty()) {
-        Envelope envelope = queue.poll(200, TimeUnit.MILLISECONDS);
+      while (running || !queue.isEmpty() || geometryArchive.hasPendingPublications()) {
+        Envelope envelope = queue.poll(
+            geometryArchive.hasPendingPublications() ? 10 : 200, TimeUnit.MILLISECONDS);
         if (envelope != null) for (ObjectPoint point : envelope.points()) append(point);
 
         long now = System.currentTimeMillis();
         if (now - lastLiveFlush >= 250) publishLive(now);
         if (now - lastFlush >= 5000 || pending.size() >= 4096) {
           flush();
+          geometryArchive.flush();
           lastFlush = now;
         }
+        geometryArchive.publishNext();
         backfill();
         if (now - lastMaintenance >= 3_600_000) {
           retention(now);
@@ -320,6 +319,7 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
         if (point.online()) append(point.with(Math.max(point.time(), System.currentTimeMillis()),
             ObjectPoint.OFFLINE | ObjectPoint.BREAK));
       flush();
+      geometryArchive.flush();
       finish();
     } catch (Throwable error) {
       failure = error;
