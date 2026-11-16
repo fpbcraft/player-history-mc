@@ -155,6 +155,7 @@ export interface ObjectHistoryManifest {
   quaternionScale: number;
   scaleScale: number;
   geometryArchive: boolean;
+  geometryLookup?: "sha256-v1";
   geometries?: ObjectGeometryEntry[];
   pointsPerSecond?: number;
   registry: ObjectHistoryRegistry;

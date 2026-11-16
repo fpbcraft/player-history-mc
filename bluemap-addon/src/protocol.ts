@@ -295,6 +295,7 @@ export const parseObjectManifest = (value: unknown): ObjectHistoryManifest => {
     geometryArchive: value.geometryArchive === true,
     registry: parseObjectRegistry(value.registry),
   };
+  if (value.geometryLookup === "sha256-v1") result.geometryLookup = value.geometryLookup;
   if (Number.isFinite(value.pointsPerSecond))
     result.pointsPerSecond = value.pointsPerSecond as number;
   if (value.geometries !== undefined) {
