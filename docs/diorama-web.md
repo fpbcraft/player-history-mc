@@ -60,6 +60,21 @@ The read-only public replay/history features do not depend on chat being enabled
 
 ### Existing deployments and troubleshooting
 
+Object-history manifests advertise `geometryLookup: "sha256-v1"` and omit the
+archive-wide geometry list. The viewer resolves only geometry at the replay
+cursor, with four concurrent lookups and a 256-entry cache. The archive path is
+`geometry/<sha256>.dspr` (or `.bm3d` for legacy mesh archives), with the atlas at
+the same stem plus `.png`. The hash is SHA-256 of UTF-8
+`provider + NUL + sourceId + NUL + decimalVersion`, matching the recorder's
+existing archive filenames. HEAD requests distinguish sprite and mesh formats.
+Old manifests with inline `geometries` remain supported.
+
+This avoids HTTP 413 failures when historical geometry catalogs outgrow the web
+host's file-size limit, and avoids loading hundreds of megabytes into the browser.
+Update the recorder and bundled viewer together (public-assets, and the BlueMap
+bridge if installed), restart the server, and reload the browser. Existing binary
+recordings and geometry archives stay in place; no migration is required.
+
 The old v3.0.0 deployment requires manually staged frontend files and a proxy.
 After upgrading both JARs/mods to this implementation, stale manually copied
 `world/diorama-web/player-history/` files may be left in place temporarily.

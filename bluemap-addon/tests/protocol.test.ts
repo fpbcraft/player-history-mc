@@ -1,8 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { parseChunk, parseLiveSnapshot, parseManifest } from "../src/protocol.js";
+import {
+  parseChunk,
+  parseLiveSnapshot,
+  parseManifest,
+  parseObjectManifest,
+} from "../src/protocol.js";
 
 const registry = { players: [], worlds: [], items: [] };
+
+test("compact geometry lookup manifests preserve the archive lookup contract", () => {
+  const manifest = parseObjectManifest({
+    protocolVersion: 3,
+    earliestTimestamp: 1,
+    latestTimestamp: 2,
+    chunkDurationMs: 60000,
+    positionScale: 32,
+    quaternionScale: 32767,
+    scaleScale: 1024,
+    geometryArchive: true,
+    geometryLookup: "sha256-v1",
+    geometries: [],
+    registry: { objects: [], worlds: [] },
+  });
+  assert.equal(manifest.geometryLookup, "sha256-v1");
+  assert.deepEqual(manifest.geometries, []);
+});
 
 test("protocol parsers reject malformed public data", () => {
   assert.throws(() => parseChunk({ points: [{}], events: [] }), /Invalid player/);

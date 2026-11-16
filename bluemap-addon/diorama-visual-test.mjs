@@ -1,4 +1,5 @@
 import { deflateSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import { vehicleFixture, whitePng, craftSpriteFixture, craftPng } from "./vehicle-fixture.mjs";
 import { createServer } from "node:http";
 import { readFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -27,6 +28,13 @@ execFileSync(process.execPath, [join(dioramaRoot, "scripts/export-web-pins.mjs")
 const output = join(root, "visual-output/diorama");
 await mkdir(output, { recursive: true });
 const started = Date.now();
+const archivedGeometries = [
+  { provider: "create_contraptions", sourceId: "fixture-train", version: 1 },
+  { provider: "sable_ships", sourceId: "fixture-recorded-ship", version: 1 },
+].map(identity => ({ ...identity, mesh: "meshes/train.dspr", atlas: "meshes/craft.png", lastReferencedAt: started }));
+const geometryFiles = new Map(archivedGeometries.map(entry => [
+  createHash("sha256").update(`${entry.provider}\0${entry.sourceId}\0${entry.version}`).digest("hex"), entry,
+]));
 const start = Math.floor((started - 600000) / 60000) * 60000;
 const registry = {
   players: ["Ada", "NetherExplorer", "OfflineBuilder"].map((name, i) => ({
@@ -307,18 +315,14 @@ const server = createServer(async (req, res) => {
           ],
           worlds: ["minecraft:overworld"],
         },
-        geometries: [
-          {
-            provider: "create_contraptions",
-            sourceId: "fixture-train",
-            version: 1,
-            mesh: "meshes/train.dspr",
-            atlas: "meshes/craft.png",
-            lastReferencedAt: started,
-          },
-          {provider:"sable_ships",sourceId:"fixture-recorded-ship",version:1,mesh:"meshes/train.dspr",atlas:"meshes/craft.png",lastReferencedAt:started},
-        ],
+        geometryLookup: "sha256-v1",
+        geometries: [],
       });
+    const archived = /^\/player-history\/data\/objects\/geometry\/([0-9a-f]{64})\.(dspr|png)$/.exec(path);
+    if (archived && geometryFiles.has(archived[1])) {
+      res.writeHead(200, { "Content-Type": archived[2] === "png" ? "image/png" : "application/octet-stream" });
+      return res.end(archived[2] === "png" ? craftPng : craftSpriteFixture());
+    }
     if (path.includes("/data/objects/chunks/")) {
       const bucket = +path.split("/").at(-1).replace(".json", "");
       return json(
@@ -919,6 +923,7 @@ try {
     'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2',
   );
   assert.ok(requests.some(path=>path.endsWith("objects/diorama-manifest.json")));
+  assert.equal(new Set(requests.filter(path => /objects\/geometry\/[0-9a-f]{64}\.dspr$/.test(path))).size, 2, "Replay loads only the two visible archived geometry versions");
   assert.ok(!requests.some(path=>path.endsWith("objects/manifest.json")),"Native viewer must use its compact vehicle manifest");
   for(const offset of [330000,390000,270000]){
     await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start+offset})`);

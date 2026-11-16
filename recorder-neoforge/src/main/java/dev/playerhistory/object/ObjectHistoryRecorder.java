@@ -452,7 +452,6 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     var filtered=new LinkedHashMap<String,Object>(full);
     var snapshot=registry.snapshot();
     filtered.put("registry",new ObjectRegistry.Snapshot(snapshot.objects().stream().filter(entry->dioramaProvider(entry.provider())).toList(),snapshot.worlds()));
-    filtered.put("geometries",geometryArchive.entries().stream().filter(entry->dioramaProvider(entry.provider())).toList());
     JsonFiles.write(pub.resolve("diorama-manifest.json"),filtered);
   }
   private static final java.util.Set<String> DIORAMA_PROVIDERS=java.util.Set.of("sable_ships","create_trains","create_contraptions","create_bearings");
@@ -472,7 +471,8 @@ public final class ObjectHistoryRecorder implements AutoCloseable {
     result.put("scaleScale", ObjectPoint.SCALE_SCALE);
     result.put("registry", registry.snapshot());
     result.put("geometryArchive", true);
-    result.put("geometries", geometryArchive.entries());
+    result.put("geometryLookup", "sha256-v1");
+    result.put("geometries", List.of());
     result.put("pointsPerSecond", recentPointsPerSecond);
     return result;
   }

@@ -31,6 +31,7 @@
   },
   "version": "0.0.0-private",
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "preact": "^10.29.8",
     "three": "^0.187.0"
   }

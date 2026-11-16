@@ -238,11 +238,12 @@ class ObjectHistoryTest {
           dev.playerhistory.core.JsonFiles.GSON.fromJson(
               reader, com.google.gson.JsonObject.class);
     }
-    var geometry = manifest.getAsJsonArray("geometries").get(0).getAsJsonObject();
-    Path archived =
-        publicRoot.resolve("objects").resolve(geometry.get("mesh").getAsString());
-    Path atlas =
-        publicRoot.resolve("objects").resolve(geometry.get("atlas").getAsString());
+    assertEquals("sha256-v1", manifest.get("geometryLookup").getAsString());
+    assertTrue(manifest.getAsJsonArray("geometries").isEmpty());
+    String stem = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+        .digest("create_contraptions\u0000train/0\u00007".getBytes(StandardCharsets.UTF_8)));
+    Path archived = publicRoot.resolve("objects/geometry/" + stem + ".bm3d");
+    Path atlas = publicRoot.resolve("objects/geometry/" + stem + ".png");
     assertTrue(Files.isRegularFile(archived));
     assertArrayEquals(new byte[] {1, 2, 3}, Files.readAllBytes(atlas));
 

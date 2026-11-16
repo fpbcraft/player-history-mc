@@ -1,3 +1,4 @@
+import { type GeometryIdentity, ObjectGeometryCatalog } from "./object-geometry-catalog.js";
 import { ObjectChunkCache, ObjectReplayEngine } from "./object-replay.js";
 import type {
   ObjectGeometryEntry,
@@ -39,12 +40,16 @@ export class ObjectReplaySession {
   private engine = new ObjectReplayEngine(32, 32767);
   private loadedBucket: number | undefined;
   private loadedTimes: [number, number] | undefined;
+  private readonly geometryCatalog: ObjectGeometryCatalog;
+  private objects = new Map<number, ObjectRegistryEntry>();
 
   constructor(
     private readonly base: string,
     private readonly cacheFactory: ObjectReplayCacheFactory = (base, duration, ranges) =>
       new ObjectChunkCache(base, duration, undefined, ranges),
-  ) {}
+  ) {
+    this.geometryCatalog = new ObjectGeometryCatalog(base);
+  }
 
   configure(manifest?: ObjectHistoryManifest): void {
     this.manifest = manifest;
@@ -52,6 +57,7 @@ export class ObjectReplaySession {
       this.clear();
       return;
     }
+    this.objects = new Map(manifest.registry.objects.map((object) => [object.id, object]));
 
     if (!this.cache || this.cache.duration !== manifest.chunkDurationMs) {
       this.generation++;
@@ -106,14 +112,40 @@ export class ObjectReplaySession {
     const ready =
       Math.floor(time / cache.duration) === this.loadedBucket ||
       Boolean(this.loadedTimes && time >= this.loadedTimes[0] && time <= this.loadedTimes[1]);
+    const poses = ready && world >= 0 ? this.engine.poses(time, world) : [];
+    if (manifest.geometryLookup === "sha256-v1") {
+      const identities: GeometryIdentity[] = [];
+      for (const pose of poses) {
+        const object = this.objects.get(pose.object);
+        if (!object) continue;
+        if (!pose.groups.length)
+          identities.push({
+            provider: object.provider,
+            sourceId: object.sourceId,
+            version: pose.geometry,
+          });
+        for (const group of pose.groups)
+          identities.push({
+            provider: object.provider,
+            sourceId: `${object.sourceId}/@group/${group.id}`,
+            version: group.geometry,
+          });
+      }
+      this.geometryCatalog.request(identities);
+    }
     return {
-      poses: ready && world >= 0 ? this.engine.poses(time, world) : [],
+      poses,
       objects: manifest.registry.objects,
-      geometries: manifest.geometries ?? [],
+      geometries:
+        manifest.geometryLookup === "sha256-v1"
+          ? this.geometryCatalog.geometries
+          : (manifest.geometries ?? []),
     };
   }
 
   clear(): void {
+    this.geometryCatalog.clear();
+    this.objects.clear();
     this.generation++;
     this.cache?.clear();
     this.manifest = undefined;
