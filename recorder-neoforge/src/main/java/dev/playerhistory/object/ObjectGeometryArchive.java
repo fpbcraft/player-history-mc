@@ -34,9 +34,15 @@ public final class ObjectGeometryArchive {
     void copy(Path source, Path target) throws IOException;
   }
 
+  @FunctionalInterface
+  interface IndexWriter {
+    void write(Path target, List<Entry> entries) throws IOException;
+  }
+
   private final Object publicationLock = new Object();
   private final LinkedHashSet<Key> pendingPublications = new LinkedHashSet<>();
   private final Publisher publisher;
+  private final IndexWriter indexWriter;
   private final Path root;
   private final LogSink log;
   private final Map<Key, Entry> entries = new LinkedHashMap<>();
@@ -49,7 +55,13 @@ public final class ObjectGeometryArchive {
   }
 
   ObjectGeometryArchive(Path root, LogSink log, Publisher publisher) throws IOException {
+    this(root, log, publisher, JsonFiles::write);
+  }
+
+  ObjectGeometryArchive(Path root, LogSink log, Publisher publisher, IndexWriter indexWriter)
+      throws IOException {
     this.publisher = publisher;
+    this.indexWriter = indexWriter;
     this.root = root;
     this.log = log;
     Files.createDirectories(root.resolve("geometry"));
@@ -74,52 +86,56 @@ public final class ObjectGeometryArchive {
     }
   }
 
-  public synchronized void archive(
+  public void archive(
       String provider,
       String sourceId,
       long version,
       Path sourceMesh,
       Path sourceAtlas)
       throws IOException {
-    Objects.requireNonNull(sourceMesh, "sourceMesh");
-    Key key = new Key(provider, sourceId, version);
-    String stem = digest(provider + "\u0000" + sourceId + "\u0000" + version);
-    boolean sprite = sourceMesh.getFileName().toString().endsWith(".dspr");
-    String meshName = stem + (sprite ? ".dspr" : ".bm3d");
-    String atlasName = stem + ".png";
-    String meshRelative = "geometry/" + meshName;
-    String atlasRelative = "geometry/" + atlasName;
+    synchronized (publicationLock) {
+      Objects.requireNonNull(sourceMesh, "sourceMesh");
+      Key key = new Key(provider, sourceId, version);
+      String stem = digest(provider + "\u0000" + sourceId + "\u0000" + version);
+      boolean sprite = sourceMesh.getFileName().toString().endsWith(".dspr");
+      String meshName = stem + (sprite ? ".dspr" : ".bm3d");
+      String atlasName = stem + ".png";
+      String meshRelative = "geometry/" + meshName;
+      String atlasRelative = "geometry/" + atlasName;
 
-    Path targetMesh = root.resolve(meshRelative);
-    Path targetAtlas = root.resolve(atlasRelative);
+      Path targetMesh = root.resolve(meshRelative);
+      Path targetAtlas = root.resolve(atlasRelative);
 
-    if (!Files.exists(targetMesh)) {
-      if (!Files.isRegularFile(sourceMesh))
-        throw new IOException("BlueMap3D mesh is not readable: " + sourceMesh);
-      Files.createDirectories(targetMesh.getParent());
+      if (!Files.exists(targetMesh)) {
+        if (!Files.isRegularFile(sourceMesh))
+          throw new IOException("BlueMap3D mesh is not readable: " + sourceMesh);
+        Files.createDirectories(targetMesh.getParent());
 
-      String publicAtlasUrl = "player-history/data/objects/" + atlasRelative;
-      byte[] source = Files.readAllBytes(sourceMesh);
-      byte[] rewritten = sprite ? validateCraftSprite(source) : rewriteAtlasUrl(source, publicAtlasUrl);
-      writeAtomically(targetMesh, rewritten);
+        String publicAtlasUrl = "player-history/data/objects/" + atlasRelative;
+        byte[] source = Files.readAllBytes(sourceMesh);
+        byte[] rewritten = sprite ? validateCraftSprite(source) : rewriteAtlasUrl(source, publicAtlasUrl);
+        writeAtomically(targetMesh, rewritten);
 
-      if (sourceAtlas != null && Files.isRegularFile(sourceAtlas))
+        if (sourceAtlas != null && Files.isRegularFile(sourceAtlas))
+          copyAtomically(sourceAtlas, targetAtlas);
+      } else if (!Files.exists(targetAtlas)
+          && sourceAtlas != null
+          && Files.isRegularFile(sourceAtlas)) {
         copyAtomically(sourceAtlas, targetAtlas);
-    } else if (!Files.exists(targetAtlas)
-        && sourceAtlas != null
-        && Files.isRegularFile(sourceAtlas)) {
-      copyAtomically(sourceAtlas, targetAtlas);
+      }
+
+      synchronized (this) {
+        long referenced = references.getOrDefault(key, System.currentTimeMillis());
+        Entry existing = entries.get(key);
+        if (existing != null) referenced = Math.max(referenced, existing.lastReferencedAt());
+        entries.put(
+            key,
+            new Entry(provider, sourceId, version, meshRelative, atlasRelative, referenced));
+        dirty = true;
+
+        if (publicRoot != null) pendingPublications.add(key);
+      }
     }
-
-    long referenced = references.getOrDefault(key, System.currentTimeMillis());
-    Entry existing = entries.get(key);
-    if (existing != null) referenced = Math.max(referenced, existing.lastReferencedAt());
-    entries.put(
-        key,
-        new Entry(provider, sourceId, version, meshRelative, atlasRelative, referenced));
-    dirty = true;
-
-    if (publicRoot != null) pendingPublications.add(key);
   }
 
   /** Selects the destination without doing filesystem work on the caller's thread. */
@@ -159,38 +175,50 @@ public final class ObjectGeometryArchive {
     return List.copyOf(entries.values());
   }
 
-  public synchronized void flush() throws IOException {
-    if (dirty) save();
+  public void flush() throws IOException {
+    synchronized (publicationLock) {
+      List<Entry> snapshot;
+      synchronized (this) {
+        if (!dirty) return;
+        snapshot = List.copyOf(entries.values());
+        dirty = false;
+      }
+      try {
+        indexWriter.write(root.resolve("geometry-index.json"), snapshot);
+      } catch (IOException | RuntimeException error) {
+        synchronized (this) { dirty = true; }
+        throw error;
+      }
+    }
   }
 
   public void prune(long cutoff) throws IOException {
     synchronized (publicationLock) {
+      List<Entry> expired = new ArrayList<>();
+      Path pub;
       synchronized (this) {
-        pruneEntries(cutoff);
+        pub = publicRoot;
+        Iterator<Map.Entry<Key, Entry>> iterator = entries.entrySet().iterator();
+        while (iterator.hasNext()) {
+          Map.Entry<Key, Entry> row = iterator.next();
+          if (row.getValue().lastReferencedAt() >= cutoff) continue;
+          expired.add(row.getValue());
+          pendingPublications.remove(row.getKey());
+          references.remove(row.getKey());
+          iterator.remove();
+          dirty = true;
+        }
       }
-    }
-  }
-
-  private void pruneEntries(long cutoff) throws IOException {
-    Iterator<Map.Entry<Key, Entry>> iterator = entries.entrySet().iterator();
-    while (iterator.hasNext()) {
-      Map.Entry<Key, Entry> row = iterator.next();
-      Entry entry = row.getValue();
-      if (entry.lastReferencedAt() >= cutoff) continue;
-
-      Files.deleteIfExists(root.resolve(entry.mesh()));
-      Files.deleteIfExists(root.resolve(entry.atlas()));
-      Path pub = publicRoot;
-      if (pub != null) {
-        Files.deleteIfExists(pub.resolve(entry.mesh()));
-        Files.deleteIfExists(pub.resolve(entry.atlas()));
+      for (Entry entry : expired) {
+        Files.deleteIfExists(root.resolve(entry.mesh()));
+        Files.deleteIfExists(root.resolve(entry.atlas()));
+        if (pub != null) {
+          Files.deleteIfExists(pub.resolve(entry.mesh()));
+          Files.deleteIfExists(pub.resolve(entry.atlas()));
+        }
       }
-      pendingPublications.remove(row.getKey());
-      references.remove(row.getKey());
-      iterator.remove();
-      dirty = true;
+      flush();
     }
-    flush();
   }
 
   public synchronized int size() {
@@ -219,11 +247,6 @@ public final class ObjectGeometryArchive {
         entries.put(new Key(entry.provider(), entry.sourceId(), entry.version()), entry);
       }
     }
-  }
-
-  private void save() throws IOException {
-    JsonFiles.write(root.resolve("geometry-index.json"), entries.values());
-    dirty = false;
   }
 
   private static byte[] validateCraftSprite(byte[] source) throws IOException {

@@ -16,6 +16,51 @@ import org.junit.jupiter.api.io.TempDir;
 class ObjectGeometryPublicationTest {
   @TempDir Path root;
 
+  @Test
+  void slowIndexWriteDoesNotBlockReferencesOrLoseNewTimestamps() throws Exception {
+    var writing = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var archive = new ObjectGeometryArchive(root.resolve("archive"), ignored -> {},
+        (source, target) -> {}, (target, entries) -> {
+          writing.countDown();
+          try {
+            if (!release.await(5, TimeUnit.SECONDS)) throw new IOException("Index write timed out");
+          } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IOException(error);
+          }
+          dev.playerhistory.core.JsonFiles.write(target, entries);
+        });
+    archive(archive, 1);
+    try (var executor = Executors.newFixedThreadPool(2)) {
+      var flushing = executor.submit(() -> { archive.flush(); return null; });
+      try {
+        assertTrue(writing.await(5, TimeUnit.SECONDS));
+        executor.submit(() -> archive.reference("sable_ships", "ship", 1, Long.MAX_VALUE))
+            .get(2, TimeUnit.SECONDS);
+      } finally { release.countDown(); }
+      flushing.get(5, TimeUnit.SECONDS);
+    }
+    archive.flush();
+    var restarted = new ObjectGeometryArchive(root.resolve("archive"), ignored -> {});
+    assertEquals(Long.MAX_VALUE, restarted.entries().getFirst().lastReferencedAt());
+  }
+
+  @Test
+  void failedIndexWriteRemainsDirtyAndCanBeRetried() throws Exception {
+    var writes = new AtomicInteger();
+    var archive = new ObjectGeometryArchive(root.resolve("archive"), ignored -> {},
+        (source, target) -> {}, (target, entries) -> {
+          if (writes.incrementAndGet() == 1) throw new IOException("Disk unavailable");
+          dev.playerhistory.core.JsonFiles.write(target, entries);
+        });
+    archive(archive, 1);
+    assertThrows(IOException.class, archive::flush);
+    archive.flush();
+    assertEquals(2, writes.get());
+    assertEquals(1, new ObjectGeometryArchive(root.resolve("archive"), ignored -> {}).size());
+  }
+
   private void archive(ObjectGeometryArchive archive, long version) throws Exception {
     Path mesh = root.resolve("source.bm3d");
     byte[] bytes = new byte[24];
