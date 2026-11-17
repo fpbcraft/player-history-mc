@@ -14,23 +14,58 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 final class DioramaVehicleHistory {
   private final LogSink log;
   private Method latest;
+  private Method historyEnabled;
+  private Method historyInterval;
   private boolean absent;
   private long last;
+  private long nextSample;
+  private int sampleInterval = 500;
+  private boolean recording = true;
+  private final java.util.function.LongSupplier clock;
   private volatile long generation;
-  private final Set<String> archived = ConcurrentHashMap.newKeySet();
+  private final Set<String> archived = Collections.synchronizedSet(new LinkedHashSet<>());
   private final Set<String> pending = ConcurrentHashMap.newKeySet();
   private final ExecutorService writer = Executors.newSingleThreadExecutor(task -> {
     Thread thread = new Thread(task,"Diorama vehicle history archive");thread.setDaemon(true);thread.setPriority(Thread.MIN_PRIORITY);return thread;
   });
-  DioramaVehicleHistory(LogSink log) {this.log=log;}
+  DioramaVehicleHistory(LogSink log) {this(log, System::currentTimeMillis);}
+  DioramaVehicleHistory(LogSink log, java.util.function.LongSupplier clock) {this.log=log;this.clock=clock;}
   private static Object value(Object record,String name) throws ReflectiveOperationException {return record.getClass().getMethod(name).invoke(record);}
   private static double number(Object record,String name) throws ReflectiveOperationException {return ((Number)value(record,name)).doubleValue();}
   void tick(ServerTickEvent.Post event) {
+    sample();
+  }
+  void sample() {
     if(absent || !ObjectHistoryApi.available())return;
     try {
-      if(latest==null)latest=Class.forName("dev.diorama.api.WebVehicleScene").getMethod("latest");
+      if(latest==null) {
+        Class<?> scene = Class.forName("dev.diorama.api.WebVehicleScene");
+        latest = scene.getMethod("latest");
+        try {
+          historyEnabled = scene.getMethod("historyEnabled");
+          historyInterval = scene.getMethod("historyIntervalMs");
+        } catch (NoSuchMethodException ignored) { /* Older Diorama keeps the default policy. */ }
+      }
+      boolean enabled = historyEnabled == null || Boolean.TRUE.equals(historyEnabled.invoke(null));
+      if (!enabled) {
+        if (recording) {
+          reset();
+          long now = clock.getAsLong();
+          for (String provider : List.of("create_trains", "create_contraptions", "sable_ships"))
+            ObjectHistoryApi.providerSnapshot(provider, List.of(), now);
+          recording = false;
+        }
+        return;
+      }
+      recording = true;
+      long now = clock.getAsLong();
+      int interval = historyInterval == null ? 500 : ((Number) historyInterval.invoke(null)).intValue();
+      interval = Math.max(100, Math.min(60000, interval));
+      if (interval != sampleInterval) { sampleInterval = interval; nextSample = 0; }
+      if (now < nextSample) return;
+      nextSample = now + interval;
       Object snapshot=latest.invoke(null);long time=((Number)value(snapshot,"time")).longValue();
-      if(time<=last || System.currentTimeMillis()-time>15000)return;
+      if(time<=last || now-time>15000)return;
       last=time;
       Map<String,List<ObjectSnapshot>> providers=new LinkedHashMap<>();
       providers.put("create_trains",new ArrayList<>());providers.put("create_contraptions",new ArrayList<>());providers.put("sable_ships",new ArrayList<>());
@@ -49,17 +84,36 @@ final class DioramaVehicleHistory {
     String key=provider+"/"+source+"/"+version;
     long session = generation;
     String pendingKey = session + "/" + key;
-    if(archived.contains(key)||pending.size()>=64||!pending.add(pendingKey))return;
+    if(hasArchive(key)||pending.size()>=64||!pending.add(pendingKey))return;
     Object recorderSession = ObjectHistoryApi.session();
     writer.execute(()->{
       if (session != generation) {pending.remove(pendingKey);return;}
       try {
         boolean copied = ObjectHistoryApi.archiveGeometryInSession(recorderSession,provider,source,version,sprite,atlas);
-        if (copied && session == generation) {archived.add(key);if(archived.size()>2048)archived.clear();}
+        if (copied && session == generation) {
+          rememberArchive(key);
+        }
       }
       catch(java.io.IOException|RuntimeException error){log.warn("Cannot archive Diorama craft sprite: "+error);}
       finally {pending.remove(pendingKey);}
     });
   }
-  void stop(ServerStoppingEvent event) {generation++;last=0;archived.clear();pending.clear();}
+  boolean hasArchive(String key) {
+    synchronized (archived) {
+      if (!archived.remove(key)) return false;
+      archived.add(key);
+      return true;
+    }
+  }
+  void rememberArchive(String key) {
+    synchronized (archived) {
+      archived.remove(key);
+      archived.add(key);
+      if (archived.size() > 2048) {
+        var oldest = archived.iterator(); oldest.next(); oldest.remove();
+      }
+    }
+  }
+  void reset() {generation++;last=0;nextSample=0;archived.clear();pending.clear();}
+  void stop(ServerStoppingEvent event) {reset();recording=true;}
 }
