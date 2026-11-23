@@ -3,6 +3,7 @@ import {
   updateVehiclePin,
   arrangeVehicleLabels,
   vehiclePinVisible,
+  vehicleVisibilityKey,
 } from "./vehicle-markers.js";
 import { VehicleMotion } from "./vehicle-motion.js";
 import { signedVehicleTravel } from "./vehicle-travel.js";
@@ -179,11 +180,18 @@ export class DioramaSceneHost {
     if (this.abort.signal.aborted) return;
     this.frame = requestAnimationFrame((next) => this.draw(next));
     if (document.hidden) return;
-    const rows = this.live
+    const sampledRows = this.live
       ? Date.now() <= this.expiresAt
         ? this.motion.sample(time, this.reduced.matches)
         : []
       : this.historyRows;
+    const rows = sampledRows.filter((row) => {
+      const provider = row.id.startsWith("history:")
+        ? this.objectIndex.get(Number(row.id.slice(8)))?.provider
+        : undefined;
+      const key = vehicleVisibilityKey(row.id, provider);
+      return this.api.visible?.(key) !== false;
+    });
     if (rows.length && !this.layer && !this.loading && !this.failed) {
       this.loading = true;
       void import("./diorama-vehicle-layer.js")
@@ -204,7 +212,7 @@ export class DioramaSceneHost {
     const scale = state?.scale ?? 1;
     for (const row of vehicleMarkers(this.live ? rows : [], scale)) {
       if (!vehiclePinVisible(row, this.api.visible?.("allVehicles") === true)) continue;
-      const pinKind = /train|contraption/i.test(row.id) ? "trainPins" : "sablePins";
+      const pinKind = vehicleVisibilityKey(row.id);
       if (this.api.visible?.(pinKind) === false) continue;
       if (row.dimension !== this.api.getState()?.dimension) continue;
       const pixel = this.api.screen({ x: row.pos[0], y: row.pos[1], z: row.pos[2] });

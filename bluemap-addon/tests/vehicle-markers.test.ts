@@ -71,3 +71,9 @@ it("draws a cog for unnamed Sable ships and restores initials after naming", () 
   expect(button.querySelector(".diorama-pin-initials svg")).toBeNull();
   expect(button.querySelector(".diorama-pin-initials")?.textContent).toBe("CF");
 });
+
+it("classifies archived numeric IDs by provider for independent layer toggles", async () => {
+  const { vehicleVisibilityKey } = await import("../src/vehicle-markers.js");
+  expect(vehicleVisibilityKey("history:1", "create_contraptions")).toBe("trainPins");
+  expect(vehicleVisibilityKey("history:2", "sable_ships")).toBe("sablePins");
+});
