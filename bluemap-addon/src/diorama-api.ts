@@ -16,8 +16,14 @@ export interface DioramaViewport {
   pixelRatio: number;
   projection: { sin: number; cos: number; facing: number };
 }
+export interface TerritoryHover {
+  name: string;
+  color?: number;
+  owner?: string;
+}
 export interface DioramaOverlay {
   element?: HTMLElement;
+  hover?(x: number, y: number, state: DioramaViewport): string | TerritoryHover | undefined;
   draw?(context: CanvasRenderingContext2D, state: DioramaViewport): void;
   pointer?(event: PointerEvent, state: DioramaViewport): boolean;
 }
@@ -41,6 +47,7 @@ export interface DioramaApi {
   version: 1;
   events: EventTarget;
   getState(): DioramaViewport | null;
+  worldAt?(x: number, y: number, height: number): { x: number; z: number } | null;
   screen(point: WorldPosition): { x: number; y: number } | null;
   navigate(point: WorldPosition): boolean;
   setDimension(id: string): boolean;
