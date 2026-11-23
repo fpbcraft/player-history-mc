@@ -5,12 +5,14 @@ import dev.playerhistory.core.LogSink;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import xaero.pac.common.claims.player.api.IPlayerChunkClaimAPI;
 import xaero.pac.common.claims.tracker.api.IClaimsManagerListenerAPI;
 import xaero.pac.common.server.api.OpenPACServerAPI;
+import xaero.pac.common.server.player.config.api.PlayerConfigOptions;
 
 public final class OpacClaimsSource implements ClaimsOverlaySource, IClaimsManagerListenerAPI {
   private final LogSink log;
@@ -56,14 +58,18 @@ public final class OpacClaimsSource implements ClaimsOverlaySource, IClaimsManag
 
     try {
       var next = new ArrayList<ClaimCell>();
-      OpenPACServerAPI.get(current)
-          .getServerClaimsManager()
+      OpenPACServerAPI api = OpenPACServerAPI.get(current);
+      api.getServerClaimsManager()
           .getPlayerInfoStream()
           .forEach(
               info -> {
-                String owner = info.getClaimsName();
-                if (owner == null || owner.isBlank()) owner = info.getPlayerUsername();
-                final String label = owner == null || owner.isBlank() ? info.getPlayerId().toString() : owner;
+                String username = info.getPlayerUsername();
+                String owner = username == null || username.isBlank() ? null : username;
+                String claimsName = info.getClaimsName();
+                String regionName =
+                    claimsName == null || claimsName.isBlank()
+                        ? partyName(api, info.getPlayerId())
+                        : claimsName;
                 final int color = info.getClaimsColor();
                 info.getStream()
                     .forEach(
@@ -72,8 +78,12 @@ public final class OpacClaimsSource implements ClaimsOverlaySource, IClaimsManag
                           entry.getValue().getStream()
                               .forEach(
                                   positions -> {
-                                    boolean forceLoadMarked =
-                                        positions.getClaimState().isForceloadable();
+                                    var state = positions.getClaimState();
+                                    boolean forceLoadMarked = state.isForceloadable();
+                                    int sub = state.getSubConfigIndex();
+                                    String subName = sub < 0 ? null : info.getClaimsName(sub);
+                                    String name =
+                                        subName == null || subName.isBlank() ? regionName : subName;
                                     positions.getStream()
                                         .forEach(
                                             pos ->
@@ -82,7 +92,8 @@ public final class OpacClaimsSource implements ClaimsOverlaySource, IClaimsManag
                                                         dimension,
                                                         pos.x,
                                                         pos.z,
-                                                        label,
+                                                        owner,
+                                                        name,
                                                         color,
                                                         forceLoadMarked)));
                                   });
@@ -93,6 +104,15 @@ public final class OpacClaimsSource implements ClaimsOverlaySource, IClaimsManag
       dirty.set(true);
       log.warn("Could not refresh OpenPAC overlay data: " + error);
     }
+  }
+
+  private static String partyName(OpenPACServerAPI api, UUID id) {
+    var manager = api.getPartyManager();
+    var party = manager.getPartyById(id);
+    if (party == null) party = manager.getPartyByMember(id);
+    if (party == null) return null;
+    var config = api.getPlayerConfigs().getLoadedConfig(party.getOwner().getUUID());
+    return config == null ? null : config.getEffective(PlayerConfigOptions.PARTY_NAME);
   }
 
   @Override

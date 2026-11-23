@@ -12,6 +12,7 @@ interface ClaimsOverlaySource {
       int x,
       int z,
       String owner,
+      String name,
       int color,
       boolean forceLoadMarked) {}
 

@@ -1,4 +1,4 @@
-import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
+import type { DioramaApi, OverlayRegistration, TerritoryHover } from "./diorama-api.js";
 import { aggregateCorners } from "./diorama-geometry.js";
 import { formatMinecraftTime, minecraftDay } from "./world-status.js";
 
@@ -6,6 +6,8 @@ interface Cell {
   x: number;
   z: number;
   color?: number;
+  owner?: string;
+  name?: string;
   total?: number;
   forceLoadMarked?: boolean;
 }
@@ -33,6 +35,7 @@ export class DioramaServerOverlays {
   private readonly overlay: OverlayRegistration;
   private readonly listeners = new AbortController();
   private snapshot: Snapshot | undefined;
+  private claimIndex = new Map<string, Map<string, TerritoryHover>>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private request: AbortController | undefined;
   private lastTime:
@@ -138,6 +141,7 @@ export class DioramaServerOverlays {
     if (!api.registerVisibility) tools.append(this.controls);
     this.overlay = api.registerOverlay("server-overlays", {
       draw: (context) => this.draw(context),
+      hover: (x, y, state) => this.claimAt(x, y, state.dimension),
     });
     api.events.addEventListener(
       "change",
@@ -213,6 +217,26 @@ export class DioramaServerOverlays {
       if (![1, 2].includes(snapshot.version) || !Number.isFinite(snapshot.generatedAt))
         throw Error("Unsupported overlay snapshot");
       this.snapshot = snapshot;
+      this.claimIndex.clear();
+      for (const [dimension, data] of Object.entries(snapshot.dimensions ?? {})) {
+        if (!Array.isArray(data.claims)) continue;
+        const chunks = new Map<string, TerritoryHover>();
+        for (const cell of data.claims.slice(0, 20000)) {
+          if (!finiteCell(cell)) continue;
+          const name =
+            (typeof cell.name === "string" && cell.name.trim()) ||
+            (typeof cell.owner === "string" && cell.owner.trim());
+          if (name) {
+            const owner = typeof cell.owner === "string" ? cell.owner.trim() : undefined;
+            chunks.set(`${cell.x},${cell.z}`, {
+              name,
+              ...(owner ? { owner } : {}),
+              color: cell.color ?? 0x58a96a,
+            });
+          }
+        }
+        this.claimIndex.set(dimension, chunks);
+      }
       this.status.textContent =
         Date.now() - snapshot.generatedAt > 10000 ? "Server overlay snapshot is stale" : "";
     } catch (error) {
@@ -220,11 +244,25 @@ export class DioramaServerOverlays {
         this.status.textContent =
           error instanceof Error ? error.message : "Server overlays unavailable";
       this.snapshot = undefined;
+      this.claimIndex.clear();
     } finally {
       this.request = undefined;
       this.overlay.invalidate();
       if (!this.listeners.signal.aborted) this.timer = setTimeout(() => void this.poll(), 5000);
     }
+  }
+
+  private claimAt(x: number, y: number, dimension: string): TerritoryHover | undefined {
+    if (
+      !this.enabled.has("claims") ||
+      !this.snapshot ||
+      Date.now() - this.snapshot.generatedAt > 10000
+    )
+      return;
+    const world = this.api.worldAt?.(x, y, this.referenceHeight());
+    if (!world) return;
+    const chunk = `${Math.floor(world.x / 16)},${Math.floor(world.z / 16)}`;
+    return this.claimIndex.get(dimension)?.get(chunk);
   }
 
   private referenceHeight(): number {
