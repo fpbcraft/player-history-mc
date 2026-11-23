@@ -105,6 +105,9 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "image/png" });
       return res.end(await readFile(join(fogAssets, path.slice("/diorama/".length))));
     }
+    if (path === "/diorama/frontiers.json")
+      return json([{dimension:"minecraft:overworld",name:"Harbour region",color:0x72d6ac,
+        vertices:[-100,-60,100,-60,100,100,-100,100],label:{x:0,z:20,clearance:80}}]);
     if (path === "/diorama/map.json")
       return json({
         tileUnits: 128,
@@ -118,6 +121,7 @@ const server = createServer(async (req, res) => {
         fogCoverage: true,
         roundedFog: true,
         markerFeed: "markers.json",
+        frontierFeed: "frontiers.json",
         vehicleFeed: "assets/diorama-vehicles/scene.json",
         queueFeed: "queue-status.json",
         dimensions: registry.worlds.map((world) => ({
@@ -437,7 +441,7 @@ const server = createServer(async (req, res) => {
     }
     let file;
     if (path === "/diorama/" || path === "/diorama/index.html") file = join(mapRoot, "index.html");
-    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js" || path === "/diorama/web-queue.js")
+    else if (path === "/diorama/overlay-api.js" || path === "/diorama/web-markers.js" || path === "/diorama/map-controls.js" || path === "/diorama/web-queue.js" || path === "/diorama/web-frontiers.js")
       file = join(mapRoot, path.split("/").at(-1));
     else if (
       /^\/diorama\/(web-fog\.js|fog-(mask|mask-task|mask-worker|coverage|gpu|reveal)\.js|fog\.fsh|fog-noise\.png)$/.test(
@@ -622,6 +626,15 @@ try {
     deviceScaleFactor: 2,
     mobile: false,
   });
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `{
+    const fillText=CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText=function(text,...args){
+      if(text==="Harbour region") (window.__frontierLabels??=[]).push(text);
+      return fillText.call(this,text,...args);
+    };
+  }`,
+  });
   await cdp.send("Page.navigate", {
     url: `${origin}/diorama/#dim=minecraft%3Aoverworld&u=0&v=-49&s=2`,
   });
@@ -636,6 +649,31 @@ try {
   assert.equal(new Set(controlStyles).size,1,"Map controls must share panel colours, borders and corners");
   const topPositions=await cdp.evaluate('["#dims",".diorama-player-bar","#map-tools"].map(selector=>document.querySelector(selector).getBoundingClientRect().top)');
   assert.ok(topPositions.every(top=>Math.abs(top-topPositions[0])<1),"Desktop controls and player strip align at the top");
+  await wait('document.querySelectorAll(".map-layer-toolbar button").length === 4');
+  assert.deepEqual(
+    await cdp.evaluate(
+      'Array.from(document.querySelectorAll(".map-layer-toolbar button"),b=>b.getAttribute("aria-label"))',
+    ),
+    ["Frontiers", "OPAC claims", "Vehicles", "Trains"],
+  );
+  assert.equal(
+    await cdp.evaluate('window.diorama.visible("frontiers")'),
+    true,
+    "Frontiers default on",
+  );
+  assert.equal(
+    await cdp.evaluate('document.querySelector(".map-layer-toolbar").textContent'),
+    "",
+    "Layer buttons are icon-only",
+  );
+  assert.equal(
+    await cdp.evaluate(
+      'document.querySelectorAll(".map-menu input:is([data-visibility=claims],[data-visibility=sablePins],[data-visibility=trainPins],[data-visibility=frontiers])").length',
+    ),
+    0,
+  );
+  await wait('window.__frontierLabels?.includes("Harbour region")');
+  await capture("desktop-layer-toolbar");
   await cdp.evaluate('document.querySelector(".map-visibility summary").click()');
   await capture("desktop-visibility-menu");
   const beforeQueueTiles=requests.filter(path=>path.endsWith(".jpg")).length;
@@ -929,6 +967,28 @@ try {
     await cdp.evaluate(`document.querySelector("bluemap-player-replay").seek(${start+offset})`);
     await wait('Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2');
   }
+  await cdp.evaluate('document.querySelector(".map-layer-toolbar button[data-visibility=trainPins]").click()');
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 1',
+  );
+  assert.ok(
+    await cdp.evaluate(
+      'Array.from(document.querySelectorAll(".diorama-object-marker[data-visibility=trainPins]")).every(el=>el.hidden)',
+    ),
+    "Train fallback pins follow the layer switch",
+  );
+  await cdp.evaluate('document.querySelector(".map-layer-toolbar button[data-visibility=sablePins]").click()');
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 0',
+  );
+  await cdp.evaluate('document.querySelector(".map-layer-toolbar button[data-visibility=trainPins]").click()');
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 1',
+  );
+  await cdp.evaluate('document.querySelector(".map-layer-toolbar button[data-visibility=sablePins]").click()');
+  await wait(
+    'Number(document.querySelector("canvas[data-vehicle-models]")?.dataset.vehicleModels) === 2',
+  );
   await capture("desktop-replay");
   const before = await cdp.evaluate("window.diorama.getState().scale");
   await cdp.send("Input.dispatchMouseEvent", {
@@ -1026,9 +1086,46 @@ try {
     const zoomed=await cdp.evaluate(`(() => {const marker=document.querySelector(${JSON.stringify(selector)});const before=window.diorama.getState().scale;marker.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:160,clientY:300,deltaY:-120}));return window.diorama.getState().scale>before;})()`);
     assert.equal(zoomed,true,"Map markers must pass the wheel gesture to zoom");
   }
+  const toolbar = await cdp.evaluate(
+    'Array.from(document.querySelectorAll(".map-layer-toolbar button"),b=>b.getBoundingClientRect().toJSON())',
+  );
+  assert.ok(
+    toolbar.every(
+      (b, i) =>
+        b.width <= 40 &&
+        b.height <= 40 &&
+        b.left === toolbar[0].left &&
+        (!i || b.top >= toolbar[i - 1].bottom),
+    ),
+    "Compact vertical buttons",
+  );
+  const settingsBox = await cdp.evaluate(
+    'document.querySelector(".map-visibility summary").getBoundingClientRect().toJSON()',
+  );
+  assert.ok(
+    toolbar[0].top > settingsBox.bottom && toolbar[0].right <= 390,
+    "Toolbar sits below settings inside viewport",
+  );
+  await cdp.evaluate(
+    'document.querySelector(".map-layer-toolbar button[data-visibility=frontiers]").click()',
+  );
+  assert.equal(await cdp.evaluate('window.diorama.visible("frontiers")'), false);
+  await cdp.send("Page.reload", {});
+  await wait('document.querySelector(".map-layer-toolbar button[data-visibility=frontiers]")');
+  assert.equal(
+    await cdp.evaluate(
+      'document.querySelector(".map-layer-toolbar button[data-visibility=frontiers]").getAttribute("aria-pressed")',
+    ),
+    "false",
+    "Layer choices persist",
+  );
+  await cdp.evaluate(
+    'document.querySelector(".map-layer-toolbar button[data-visibility=frontiers]").click()',
+  );
+  await capture("mobile-layer-toolbar");
   await cdp.evaluate('window.diorama.setVisible("loaded",true);window.diorama.setVisible("claims",true);window.diorama.setVisible("allVehicles",true);window.diorama.setVisible("heatmap",true);window.diorama.setVisible("clouds",false)');
   await cdp.send("Page.reload",{});
-  await wait('document.querySelector("input[data-visibility=claims]")');
+  await wait('document.querySelector("button[data-visibility=claims]")');
   for(const key of ["loaded","claims","allVehicles","heatmap"]){assert.equal(await cdp.evaluate(`window.diorama.visible(${JSON.stringify(key)})`),true,"Visibility persists across reload");}
   assert.equal(await cdp.evaluate('window.diorama.visible("clouds")'),false);
   await cdp.evaluate("window.diorama.dispose()");

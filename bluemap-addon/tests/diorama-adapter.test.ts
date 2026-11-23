@@ -155,6 +155,13 @@ it("renders object poses in blocks without requesting meshes", () => {
     "Express",
   );
   expect(api.screen).toHaveBeenCalledWith(expect.objectContaining({ x: -32, y: 80, z: 48 }));
+  const marker = document.querySelector<HTMLButtonElement>(".diorama-object-marker");
+  api.visible = key => key !== "trainPins";
+  api.events.dispatchEvent(new CustomEvent("visibility", {detail: {key:"trainPins",value:false}}));
+  expect(marker?.hidden).toBe(true);
+  api.visible = () => true;
+  api.events.dispatchEvent(new CustomEvent("visibility", {detail: {key:"trainPins",value:true}}));
+  expect(marker?.hidden).toBe(false);
   objects.clear();
   expect(document.querySelector(".diorama-object-marker")).toBeNull();
   objects.dispose();

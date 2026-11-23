@@ -43,6 +43,7 @@ export const dioramaWebFiles = (archive) => {
     "overlay-api.js",
     "map-controls.js",
     "web-markers.js",
+    "web-frontiers.js",
     "web-fog.js",
     "fog-gpu.js",
     "fog-mask.js",

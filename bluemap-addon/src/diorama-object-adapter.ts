@@ -1,3 +1,4 @@
+import { vehicleVisibilityKey } from "./vehicle-markers.js";
 import type { DioramaSceneHost } from "./diorama-scene-host.js";
 import type { DioramaApi, OverlayRegistration } from "./diorama-api.js";
 import type { ObjectMapAdapter } from "./map-adapter.js";
@@ -18,6 +19,9 @@ export class DioramaObjectAdapter implements ObjectMapAdapter {
     this.layer.className = "diorama-history-markers";
     this.overlay = api.registerOverlay("object-history", { element: this.layer });
     api.events.addEventListener("change", () => this.layout(), { signal: this.listeners.signal });
+    api.events.addEventListener("visibility", () => this.layout(), {
+      signal: this.listeners.signal,
+    });
   }
 
   setObjects(
@@ -48,6 +52,10 @@ export class DioramaObjectAdapter implements ObjectMapAdapter {
         this.layer.append(element);
       }
       marker.pose = pose;
+      marker.element.dataset.visibility = vehicleVisibilityKey(
+        identity.sourceId,
+        identity.provider,
+      );
       marker.element.title = `${identity.label || identity.sourceId} · recorded position\n${pose.x.toFixed(1)}, ${pose.y.toFixed(1)}, ${pose.z.toFixed(1)}`;
       marker.element.setAttribute("aria-label", marker.element.title);
     }
@@ -61,7 +69,9 @@ export class DioramaObjectAdapter implements ObjectMapAdapter {
 
   private layout(): void {
     for (const { element, pose } of this.markers.values()) {
-      element.hidden = this.dimension !== this.api.getState()?.dimension;
+      element.hidden =
+        this.dimension !== this.api.getState()?.dimension ||
+        this.api.visible?.(element.dataset.visibility ?? "sablePins") === false;
       element.dataset.model = String(this.scene?.hasHistorical(pose.object) ?? false);
       const pixel = this.api.screen(pose);
       if (!pixel) continue;

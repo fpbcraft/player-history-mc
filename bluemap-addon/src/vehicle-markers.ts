@@ -1,5 +1,11 @@
 import type { VehiclePose } from "./vehicle-scene.js";
 
+/** Recorded rows retain numeric history IDs, so their provider identifies the layer. */
+export const vehicleVisibilityKey = (id: string, provider?: string): "trainPins" | "sablePins" =>
+  /train|contraption/i.test(provider ?? "") || /train|contraption/i.test(id)
+    ? "trainPins"
+    : "sablePins";
+
 /** Subpixel craft use their existing waypoint pins instead of a full WebGL model pass. */
 export const vehicleModelVisible = (row: VehiclePose, scale: number): boolean =>
   (row.size ?? 32) * scale >= 12;

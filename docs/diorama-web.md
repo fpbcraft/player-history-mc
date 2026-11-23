@@ -175,3 +175,16 @@ They use clearly labelled synthetic terrain and do not prove real terrain alignm
 
 The user is testing the merged changes at `192.168.0.31:8100`. No hybrid artifacts have been deployed by this change. Real OPAC/MineColonies/Create/Sable acceptance and
 production proxy validation remain required before merging or deploying.
+
+### Layer buttons
+
+With the matching Diorama web-layer-toolbar frontend, Frontiers, OPAC claims,
+Vehicles and Trains are compact icon-only buttons below settings. Vehicle and
+train switches control both live/replay models and their fallback pins. Existing
+saved switch choices are retained. Frontiers default on for new browser profiles;
+names are displayed inside regions when they fit at the current zoom.
+
+The pinned frontend used by Vercel previews and browser CI includes this layout.
+Deploy the matching Diorama core and optional web-assets addon to publish and
+render the frontier feed on the server. A frontend preview alone cannot create
+server frontier data.
